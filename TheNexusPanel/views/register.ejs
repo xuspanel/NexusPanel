@@ -1,0 +1,18 @@
+<% const body = `
+<section class="n-auth-section">
+  <div class="n-auth-card">
+    <h2>Create Account</h2>
+    <p>Get started with NexusPanel</p>
+    <div class="n-form-error" id="regError"></div>
+    <form id="regForm" onsubmit="return doRegister(event)">
+      <div class="n-form-group"><label>Name</label><input type="text" id="regName" class="n-input" required></div>
+      <div class="n-form-group"><label>Email</label><input type="email" id="regEmail" class="n-input" required></div>
+      <div class="n-form-group"><label>Password</label><input type="password" id="regPassword" class="n-input" required minlength="6"></div>
+      <button type="submit" class="n-btn n-btn-primary n-btn-block">Create Account</button>
+    </form>
+    <p class="n-auth-footer">Already have an account? <a href="/login">Sign In</a></p>
+  </div>
+</section>
+`; %>
+<%- include('layout', { body: body }) %>
+<script src="/js/auth.js"></script>

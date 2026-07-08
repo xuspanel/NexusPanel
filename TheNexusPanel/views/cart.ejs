@@ -1,0 +1,14 @@
+<% if (!user) { %>
+<%- include('layout', { body: '<section class="n-section"><div class="n-auth-card"><h2>Sign in to view cart</h2><a href="/login" class="n-btn n-btn-primary">Sign In</a></div></section>' }) %>
+<% } else { %>
+<%
+const body = `
+<section class="n-section"><h2 class="n-section-title">Shopping Cart</h2>
+<div id="cartContent"><div class="n-loading">Loading cart...</div></div>
+<div id="cartActions" style="display:none;text-align:right;margin-top:16px">
+  <a href="/checkout" class="n-btn n-btn-lg n-btn-primary">Proceed to Checkout →</a>
+</div></section>
+`; %>
+<%- include('layout', { body: body }) %>
+<script src="/js/cart.js"></script>
+<% } %>

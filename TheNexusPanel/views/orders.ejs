@@ -1,0 +1,32 @@
+<% if (!user) { %>
+<%- include('layout', { body: '<section class="n-section"><div class="n-auth-card"><h2>Sign in</h2><a href="/login" class="n-btn n-btn-primary">Sign In</a></div></section>' }) %>
+<% } else { %>
+<%
+const body = `
+<section class="n-section"><h2 class="n-section-title">My Orders</h2>
+<div id="ordersList"><div class="n-loading">Loading orders...</div></div></section>
+`; %>
+<%- include('layout', { body: body }) %>
+<script>
+(async function(){
+  var el=document.getElementById('ordersList');
+  try{
+    var r=await fetch('/api/orders',{credentials:'same-origin'});
+    if(r.status===401){el.innerHTML='<div class="n-empty"><a href="/login">Sign in</a> to view your orders.</div>';return}
+    if(!r.ok){el.innerHTML='<div class="n-empty">Failed to load orders. <a href="#" onclick="location.reload()">Retry</a></div>';return}
+    var orders=await r.json();
+    if(!orders.length){el.innerHTML='<div class="n-empty">No orders yet. <a href="/pricing">Get a license</a></div>';return}
+    el.innerHTML=orders.map(function(o){
+      return '<div class="n-order-card"><div class="n-order-header"><span>Order #'+o.id.substring(0,10)+'...</span><span class="n-order-status '+o.status+'">'+o.status+'</span></div>'
+        +'<div class="n-order-items">'+o.items.map(function(i){return '<div class="n-order-item">'+i.name+' x'+i.quantity+' — $'+(i.price*i.quantity)+'</div>'}).join('')+'</div>'
+        +'<div class="n-order-total">Total: $'+o.total+'</div>'
+        +(o.licenseKeys&&o.licenseKeys.length?'<div class="n-order-keys"><strong>License Keys:</strong> '+o.licenseKeys.map(function(k){return '<code>'+k+'</code>'}).join(', ')+'</div>':'')
+        +'<div class="n-order-actions" style="margin-top:12px;display:flex;gap:8px">'
+        +'<a href="/api/orders/'+o.id+'/invoice" class="n-btn n-btn-sm n-btn-outline" download>📄 Download Invoice (PDF)</a>'
+        +'</div>'
+        +'</div>';
+    }).join('')
+  }catch(e){el.innerHTML='<div class="n-empty">Failed to load orders. <a href="#" onclick="location.reload()">Retry</a></div>'}
+})()
+</script>
+<% } %>

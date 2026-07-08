@@ -1,0 +1,17 @@
+<%
+const isLoggedIn = !!user;
+const url = isLoggedIn ? '#' : '/register';
+const sAttr = isLoggedIn ? 'onclick="addToCart(\'Starter\',29,1,12);return false"' : '';
+const pAttr = isLoggedIn ? 'onclick="addToCart(\'Professional\',79,5,12);return false"' : '';
+const bAttr = isLoggedIn ? 'onclick="addToCart(\'Business\',149,10,12);return false"' : '';
+const eAttr = isLoggedIn ? 'onclick="addToCart(\'Enterprise\',299,999,12);return false"' : '';
+const body = `
+<section class="n-section"><h2 class="n-section-title">Choose Your <span class="n-gradient">Plan</span></h2><p class="n-section-sub">All plans include every feature. Only the number of domains differs.</p>
+<div class="n-pricing-grid n-pricing-page">
+  <div class="n-price-card"><h3>Starter</h3><div class="n-price">$29</div><p>1 Domain · 12 Months</p><ul><li>24+ Features</li><li>1 Domain License</li><li>Email Support</li><li>Updates & Security Patches</li></ul><a href="` + url + `" class="n-btn n-btn-primary n-btn-block" ` + sAttr + `>Get Started</a></div>
+  <div class="n-price-card n-price-popular"><span class="n-price-badge">Popular</span><h3>Professional</h3><div class="n-price">$79</div><p>5 Domains · 12 Months</p><ul><li>24+ Features</li><li>5 Domain Licenses</li><li>Priority Email Support</li><li>Updates & Security Patches</li></ul><a href="` + url + `" class="n-btn n-btn-primary n-btn-block" ` + pAttr + `>Get Started</a></div>
+  <div class="n-price-card"><h3>Business</h3><div class="n-price">$149</div><p>10 Domains · 12 Months</p><ul><li>24+ Features</li><li>10 Domain Licenses</li><li>Priority Email Support</li><li>Updates & Security Patches</li></ul><a href="` + url + `" class="n-btn n-btn-primary n-btn-block" ` + bAttr + `>Get Started</a></div>
+  <div class="n-price-card"><h3>Enterprise</h3><div class="n-price">$299</div><p>Unlimited · 12 Months</p><ul><li>24+ Features</li><li>Unlimited Domains</li><li>24/7 Priority Support</li><li>Updates & Security Patches</li></ul><a href="` + url + `" class="n-btn n-btn-primary n-btn-block" ` + eAttr + `>Get Started</a></div>
+</div></section>
+`; %>
+<%- include('layout', { body: body }) %>

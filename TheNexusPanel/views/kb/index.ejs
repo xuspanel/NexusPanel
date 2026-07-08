@@ -1,0 +1,45 @@
+<%
+var cats = locals.kbCategories || [];
+var search = (locals.kbSearch || '').toLowerCase();
+var category = locals.kbCategory || '';
+var article = locals.kbArticle || null;
+var articles = locals.kbArticles || [];
+var body = '';
+
+if (article) {
+  body += '<section class="n-section n-docs"><a href="/kb/' + category + '" style="color:var(--text3)">← Back</a>'
+    + '<h1>' + article.title + '</h1>'
+    + '<div class="n-blog-content">' + (article.body || '').replace(/\n/g, '<br>') + '</div></section>';
+} else if (category) {
+  body += '<section class="n-section n-docs"><a href="/kb" style="color:var(--text3);display:block;margin-bottom:16px">← All Categories</a><h1>Knowledge Base</h1>';
+  if (!articles.length) {
+    body += '<div class="n-empty">No articles in this category.</div>';
+  } else {
+    body += '<div class="n-docs-grid">';
+    articles.forEach(function(a) {
+      body += '<a href="/kb/' + category + '/' + a.slug + '" class="n-doc-card"><span class="n-doc-icon">📄</span><h3>' + a.title + '</h3><p>' + (a.body || '').substring(0, 120) + '...</p></a>';
+    });
+    body += '</div>';
+  }
+  body += '</section>';
+} else {
+  body += '<section class="n-section n-docs"><h1>Knowledge Base</h1><p>Find answers to common questions about NexusPanel.</p>'
+    + '<div style="margin-bottom:24px"><input type="text" id="kbSearch" class="n-input" placeholder="Search all articles..." value="' + search + '" oninput="kbLiveSearch(this.value)"></div>';
+  if (search) {
+    body += '<h2>Search Results</h2><div class="n-docs-grid">';
+    cats.forEach(function(c) {
+      body += '<a href="/kb/' + c.slug + '" class="n-doc-card"><span class="n-doc-icon">📚</span><h3>' + c.name + '</h3><p>' + c.count + ' articles</p></a>';
+    });
+    body += '</div><div class="n-empty" style="margin-top:16px">Full-text search coming soon. Browse categories above.</div>';
+  } else {
+    body += '<div class="n-docs-grid">';
+    cats.forEach(function(c) {
+      body += '<a href="/kb/' + c.slug + '" class="n-doc-card"><span class="n-doc-icon">📚</span><h3>' + c.name + '</h3><p>' + c.count + ' articles</p></a>';
+    });
+    body += '</div>';
+  }
+  body += '</section>';
+}
+%>
+<%- include('../layout', { body: body }) %>
+<script>function kbLiveSearch(val){clearTimeout(window._kbTimer);window._kbTimer=setTimeout(function(){window.location.href='/kb?search='+encodeURIComponent(val)},500)}</script>

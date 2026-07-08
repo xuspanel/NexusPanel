@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title><%= title %></title>
+  <meta name="description" content="NexusPanel — All-in-one VPS control panel. Manage files, databases, Docker, domains, email, security, and more from a single dashboard.">
+  <link rel="stylesheet" href="/css/style.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>">
+</head>
+<body>
+  <nav class="n-nav" id="nNav">
+    <div class="n-nav-inner">
+      <a href="/" class="n-logo">⚡ Nexus<span>Panel</span></a>
+      <div class="n-nav-links" id="nNavLinks">
+        <a href="/" class="n-nav-link <%= page==='home'?'active':'' %>">Home</a>
+        <a href="/docs" class="n-nav-link <%= page==='docs'?'active':'' %>">Docs</a>
+        <a href="/kb" class="n-nav-link <%= page==='kb'?'active':'' %>">Knowledge Base</a>
+        <a href="/blog" class="n-nav-link <%= page==='blog'?'active':'' %>">Blog</a>
+        <a href="/pricing" class="n-nav-link <%= page==='pricing'?'active':'' %>">Pricing</a>
+        <a href="/contact" class="n-nav-link <%= page==='contact'?'active':'' %>">Contact</a>
+      </div>
+      <div class="n-nav-right">
+        <% if (user) { %>
+          <a href="/licenses" class="n-nav-link">My Licenses</a>
+          <a href="/orders" class="n-nav-link">Orders</a>
+          <a href="/profile" class="n-nav-link">👤 <%= user.name || user.email %></a>
+          <a href="/cart" class="n-nav-link n-cart-link">🛒 <span class="n-cart-badge" id="cartBadge">0</span></a>
+        <% } else { %>
+          <a href="/login" class="n-nav-link">Sign In</a>
+          <a href="/register" class="n-btn n-btn-sm n-btn-primary">Get Started</a>
+        <% } %>
+      </div>
+      <button class="n-hamburger" id="nHamburger" onclick="document.getElementById('nNav').classList.toggle('open')">
+        <span></span><span></span><span></span>
+      </button>
+    </div>
+  </nav>
+
+  <main><%- body %></main>
+
+  <footer class="n-footer">
+    <div class="n-footer-grid">
+      <div class="n-footer-col">
+        <h4>⚡ NexusPanel</h4>
+        <p>All-in-one VPS control panel. Manage your server with ease.</p>
+      </div>
+      <div class="n-footer-col">
+        <h4>Product</h4>
+        <a href="/docs">Documentation</a>
+          <a href="/kb">Knowledge Base</a>
+          <a href="/blog">Blog</a>
+        <a href="/pricing">Pricing</a>
+        <a href="/docs/installation">Install Guide</a>
+        <a href="/docs/api-reference">API Reference</a>
+      </div>
+      <div class="n-footer-col">
+        <h4>Company</h4>
+        <a href="/contact">Contact</a>
+        <a href="/policies/privacy">Privacy Policy</a>
+        <a href="/policies/terms">Terms of Service</a>
+        <a href="/policies/refunds">Refund Policy</a>
+      </div>
+      <div class="n-footer-col">
+        <h4>Connect</h4>
+        <a href="https://github.com/xuspanel/NexusPanel">GitHub</a>
+        <a href="mailto:nxp@s2u.me">nxp@s2u.me</a>
+      </div>
+    </div>
+    <div class="n-footer-bottom">
+      <p>&copy; 2026 NexusPanel. All rights reserved.</p>
+    </div>
+  </footer>
+
+  <div class="n-cookies" id="nCookies" style="display:none">
+    <div class="n-cookies-card">
+      <div class="n-cookies-left">
+        <span class="n-cookies-icon">🍪</span>
+        <div>
+          <strong>This website uses cookies</strong>
+          <p>We use cookies to enhance your experience, analyze traffic, and personalize content. By clicking "Accept," you consent to our use of cookies.</p>
+        </div>
+      </div>
+      <div class="n-cookies-actions">
+        <button class="n-btn n-btn-ghost" onclick="denyCookies()">Deny</button>
+        <button class="n-btn n-btn-primary" onclick="acceptCookies()">Accept</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/js/main.js"></script>
+</body>
+</html>
