@@ -1,3 +1,17 @@
+# Keep only TheNexusPanel in git
+/*
+!/TheNexusPanel
+!/.gitignore
+!/README.md
+
+# TheNexusPanel exceptions
+/TheNexusPanel/node_modules/
+/TheNexusPanel/.env
+/TheNexusPanel/data/users.json
+/TheNexusPanel/data/orders.json
+/TheNexusPanel/data/invoices/
+
+# Existing ignore patterns (redundant but kept for safety)
 node_modules/
 data/
 .env
