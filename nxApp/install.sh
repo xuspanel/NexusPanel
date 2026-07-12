@@ -288,6 +288,13 @@ else
     echo -e "${YELLOW}GitHub clone failed. Falling back to local copy.${NC}"
     mkdir -p "$INSTALL_DIR"
   }
+  # Move nxApp contents to root if cloned as subdirectory
+  if [ -d "$INSTALL_DIR/nxApp" ]; then
+    shopt -s dotglob
+    cp -r "$INSTALL_DIR/nxApp/"* "$INSTALL_DIR/" 2>/dev/null
+    rm -rf "$INSTALL_DIR/nxApp"
+    shopt -u dotglob
+  fi
 fi
 
 # ─── Write .env ──────────────────────────────────────
