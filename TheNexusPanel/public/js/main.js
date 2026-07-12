@@ -1,4 +1,5 @@
 /* main.js — TheNexusPanel marketing site */
+function esc(s) { return String(s || '').replace(/[&<>]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
 
 /* Cookie consent */
 (function () {
