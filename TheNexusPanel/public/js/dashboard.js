@@ -281,6 +281,7 @@ async function initDashboard() {
   setInterval(updateClock, 1000);
 
   renderHomeCards();
+  loadHistoryCharts();
 
   await fetchStats();
   if (pollInterval) clearInterval(pollInterval);
