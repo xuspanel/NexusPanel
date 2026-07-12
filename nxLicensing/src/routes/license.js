@@ -7,7 +7,7 @@ router.post('/validate', (req, res) => {
   const { key, domain } = req.body;
   if (!key) return res.status(400).json({ error: 'key is required' });
   const result = license.validateKey(key, domain || null);
-  res.json(result);
+  res.json(license.signPayload(result));
 });
 
 router.get('/licenses', authMiddleware, (req, res) => {

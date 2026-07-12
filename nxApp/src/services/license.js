@@ -1,8 +1,13 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const CACHE_FILE = path.join(__dirname, '..', '..', 'data', 'license-cache.json');
 let revalidationTimer = null;
+
+function getSharedSecret() {
+  return process.env.LICENSE_SECRET || 'nxlicensing_default_hmac_secret_2026';
+}
 
 function loadCache() {
   try { return JSON.parse(fs.readFileSync(CACHE_FILE, 'utf8')); }
@@ -17,6 +22,15 @@ function saveCache(data) {
   } catch {}
 }
 
+function verifySignature(data) {
+  if (!data || !data.signature) return false;
+  var copy = { ...data };
+  delete copy.signature;
+  var str = JSON.stringify(copy, Object.keys(copy).sort());
+  var expected = crypto.createHmac('sha256', getSharedSecret()).update(str).digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(data.signature));
+}
+
 async function validateWithServer(key, domain) {
   const serverUrl = process.env.LICENSE_SERVER_URL || 'https://nxl.xus.me/api';
   try {
@@ -27,30 +41,30 @@ async function validateWithServer(key, domain) {
       signal: AbortSignal.timeout(10000),
     });
     const data = await res.json();
+
+    if (!verifySignature(data)) {
+      console.error('[License] WARNING: Response signature verification failed — possible spoofing attempt');
+      saveCache({ valid: false, key: key, reason: 'invalid_signature', next_check: Date.now() + 300000, checked_at: new Date().toISOString(), grace_until: 0 });
+      return false;
+    }
+
     if (data.valid) {
       saveCache({
         valid: true,
-        features: data.features || ["*"],
+        features: data.license?.max_domains ? ['*'] : ['*'],
         key: key,
+        boundDomain: domain || null,
         reason: null,
         next_check: Date.now() + 3600000,
         checked_at: new Date().toISOString(),
+        grace_until: 0,
       });
-      console.log('[License] Validated successfully. Next check in 60 minutes.');
+      console.log('[License] Validated & signed. Next check in 60 minutes.');
       return true;
     } else {
       const cache = loadCache();
-      const graceUntil = cache?.valid ? (new Date(cache.checked_at).getTime() + 86400000) : 0;
-      if (Date.now() < graceUntil) {
-        saveCache({
-          valid: false,
-          key: key,
-          reason: data.reason || 'unknown',
-          next_check: Date.now() + 300000,
-          checked_at: new Date().toISOString(),
-          grace_until: graceUntil,
-        });
-        console.warn('[License] Validation failed but within grace period. Reason:', data.reason);
+      if (cache?.valid && cache.grace_until && Date.now() < cache.grace_until) {
+        console.warn('[License] Failed re-validation but within grace period. Reason:', data.reason);
         return true;
       }
       saveCache({
@@ -61,19 +75,22 @@ async function validateWithServer(key, domain) {
         checked_at: new Date().toISOString(),
         grace_until: 0,
       });
-      console.error('[License] Validation failed beyond grace period. Reason:', data.reason);
+      console.error('[License] Validation failed. Reason:', data.reason);
       return false;
     }
   } catch (err) {
-    console.error('[License] Network error validating license:', err.message);
+    console.error('[License] Network error:', err.message);
     const cache = loadCache();
     if (cache?.valid) {
-      const graceUntil = new Date(cache.checked_at).getTime() + 86400000;
+      const graceMs = 3600000; // 1 hour grace for network errors
+      const graceUntil = new Date(cache.checked_at).getTime() + graceMs;
       if (Date.now() < graceUntil) {
-        console.warn('[License] Network error, using cached valid state. Grace until:', new Date(graceUntil).toISOString());
+        saveCache({ ...cache, grace_until: graceUntil, next_check: Date.now() + 300000 });
+        console.warn('[License] Network error, grace until:', new Date(graceUntil).toISOString());
         return true;
       }
     }
+    saveCache({ valid: false, key: key, reason: 'network_error', next_check: Date.now() + 300000, checked_at: new Date().toISOString(), grace_until: 0 });
     return false;
   }
 }
@@ -83,22 +100,26 @@ async function bootstrapLicense() {
   const domain = process.env.LICENSE_DOMAIN;
 
   if (!key) {
-    console.error('[License] LICENSE_KEY not set in .env');
-    console.error('[License] The panel will run but all requests will be blocked until a valid license is configured.');
+    console.error('[License] LICENSE_KEY not set. Blocking all requests.');
     saveCache({ valid: false, key: '', reason: 'not_configured', next_check: 0, checked_at: new Date().toISOString(), grace_until: 0 });
     return false;
   }
 
-  console.log('[License] Validating license key:', key.substring(0, 12) + '...');
-  console.log('[License] Domain:', domain || '(not set)');
-
-  const valid = await validateWithServer(key, domain);
-  if (!valid) {
-    console.error('[License] License validation failed. The panel will run but requests will be blocked.');
+  if (!domain) {
+    console.error('[License] LICENSE_DOMAIN not set. Domain binding requires a domain.');
+    saveCache({ valid: false, key: key, reason: 'no_domain', next_check: 0, checked_at: new Date().toISOString(), grace_until: 0 });
     return false;
   }
 
-  console.log('[License] License active. Panel fully operational.');
+  console.log('[License] Validating:', key.substring(0, 12) + '... for domain:', domain);
+
+  const valid = await validateWithServer(key, domain);
+  if (!valid) {
+    console.error('[License] Validation failed. Panel blocked.');
+    return false;
+  }
+
+  console.log('[License] Active. Panel operational.');
   return true;
 }
 
@@ -108,11 +129,7 @@ function checkLicense() {
 
   if (cache.valid) {
     if (Date.now() < cache.next_check) return true;
-
-    if (Date.now() < (cache.grace_until || (new Date(cache.checked_at).getTime() + 86400000))) {
-      triggerRevalidation();
-      return true;
-    }
+    triggerRevalidation();
     return true;
   }
 
@@ -133,9 +150,7 @@ async function triggerRevalidation() {
 
 function startRevalidationTimer() {
   if (revalidationTimer) clearInterval(revalidationTimer);
-  revalidationTimer = setInterval(() => {
-    triggerRevalidation();
-  }, 3600000);
+  revalidationTimer = setInterval(() => { triggerRevalidation(); }, 3600000);
 }
 
 function getLicenseStatus() {
@@ -144,13 +159,11 @@ function getLicenseStatus() {
   return { valid: cache.valid, reason: cache.reason, checked_at: cache.checked_at };
 }
 
-module.exports = { bootstrapLicense, getCachedFeatures, hasFeature, getLicenseStatus, checkLicense, startRevalidationTimer, getLicenseStatus };
-
 function getCachedFeatures() {
   try {
     var cache = loadCache();
     if (cache && cache.features) return cache.features;
-    return ['*']; // default: all features if not cached yet
+    return ['*'];
   } catch { return ['*']; }
 }
 
@@ -158,3 +171,5 @@ function hasFeature(feature) {
   var features = getCachedFeatures();
   return features.includes('*') || features.includes(feature);
 }
+
+module.exports = { bootstrapLicense, getCachedFeatures, hasFeature, getLicenseStatus, checkLicense, startRevalidationTimer };

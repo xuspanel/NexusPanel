@@ -4,6 +4,10 @@ const crypto = require('crypto');
 
 const DATA_FILE = path.join(__dirname, '..', '..', 'data', 'licenses.json');
 
+function getSharedSecret() {
+  return process.env.VALIDATION_SECRET || 'nxlicensing_default_hmac_secret_2026';
+}
+
 function load() {
   try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
   catch { return []; }
@@ -93,6 +97,13 @@ function validateKey(key, domain) {
   };
 }
 
+function signPayload(payload) {
+  const secret = getSharedSecret();
+  const str = JSON.stringify(payload, Object.keys(payload).sort());
+  const hmac = crypto.createHmac('sha256', secret).update(str).digest('hex');
+  return { ...payload, signature: hmac };
+}
+
 function getLicense(key) {
   return load().find(l => l.key === key) || null;
 }
@@ -151,7 +162,7 @@ function getStats() {
   };
 }
 
-module.exports = { generateKeys, validateKey, getLicense, listLicenses, updateLicense, deleteLicense, getStats, getAnalytics, checkExpiries, getPlanFeatures };
+module.exports = { generateKeys, validateKey, getLicense, listLicenses, updateLicense, deleteLicense, getStats, getAnalytics, checkExpiries, getPlanFeatures, signPayload };
 
 const PLAN_FEATURES = {
   Starter: ['dashboard','files','terminal','services','processes','logs','cron','users','profile','theme'],
