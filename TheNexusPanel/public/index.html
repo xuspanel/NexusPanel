@@ -327,16 +327,19 @@
       <div class="home-cards-grid" id="homeCardsGrid"></div>
 
       <!-- Resource History Charts -->
-      <div style="margin-top:20px;display:flex;align-items:center;gap:8px;justify-content:center">
-        <button class="home-period-btn active" onclick="switchHistoryPeriod('24h',this)">24h</button>
-        <button class="home-period-btn" onclick="switchHistoryPeriod('7d',this)">7d</button>
-        <button class="home-period-btn" onclick="switchHistoryPeriod('30d',this)">30d</button>
+      <div class="home-charts-header">
+        <span class="home-charts-title">📊 Resource History</span>
+        <div class="home-charts-periods">
+          <button class="home-period-btn active" onclick="switchHistoryPeriod('24h',this)">24h</button>
+          <button class="home-period-btn" onclick="switchHistoryPeriod('7d',this)">7d</button>
+          <button class="home-period-btn" onclick="switchHistoryPeriod('30d',this)">30d</button>
+        </div>
       </div>
       <div id="homeHistoryCharts" class="home-charts-grid">
-        <div class="home-chart-card"><span class="home-chart-label">CPU</span><canvas id="chartCpu" height="120"></canvas></div>
-        <div class="home-chart-card"><span class="home-chart-label">Memory</span><canvas id="chartMem" height="120"></canvas></div>
-        <div class="home-chart-card"><span class="home-chart-label">Disk</span><canvas id="chartDisk" height="120"></canvas></div>
-        <div class="home-chart-card"><span class="home-chart-label">Network</span><canvas id="chartNet" height="120"></canvas></div>
+        <div class="home-chart-card"><span class="home-chart-label">CPU</span><canvas id="chartCpu" height="80"></canvas></div>
+        <div class="home-chart-card"><span class="home-chart-label">Memory</span><canvas id="chartMem" height="80"></canvas></div>
+        <div class="home-chart-card"><span class="home-chart-label">Disk</span><canvas id="chartDisk" height="80"></canvas></div>
+        <div class="home-chart-card"><span class="home-chart-label">Network</span><canvas id="chartNet" height="80"></canvas></div>
       </div>
 
       <!-- System Stats (compact) -->

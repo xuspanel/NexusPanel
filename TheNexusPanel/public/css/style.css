@@ -6438,10 +6438,10 @@ body::before {
 
 .home-sub-title { font-size: 16px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.3px; }
 
-.home-sub-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 14px;
+.home-sub-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 /* Card Grid */
@@ -6453,82 +6453,89 @@ body::before {
 
 .home-card {
   position: relative;
-  border-radius: var(--radius-md);
-  padding: 22px 18px 18px;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
   cursor: pointer;
   overflow: hidden;
   background: var(--bg-card);
   border: 1px solid var(--glass-border);
-  transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.3s ease;
+  transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  gap: 10px;
 }
 
 .home-card::before {
   content: '';
   position: absolute;
   top: 0; left: 0;
-  width: 100%;
-  height: 4px;
+  height: 100%;
+  width: 3px;
   background: var(--card-grad);
-  transition: height 0.3s ease;
+  transition: width 0.2s ease;
 }
 
 .home-card-glow {
   position: absolute;
-  top: -50%;
-  right: -50%;
+  top: 0; left: 0;
   width: 100%;
   height: 100%;
   background: var(--card-grad);
   opacity: 0;
-  border-radius: 50%;
-  filter: blur(60px);
-  transition: opacity 0.4s ease;
+  filter: blur(30px);
+  transition: opacity 0.3s ease;
   pointer-events: none;
 }
 
 .home-card:hover {
-  transform: translateY(-4px) scale(1.02);
-  box-shadow: 0 12px 40px rgba(0,0,0,0.3);
+  transform: translateX(3px);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
   border-color: rgba(255,255,255,0.1);
 }
 
 .home-card:hover .home-card-glow {
-  opacity: 0.08;
+  opacity: 0.06;
 }
 
 .home-card:hover::before {
-  height: 5px;
+  width: 4px;
 }
 
 .home-card-icon {
-  font-size: 28px;
+  font-size: 20px;
   line-height: 1;
-  margin-bottom: 4px;
+  flex-shrink: 0;
+  width: 28px;
+  text-align: center;
+}
+
+.home-card-body {
+  flex: 1;
+  min-width: 0;
 }
 
 .home-card-title {
-  font-size: 14px;
-  font-weight: 700;
+  font-size: 13px;
+  font-weight: 600;
   color: var(--text-primary);
 }
 
 .home-card-desc {
   font-size: 11px;
   color: var(--text-muted);
-  line-height: 1.4;
-  flex: 1;
+  line-height: 1.3;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .home-card-arrow {
-  font-size: 14px;
+  font-size: 12px;
   color: var(--text-muted);
   opacity: 0;
-  transform: translateX(-8px);
-  transition: all 0.3s ease;
-  text-align: right;
+  transform: translateX(-6px);
+  transition: all 0.2s ease;
+  flex-shrink: 0;
 }
 
 .home-card:hover .home-card-arrow {
@@ -6610,23 +6617,42 @@ body::before {
 }
 
 /* Resource History Charts */
+.home-charts-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 24px;
+  padding: 0 2px;
+}
+
+.home-charts-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.home-charts-periods {
+  display: flex;
+  gap: 4px;
+}
+
 .home-charts-grid {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-top: 16px;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 10px;
+  margin-top: 10px;
 }
 
 .home-chart-card {
   background: var(--bg-card);
   border: 1px solid var(--glass-border);
-  border-radius: var(--radius-md);
-  padding: 12px;
+  border-radius: var(--radius-sm);
+  padding: 8px;
 }
 
 .home-chart-card canvas {
   width: 100% !important;
-  height: 100% !important;
+  max-height: 80px;
 }
 
 .home-chart-label {
@@ -7948,7 +7974,6 @@ body::before {
   .home-hero-title { font-size: 28px; }
   .home-cards-grid { grid-template-columns: repeat(2, 1fr); }
   .dashboard-stats-grid { grid-template-columns: repeat(2, 1fr); }
-  .home-charts-grid { grid-template-columns: repeat(2, 1fr); }
   .home-hero-stats { flex-wrap: wrap; gap: 16px; }
 }
 
