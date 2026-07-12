@@ -6430,21 +6430,21 @@ body::before {
   display: flex;
   align-items: center;
   gap: 10px;
-  padding: 10px 16px;
+  padding: 12px 18px;
   background: rgba(255,255,255,0.04);
   border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm) var(--radius-sm) 0 0;
   border-bottom: 2px solid var(--accent-cyan);
 }
 
-.home-sub-icon { font-size: 18px; }
-.home-sub-title { font-size: 14px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.3px; }
+.home-sub-icon { font-size: 20px; }
+.home-sub-title { font-size: 15px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.3px; }
 
 .home-sub-grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: 8px;
-  padding: 12px;
+  gap: 10px;
+  padding: 14px;
   background: rgba(255,255,255,0.015);
   border: 1px solid var(--glass-border);
   border-top: none;
@@ -6473,7 +6473,7 @@ body::before {
 .home-card {
   position: relative;
   border-radius: var(--radius-sm);
-  padding: 14px;
+  padding: 20px 16px 16px;
   cursor: pointer;
   overflow: hidden;
   background: var(--bg-card);
@@ -6517,14 +6517,14 @@ body::before {
 }
 
 .home-card-icon {
-  font-size: 26px;
+  font-size: 30px;
   line-height: 1;
-  margin-bottom: 8px;
+  margin-bottom: 10px;
   text-align: center;
 }
 
 .home-card-title {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 600;
   color: var(--text-primary);
 }
