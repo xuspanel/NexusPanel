@@ -6439,10 +6439,17 @@ body::before {
 .home-sub-title { font-size: 16px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.3px; }
 
 .home-sub-list {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  display: flex;
+  flex-direction: row;
   gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
 }
+
+.home-sub-list::-webkit-scrollbar { height: 4px; }
+.home-sub-list::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
 
 /* Card Grid */
 .home-cards-grid {
@@ -6460,6 +6467,9 @@ body::before {
   background: var(--bg-card);
   border: 1px solid var(--glass-border);
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+  min-width: 180px;
+  flex-shrink: 0;
+  scroll-snap-align: start;
 }
 
 .home-card::before {
@@ -6591,14 +6601,14 @@ body::before {
   .home-hero-stat { min-width: 70px; padding: 8px 12px; }
   .home-hero-stat-value { font-size: 15px; }
   .home-cards-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-  .home-sub-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
+  .home-sub-list { flex-wrap: wrap; }
   .home-sys-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
   .home-cards-grid { grid-template-columns: repeat(2, 1fr); }
-  .home-sub-list { grid-template-columns: 1fr; }
-  .home-card { padding: 12px; }
+  .home-sub-list { flex-wrap: wrap; }
+  .home-card { padding: 12px; min-width: 140px; }
   .home-card-icon { font-size: 20px; }
   .home-card-title { font-size: 12px; }
   .home-card-desc { display: none; }
