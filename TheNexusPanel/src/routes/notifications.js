@@ -1,0 +1,10 @@
+const express = require('express');
+const { authMiddleware } = require('../middleware/auth');
+const notif = require('../services/notifications');
+const router = express.Router();
+router.use(authMiddleware);
+router.get('/', (req, res) => { res.json(notif.list(req.query.unread === '1')); });
+router.post('/read/:id', (req, res) => { notif.markRead(req.params.id); res.json({ ok: true }); });
+router.post('/read-all', (req, res) => { notif.markAllRead(); res.json({ ok: true }); });
+router.delete('/', (req, res) => { notif.clear(); res.json({ ok: true }); });
+module.exports = router;

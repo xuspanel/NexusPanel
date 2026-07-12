@@ -1,51 +1,81 @@
 const express = require('express');
-const { requireAuth } = require('../middleware/auth');
+const speakeasy = require('speakeasy');
+const qrcode = require('qrcode');
+const { authMiddleware } = require('../middleware/auth');
 const users = require('../services/users');
-const { execSync } = require('child_process');
+
 const router = express.Router();
+router.use(authMiddleware);
 
-function sendProfileEmail(email, subject, body) {
-  try {
-    execSync('sendmail -t -oi', { input: [
-      'From: NexusPanel Security <nxp@s2u.me>',
-      'To: ' + email,
-      'Subject: ' + subject,
-      'Content-Type: text/plain; charset=utf-8',
-      '',
-      body,
-      '',
-      'If you did not make this change, please contact support immediately.',
-      '',
-      '— The NexusPanel Team',
-      '  nxp@s2u.me',
-    ].join('\n'), encoding: 'utf8', timeout: 10000 });
-  } catch (e) { console.error('[ProfileEmail] Failed:', e.message); }
-}
+router.get('/', (req, res) => {
+  const user = users.getPanelUser(req.user.username);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+  res.json({
+    email: user.email || '',
+    twoFactorEnabled: !!user.twoFactorEnabled,
+  });
+});
 
-router.use(requireAuth);
-
-router.put('/password', async (req, res) => {
-  try {
-    await users.changePassword(req.user.id, req.body.currentPassword, req.body.newPassword);
-    const profile = users.getProfile(req.user.id);
-    if (profile) {
-      sendProfileEmail(profile.email, 'Your Password Has Been Changed',
-        'Your NexusPanel account password was changed on ' + new Date().toLocaleString() + '.');
-    }
-    res.json({ ok: true });
-  } catch (e) { res.status(400).json({ error: e.message }); }
+router.put('/password', (req, res) => {
+  const { currentPassword, newPassword } = req.body;
+  if (!currentPassword || !newPassword) {
+    return res.status(400).json({ error: 'Current and new password required' });
+  }
+  if (newPassword.length < 8) {
+    return res.status(400).json({ error: 'New password must be at least 8 characters' });
+  }
+  const result = users.changePassword(req.user.username, currentPassword, newPassword);
+  if (result.error) return res.status(400).json({ error: result.error });
+  res.json({ success: true });
 });
 
 router.put('/email', (req, res) => {
+  const { email } = req.body;
+  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return res.status(400).json({ error: 'Valid email required' });
+  }
+  users.updateEmail(req.user.username, email);
+  res.json({ success: true, email });
+});
+
+router.post('/2fa/setup', async (req, res) => {
+  const secret = speakeasy.generateSecret({
+    name: `NexusPanel (${req.user.username})`,
+    issuer: 'NexusPanel',
+  });
+  users.setTwoFactorSecret(req.user.username, secret.base32);
   try {
-    const oldProfile = users.getProfile(req.user.id);
-    users.updateEmail(req.user.id, req.body.email);
-    if (oldProfile) {
-      sendProfileEmail(oldProfile.email, 'Your Email Has Been Changed',
-        'Your NexusPanel account email was changed from ' + oldProfile.email + ' to ' + req.body.email + ' on ' + new Date().toLocaleString() + '.');
-    }
-    res.json({ ok: true });
-  } catch (e) { res.status(400).json({ error: e.message }); }
+    const qrDataUrl = await qrcode.toDataURL(secret.otpauth_url);
+    res.json({ secret: secret.base32, qrCode: qrDataUrl });
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to generate QR code' });
+  }
+});
+
+router.post('/2fa/verify', (req, res) => {
+  const { token } = req.body;
+  if (!token) return res.status(400).json({ error: 'Verification code required' });
+  const secret = users.getTwoFactorSecret(req.user.username);
+  if (!secret) return res.status(400).json({ error: '2FA not set up. Generate a secret first.' });
+  const verified = speakeasy.totp.verify({
+    secret,
+    encoding: 'base32',
+    token,
+    window: 1,
+  });
+  if (!verified) return res.status(400).json({ error: 'Invalid code. Try again.' });
+  users.enableTwoFactor(req.user.username);
+  res.json({ success: true, message: '2FA enabled successfully' });
+});
+
+router.post('/2fa/disable', (req, res) => {
+  const { password } = req.body;
+  if (!password) return res.status(400).json({ error: 'Password required to disable 2FA' });
+  if (!users.verifyPassword(req.user.username, password)) {
+    return res.status(400).json({ error: 'Invalid password' });
+  }
+  users.disableTwoFactor(req.user.username);
+  res.json({ success: true, message: '2FA disabled' });
 });
 
 module.exports = router;

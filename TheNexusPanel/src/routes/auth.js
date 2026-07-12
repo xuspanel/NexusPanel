@@ -1,77 +1,87 @@
 const express = require('express');
+const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
-const { requireAuth } = require('../middleware/auth');
+const speakeasy = require('speakeasy');
+const { authMiddleware } = require('../middleware/auth');
 const users = require('../services/users');
-const { execSync } = require('child_process');
+
 const router = express.Router();
 
-function sendWelcomeEmail(email, name) {
-  try {
-    execSync('sendmail -t -oi', { input: [
-      'From: NexusPanel <nxp@s2u.me>',
-      'To: ' + email,
-      'Subject: Welcome to NexusPanel!',
-      'Content-Type: text/plain; charset=utf-8',
-      '',
-      'Welcome' + (name ? ' ' + name : '') + '!',
-      '',
-      'Thank you for creating a NexusPanel account. You now have access to:',
-      '',
-      '  • Browse and purchase license plans',
-      '  • Manage your license keys',
-      '  • Access complete documentation',
-      '  • Track your order history',
-      '',
-      'Get started: https://nxp.xus.me/pricing',
-      'Documentation: https://nxp.xus.me/docs',
-      '',
-      'If you have any questions, reply to this email or contact nxp@s2u.me.',
-      '',
-      '— The NexusPanel Team',
-      '  nxp@s2u.me',
-    ].join('\n'), encoding: 'utf8', timeout: 10000 });
-  } catch (e) { console.error('[WelcomeEmail] Failed:', e.message); }
-}
-
-router.post('/register', async (req, res) => {
-  try {
-    const { name, email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    const user = await users.createUser({ name, email, password });
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('nxp_token', token, { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 3600000 });
-    sendWelcomeEmail(email, name);
-    res.json({ ok: true, user });
-  } catch (err) {
-    res.status(400).json({ error: err.message });
+router.post('/login', (req, res) => {
+  const { username, password } = req.body;
+  if (!username || !password) {
+    return res.status(400).json({ error: 'Username and password required' });
   }
+  const user = users.getPanelUser(username);
+  if (!user) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  if (!users.verifyPassword(username, password)) {
+    return res.status(401).json({ error: 'Invalid credentials' });
+  }
+  if (user.twoFactorEnabled) {
+    const tempToken = jwt.sign(
+      { username, role: user.role, step: '2fa' },
+      process.env.JWT_SECRET,
+      { expiresIn: '5m' }
+    );
+    return res.json({ twoFactorRequired: true, tempToken });
+  }
+  const token = jwt.sign(
+    { username, role: user.role },
+    process.env.JWT_SECRET,
+    { expiresIn: '2h' }
+  );
+  const secure = req.protocol === 'https' && req.secure;
+  res.cookie('token', token, {
+    httpOnly: true, secure, sameSite: 'strict', maxAge: 2 * 60 * 60 * 1000,
+  });
+  res.json({ success: true, username });
 });
 
-router.post('/login', async (req, res) => {
+router.post('/login/2fa', (req, res) => {
+  const { tempToken, token: totpToken } = req.body;
+  if (!tempToken || !totpToken) {
+    return res.status(400).json({ error: 'Temp token and verification code required' });
+  }
   try {
-    const { email, password } = req.body;
-    if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
-    const user = await users.verifyPassword(email, password);
-    if (!user) return res.status(401).json({ error: 'Invalid credentials' });
-    const token = jwt.sign({ id: user.id, email: user.email, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
-    res.cookie('nxp_token', token, { httpOnly: true, sameSite: 'lax', maxAge: 7 * 24 * 3600000 });
-    res.json({ ok: true, user: { id: user.id, name: user.name, email: user.email, role: user.role } });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+    const decoded = jwt.verify(tempToken, process.env.JWT_SECRET);
+    if (decoded.step !== '2fa') {
+      return res.status(400).json({ error: 'Invalid temp token' });
+    }
+    const secret = users.getTwoFactorSecret(decoded.username);
+    if (!secret) {
+      return res.status(400).json({ error: '2FA not configured' });
+    }
+    const verified = speakeasy.totp.verify({
+      secret, encoding: 'base32', token: totpToken, window: 1,
+    });
+    if (!verified) {
+      return res.status(401).json({ error: 'Invalid verification code' });
+    }
+    const token = jwt.sign(
+      { username: decoded.username, role: decoded.role },
+      process.env.JWT_SECRET,
+      { expiresIn: '2h' }
+    );
+    const secure = req.protocol === 'https' && req.secure;
+    res.cookie('token', token, {
+      httpOnly: true, secure, sameSite: 'strict', maxAge: 2 * 60 * 60 * 1000,
+    });
+    res.json({ success: true, username: decoded.username });
+  } catch {
+    return res.status(401).json({ error: 'Temp token expired or invalid' });
   }
 });
 
 router.post('/logout', (req, res) => {
-  res.clearCookie('nxp_token');
-  res.json({ ok: true });
+  const secure = req.protocol === 'https' && req.secure;
+  res.clearCookie('token', { httpOnly: true, secure, sameSite: 'strict' });
+  res.json({ success: true });
 });
 
-router.get('/me', (req, res) => {
-  if (!req.user) return res.json({ user: null });
-  const profile = users.getProfile(req.user.id);
-  if (!profile) return res.json({ user: null });
-  res.json({ user: profile });
+router.get('/me', authMiddleware, (req, res) => {
+  res.json({ username: req.user.username, role: req.user.role });
 });
 
 module.exports = router;
