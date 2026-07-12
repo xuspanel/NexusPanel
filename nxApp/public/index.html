@@ -1,0 +1,1952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>NexusPanel — VPS Control Center</title>
+  <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('nx-theme') || 'dark');</script>
+  <link rel="stylesheet" href="/css/style.css?v=1.0.0">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-language_tools.js"></script>
+  <script defer src="/js/theme.js?v=1.0.0"></script>
+  <script defer src="/js/api.js?v=1.0.0"></script>
+  <script defer src="/js/auth.js?v=1.0.0"></script>
+  <script defer src="/js/dashboard.js?v=1.0.0"></script>
+  <script defer src="/js/profile.js?v=1.0.0"></script>
+  <script defer src="/js/filemanager.js?v=1.0.0"></script>
+  <script defer src="/js/databases.js?v=1.0.0"></script>
+  <script defer src="/js/emails.js?v=1.0.0"></script>
+  <script defer src="/js/docker.js?v=1.0.0"></script>
+  <script defer src="/js/terminal.js?v=1.0.0"></script>
+  <script defer src="/js/users.js?v=1.0.0"></script>
+  <script defer src="/js/ftp.js?v=1.0.0"></script>
+  <script defer src="/js/domains.js?v=1.0.0"></script>
+  <script defer src="/js/backups.js?v=1.0.0"></script>
+  <script defer src="/js/virusscanner.js?v=1.0.0"></script>
+  <script defer src="/js/mimetypes.js?v=1.0.0"></script>
+  <script defer src="/js/audit.js?v=1.0.0"></script>
+  <script defer src="/js/services.js?v=1.0.0"></script>
+  <script defer src="/js/processes.js?v=1.0.0"></script>
+  <script defer src="/js/logs.js?v=1.0.0"></script>
+  <script defer src="/js/cron.js?v=1.0.0"></script>
+  <script defer src="/js/firewall.js?v=1.0.0"></script>
+  <script defer src="/js/ssl.js?v=1.0.0"></script>
+  <script defer src="/js/phpfpm.js?v=1.0.0"></script>
+  <script defer src="/js/updates.js?v=1.0.0"></script>
+  <script defer src="/js/settings.js?v=1.0.0"></script>
+  <script defer src="/js/notifications.js?v=1.0.0"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" crossorigin="anonymous">
+  <script defer src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js" crossorigin="anonymous"></script>
+</head>
+<body>
+  <canvas id="particles-canvas"></canvas>
+
+  <!-- Login Page -->
+  <div id="loginPage" class="login-page" style="display:none;">
+    <div class="login-container">
+      <div class="login-card">
+        <div class="login-logo">
+          <span class="logo-icon">⚡</span>
+          <h1>NexusPanel</h1>
+          <p>VPS Control Center</p>
+        </div>
+        <div id="loginError" class="login-error"></div>
+        <form id="loginForm" autocomplete="off">
+          <div class="input-group">
+            <label>Username</label>
+            <div class="input-wrapper">
+              <span class="input-icon">👤</span>
+              <input type="text" id="loginUsername" placeholder="Enter username" autocomplete="username" required>
+            </div>
+          </div>
+          <div class="input-group">
+            <label>Password</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🔒</span>
+              <input type="password" id="loginPassword" placeholder="Enter password" autocomplete="current-password" required>
+            </div>
+          </div>
+          <button type="submit" class="btn-login" id="loginBtn">
+            <span class="btn-text">Access Panel</span>
+            <span class="spinner"></span>
+          </button>
+        </form>
+        <div class="login-footer">
+          NexusPanel v1.0 &bull; Secure Connection
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2FA Verify Page -->
+  <div id="twoFactorPage" class="login-page" style="display:none;">
+    <div class="login-container">
+      <div class="login-card">
+        <div class="login-logo">
+          <span class="logo-icon">🔐</span>
+          <h1>Two-Factor Auth</h1>
+          <p>Enter the code from your authenticator app</p>
+        </div>
+        <div id="twoFactorError" class="login-error"></div>
+        <form id="twoFactorForm" autocomplete="off">
+          <div class="input-group">
+            <label>Verification Code</label>
+            <div class="input-wrapper">
+              <span class="input-icon">🔢</span>
+              <input type="text" id="twoFactorCode" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" required>
+            </div>
+          </div>
+          <button type="submit" class="btn-login" id="twoFactorBtn">
+            <span class="btn-text">Verify &amp; Sign In</span>
+            <span class="spinner"></span>
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- Side Navigation -->
+  <nav class="side-nav" id="sideNav">
+    <div class="side-nav-glow"></div>
+    <div class="side-nav-inner">
+      <div class="side-nav-header">
+        <div class="side-nav-logo">⚡</div>
+        <div class="side-nav-title">NexusPanel</div>
+        <div class="side-nav-subtitle">Control Center</div>
+      </div>
+      <div class="side-nav-divider"></div>
+      <div class="side-nav-items">
+        <button class="side-nav-item active" data-view="dashboard">
+          <span class="sni-icon">🏠</span>
+          <span class="sni-label">Home</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="files">
+          <span class="sni-icon">📁</span>
+          <span class="sni-label">File Manager</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="databases">
+          <span class="sni-icon">🗄️</span>
+          <span class="sni-label">Databases</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="emails">
+          <span class="sni-icon">✉️</span>
+          <span class="sni-label">Emails</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="docker">
+          <span class="sni-icon">🐳</span>
+          <span class="sni-label">Docker</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="ftp">
+          <span class="sni-icon">📡</span>
+          <span class="sni-label">FTP</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="terminal">
+          <span class="sni-icon">&#x1F4BB;</span>
+          <span class="sni-label">Terminal</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="users">
+          <span class="sni-icon">👥</span>
+          <span class="sni-label">Users</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="domains">
+          <span class="sni-icon">🌐</span>
+          <span class="sni-label">Domains</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="backups">
+          <span class="sni-icon">💾</span>
+          <span class="sni-label">Backups</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="virusscanner">
+          <span class="sni-icon">🛡️</span>
+          <span class="sni-label">Scanner</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="mimetypes">
+          <span class="sni-icon">📋</span>
+          <span class="sni-label">MIME Types</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="audit">
+          <span class="sni-icon">📜</span>
+          <span class="sni-label">Audit Trail</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="services">
+          <span class="sni-icon">⚙️</span>
+          <span class="sni-label">Services</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="processes">
+          <span class="sni-icon">📊</span>
+          <span class="sni-label">Processes</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="logs">
+          <span class="sni-icon">📝</span>
+          <span class="sni-label">Log Viewer</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="cron">
+          <span class="sni-icon">⏰</span>
+          <span class="sni-label">Cron Jobs</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="firewall">
+          <span class="sni-icon">🛡️</span>
+          <span class="sni-label">Firewall</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="ssl">
+          <span class="sni-icon">🔒</span>
+          <span class="sni-label">SSL Certs</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="phpfpm">
+          <span class="sni-icon">🐘</span>
+          <span class="sni-label">PHP-FPM</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="updates">
+          <span class="sni-icon">🔄</span>
+          <span class="sni-label">Updates</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="settings">
+          <span class="sni-icon">⚙️</span>
+          <span class="sni-label">Settings</span>
+          <span class="sni-indicator"></span>
+        </button>
+        <button class="side-nav-item" data-view="profile">
+          <span class="sni-icon">👤</span>
+          <span class="sni-label">Profile</span>
+          <span class="sni-indicator"></span>
+        </button>
+      </div>
+      <div class="side-nav-spacer"></div>
+      <div class="side-nav-divider"></div>
+      <div class="side-nav-footer">
+        <div class="side-nav-user">
+          <span class="snu-avatar">A</span>
+          <div class="snu-info">
+            <span class="snu-name">admin</span>
+            <span class="snu-role">Administrator</span>
+          </div>
+          <span class="snu-status"></span>
+        </div>
+        <button class="side-nav-logout" id="themeToggle" onclick="toggleTheme()">
+          <span class="snl-icon" id="themeToggleIcon">🌙</span>
+          <span class="snl-label" id="themeToggleLabel">Dark Mode</span>
+        </button>
+        <button class="side-nav-logout" id="logoutBtn">
+          <span class="snl-icon">🚪</span>
+          <span class="snl-label">Sign Out</span>
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Side Nav Overlay -->
+  <div class="side-nav-overlay" id="sideNavOverlay"></div>
+
+  <!-- Nav Toggle -->
+  <button class="nav-toggle" id="navToggle">
+    <span class="nav-toggle-line"></span>
+    <span class="nav-toggle-line"></span>
+    <span class="nav-toggle-line"></span>
+  </button>
+
+  <!-- Dashboard -->
+  <div id="dashboardPage" class="dashboard" style="display:none;">
+    <header class="dashboard-header">
+      <div class="header-left">
+        <span class="header-logo">⚡ NexusPanel</span>
+      </div>
+      <div class="header-right">
+        <div class="notif-bell-wrap">
+          <button class="notif-bell" id="notifBell" onclick="toggleNotifPanel()" title="Notifications">🔔</button>
+          <span class="notif-badge" id="notifBadge" style="display:none;"></span>
+          <div class="notif-panel" id="notifPanel" style="display:none;">
+            <div class="notif-panel-header">
+              <span>Notifications</span>
+              <button class="fm-btn fm-btn-sm" onclick="notifMarkAllRead()">Mark all read</button>
+            </div>
+            <div id="notifList" class="notif-list"></div>
+          </div>
+        </div>
+        <span class="header-time" id="headerTime"></span>
+      </div>
+    </header>
+
+    <!-- Home View -->
+    <main class="dashboard-content" id="viewDashboard">
+      <!-- Hero Welcome -->
+      <div class="home-hero">
+        <div class="home-hero-bg"></div>
+        <div class="home-hero-content">
+          <div class="home-hero-icon">⚡</div>
+          <h1 class="home-hero-title">Welcome to NexusPanel</h1>
+          <p class="home-hero-subtitle" id="homeHeroSubtitle">VPS Control Center</p>
+          <div class="home-hero-stats" id="homeHeroStats">
+            <div class="home-hero-stat">
+              <span class="home-hero-stat-icon">🖥</span>
+              <span class="home-hero-stat-value" id="homeStatCores">—</span>
+              <span class="home-hero-stat-label">Cores</span>
+            </div>
+            <div class="home-hero-stat">
+              <span class="home-hero-stat-icon">💾</span>
+              <span class="home-hero-stat-value" id="homeStatRam">—</span>
+              <span class="home-hero-stat-label">RAM</span>
+            </div>
+            <div class="home-hero-stat">
+              <span class="home-hero-stat-icon">⏱</span>
+              <span class="home-hero-stat-value" id="homeStatUptime">—</span>
+              <span class="home-hero-stat-label">Uptime</span>
+            </div>
+            <div class="home-hero-stat">
+              <span class="home-hero-stat-icon">🌐</span>
+              <span class="home-hero-stat-value" id="homeStatOS">—</span>
+              <span class="home-hero-stat-label">OS</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Screen Cards Grid -->
+      <div class="home-cards-grid" id="homeCardsGrid"></div>
+
+      <!-- Resource History Charts -->
+      <div class="home-charts-header">
+        <span class="home-charts-title">📊 Resource History</span>
+        <div class="home-charts-periods">
+          <button class="home-period-btn active" onclick="switchHistoryPeriod('24h',this)">24h</button>
+          <button class="home-period-btn" onclick="switchHistoryPeriod('7d',this)">7d</button>
+          <button class="home-period-btn" onclick="switchHistoryPeriod('30d',this)">30d</button>
+        </div>
+      </div>
+      <div id="homeHistoryCharts" class="home-charts-grid">
+        <div class="home-chart-card"><span class="home-chart-label">CPU</span><canvas id="chartCpu" height="80"></canvas></div>
+        <div class="home-chart-card"><span class="home-chart-label">Memory</span><canvas id="chartMem" height="80"></canvas></div>
+        <div class="home-chart-card"><span class="home-chart-label">Disk</span><canvas id="chartDisk" height="80"></canvas></div>
+        <div class="home-chart-card"><span class="home-chart-label">Network</span><canvas id="chartNet" height="80"></canvas></div>
+      </div>
+
+      <!-- System Stats (compact) -->
+      <div class="home-section-header" style="margin-top:32px;">
+        <span class="home-section-icon">📊</span>
+        <span class="home-section-title">System Status</span>
+        <span class="home-section-badge" id="homeStatusBadge"><span class="status-dot online"></span>Online</span>
+      </div>
+      <div class="home-sys-grid" id="homeSysGrid">
+        <div class="home-sys-card">
+          <div class="home-sys-label"><span class="label-icon">💾</span> RAM</div>
+          <div class="progress-container">
+            <div class="progress-header">
+              <span class="progress-text" id="homeRamText">Loading...</span>
+              <span class="progress-percent" id="homeRamPercent">0%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill progress-fill-green" id="homeRamFill" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="home-sys-card">
+          <div class="home-sys-label"><span class="label-icon">⚡</span> CPU</div>
+          <div class="progress-container">
+            <div class="progress-header">
+              <span class="progress-text">Load Average</span>
+              <span class="progress-percent" id="homeCpuPercent">0%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill progress-fill-gold" id="homeCpuFill" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="home-sys-card">
+          <div class="home-sys-label"><span class="label-icon">💽</span> Disk</div>
+          <div class="progress-container">
+            <div class="progress-header">
+              <span class="progress-text" id="homeDiskText">Loading...</span>
+              <span class="progress-percent" id="homeDiskPercent">0%</span>
+            </div>
+            <div class="progress-bar">
+              <div class="progress-fill progress-fill-cyan" id="homeDiskFill" style="width:0%"></div>
+            </div>
+          </div>
+        </div>
+        <div class="home-sys-card">
+          <div class="home-sys-label"><span class="label-icon">📡</span> Bandwidth</div>
+          <div class="home-sys-bandwidth">
+            <div class="home-sys-bw-item">
+              <span class="home-sys-bw-label">⬇ Down</span>
+              <span class="home-sys-bw-value" id="homeTrafficRx">0 B</span>
+            </div>
+            <div class="home-sys-bw-item">
+              <span class="home-sys-bw-label">⬆ Up</span>
+              <span class="home-sys-bw-value" id="homeTrafficTx">0 B</span>
+            </div>
+          </div>
+        </div>
+        <div class="home-sys-card home-sys-card-full">
+          <div class="home-sys-label"><span class="label-icon">🔗</span> SSH Connect</div>
+          <div class="root-command" id="homeRootCommand">
+            <span id="homeRootCommandText">ssh root@—</span>
+            <span class="copy-hint">📋 Click to copy</span>
+          </div>
+        </div>
+        <div class="home-sys-card home-sys-card-full">
+          <div class="home-sys-label"><span class="label-icon">🔃</span> Reboot</div>
+          <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
+            <button class="btn-reboot" id="homeRebootBtn">
+              <span class="icon">🔃</span> Reboot Server
+            </button>
+            <span class="card-sub" id="homeRebootStatus">Server is running normally</span>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Users View -->
+    <main class="dashboard-content" id="viewUsers" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">👥</span>
+          <div class="db-header-info">
+            <div class="db-header-title">VPS Users</div>
+            <div class="db-header-subtitle">System Users &amp; Permissions</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <button class="db-btn db-btn-primary" id="usersAddBtn">+ Add User</button>
+          <button class="db-btn db-btn-icon" id="usersRefreshBtn" title="Refresh">↻</button>
+        </div>
+      </div>
+
+      <div id="usersLoading" class="db-loading">
+        <div class="db-loading-spinner"></div>
+        <div class="db-loading-text">Loading users...</div>
+      </div>
+
+      <div id="usersError" class="db-error" style="display:none;">
+        <span class="db-error-icon">⚠️</span>
+        <span id="usersErrorText">Failed to load</span>
+        <button class="db-btn db-btn-retry" id="usersRetryBtn">Retry</button>
+      </div>
+
+      <div id="usersContent" style="display:none;">
+        <div class="users-table-wrap">
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>UID</th>
+                <th>Groups</th>
+                <th>Shell</th>
+                <th>Home</th>
+                <th>Last Login</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="usersTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- Backup Wizard View -->
+    <main class="dashboard-content" id="viewBackups" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">💾</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Backups</div>
+            <div class="db-header-subtitle">VPS Backup Wizard & Archive Manager</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <button class="db-btn db-btn-icon" onclick="loadBackupList()" title="Refresh">↻</button>
+        </div>
+      </div>
+
+      <div class="bk-tabs">
+        <button class="bk-tab active" data-tab="wizard">🪄 Backup Wizard</button>
+        <button class="bk-tab" data-tab="list">📋 Backup List</button>
+        <button class="bk-tab" data-tab="schedules">⏰ Schedules</button>
+      </div>
+
+      <div id="bkProgress" class="bk-progress" style="display:none;">
+        <div class="bk-progress-header">
+          <span class="bk-progress-text">
+            <span class="bk-progress-percent">0%</span>
+          </span>
+          <button class="db-btn db-btn-sm" id="bkProgressCancel">✕ Cancel</button>
+        </div>
+        <div class="bk-progress-bar">
+          <div class="bk-progress-fill" style="width:0%"></div>
+        </div>
+        <div class="bk-progress-stats">
+          <div class="bk-stat"><span class="bk-stat-label">Current:</span> <span id="bkProgressCurrent">--</span></div>
+          <div class="bk-stat"><span class="bk-stat-label">Items:</span> <span id="bkProgressItems">--</span></div>
+          <div class="bk-stat"><span class="bk-stat-label">Elapsed:</span> <span id="bkProgressElapsed">--</span></div>
+          <div class="bk-stat"><span class="bk-stat-label">ETA:</span> <span id="bkProgressEta">--</span></div>
+        </div>
+      </div>
+
+      <div id="bkWizard" class="bk-wizard">
+        <div class="bk-card" id="bkFullCard"></div>
+        <div class="bk-card" id="bkSelCard"></div>
+      </div>
+
+      <div id="bkList" class="bk-list-view" style="display:none;">
+        <div id="bkListLoading" class="db-loading" style="display:none;">
+          <div class="db-loading-spinner"></div>
+          <span>Loading backups...</span>
+        </div>
+        <div id="bkListEmpty" class="db-error" style="display:none;">📭 No backups found yet</div>
+        <div class="bk-table-wrap">
+          <table class="users-table" id="bkListTable">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Items</th>
+                <th>Size</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="bkListBody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div id="bkSchedules" class="bk-list-view" style="display:none;">
+        <div style="margin-bottom:16px">
+          <button class="db-btn db-btn-primary" onclick="bkShowScheduleForm()">+ New Schedule</button>
+        </div>
+        <div id="bkScheduleList"></div>
+        <div id="bkScheduleForm" style="display:none" class="bk-card">
+          <h3 id="bkScheduleFormTitle">New Backup Schedule</h3>
+          <div class="bk-form-row">
+            <label>Target</label>
+            <select id="bkSchTarget" class="fm-form-input"></select>
+          </div>
+          <div class="bk-form-row">
+            <label>Frequency</label>
+            <select id="bkSchFreq" onchange="bkSchFreqChange()" class="fm-form-input">
+              <option value="daily">Daily</option>
+              <option value="weekly">Weekly</option>
+              <option value="monthly">Monthly</option>
+            </select>
+          </div>
+          <div class="bk-form-row">
+            <label>Time (UTC)</label>
+            <input type="time" id="bkSchTime" value="02:00" class="fm-form-input">
+          </div>
+          <div class="bk-form-row" id="bkSchDayRow" style="display:none">
+            <label id="bkSchDayLabel">Day</label>
+            <select id="bkSchDay" class="fm-form-input"></select>
+          </div>
+          <div class="bk-form-row">
+            <label>Keep Last (N backups)</label>
+            <input type="number" id="bkSchRetention" value="7" min="1" max="100" class="fm-form-input">
+          </div>
+          <div class="bk-form-actions">
+            <button class="db-btn" onclick="document.getElementById('bkScheduleForm').style.display='none'">Cancel</button>
+            <button class="db-btn db-btn-primary" onclick="bkSaveSchedule()">Save Schedule</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="bkToast" class="bk-toast" style="display:none;"></div>
+    </main>
+
+    <!-- Profile View -->
+    <main class="dashboard-content" id="viewProfile" style="display:none;">
+      <div class="section-header">
+        <div class="section-title"><span class="icon">👤</span> My Profile</div>
+        <span class="section-badge">Account Settings</span>
+      </div>
+
+      <div class="grid-2 profile-grid">
+        <!-- Email -->
+        <div class="card card-cyan">
+          <div class="card-label"><span class="label-icon">📧</span> Email Address</div>
+          <div id="profileEmail" class="profile-current">admin@meedo51.com</div>
+          <div class="profile-form" style="margin-top:12px;">
+            <div class="input-group" style="margin-bottom:12px;">
+              <input type="email" id="emailInput" placeholder="New email address">
+            </div>
+            <button class="btn-profile" id="updateEmailBtn">Update Email</button>
+            <span class="profile-msg" id="emailMsg"></span>
+          </div>
+        </div>
+
+        <!-- Password -->
+        <div class="card card-gold">
+          <div class="card-label"><span class="label-icon">🔒</span> Change Password</div>
+          <div class="profile-form" style="margin-top:12px;">
+            <div class="input-group" style="margin-bottom:10px;">
+              <input type="password" id="currentPass" placeholder="Current password">
+            </div>
+            <div class="input-group" style="margin-bottom:10px;">
+              <input type="password" id="newPass" placeholder="New password (min 8 chars)">
+            </div>
+            <div class="input-group" style="margin-bottom:12px;">
+              <input type="password" id="confirmPass" placeholder="Confirm new password">
+            </div>
+            <button class="btn-profile" id="changePassBtn">Change Password</button>
+            <span class="profile-msg" id="passwordMsg"></span>
+          </div>
+        </div>
+
+        <!-- 2FA -->
+        <div class="card card-purple" style="grid-column: 1 / -1;">
+          <div class="card-label"><span class="label-icon">🔐</span> Two-Factor Authentication</div>
+          <div id="twoFactorSection">
+            <p class="card-sub" style="margin-bottom:16px;">
+              Add an extra layer of security to your account by enabling 2FA via TOTP
+              (Google Authenticator, Authy, etc.).
+            </p>
+
+            <!-- 2FA Disabled State -->
+            <div id="twoFactorDisabled">
+              <button class="btn-profile btn-accent" id="setup2FABtn">Enable 2FA</button>
+            </div>
+
+            <!-- 2FA Setup State -->
+            <div id="twoFactorSetup" style="display:none;">
+              <div class="twofa-setup-layout">
+                <div class="twofa-qr">
+                  <img id="twoFactorQR" src="" alt="2FA QR Code">
+                </div>
+                <div class="twofa-secret-area">
+                  <p class="card-sub">Or enter this secret key manually:</p>
+                  <code id="twoFactorSecret" class="twofa-secret"></code>
+                  <p class="card-sub" style="margin-top:8px;">Enter the 6-digit code from your app to verify:</p>
+                  <div style="display:flex; gap:10px; margin-top:8px;">
+                    <input type="text" id="twoFactorSetupCode" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]*" class="twofa-input">
+                    <button class="btn-profile btn-accent" id="verify2FABtn">Verify &amp; Enable</button>
+                  </div>
+                  <span class="profile-msg" id="twoFactorMsg"></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- 2FA Enabled State -->
+            <div id="twoFactorEnabled" style="display:none;">
+              <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+                <span class="status-dot online" style="width:12px;height:12px;"></span>
+                <span style="color:var(--accent-green); font-weight:600;">Two-factor authentication is active</span>
+              </div>
+              <div style="display:flex; gap:10px; align-items:center;">
+                <input type="password" id="disable2FAPass" placeholder="Enter password to disable" class="twofa-input" style="max-width:260px;">
+                <button class="btn-profile btn-danger" id="disable2FABtn">Disable 2FA</button>
+              </div>
+              <span class="profile-msg" id="disable2FAMsg"></span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Databases View -->
+    <main class="dashboard-content" id="viewDatabases" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">🗄️</span>
+          <div class="db-header-info">
+            <div class="db-header-title" id="dbTitle">Database Manager</div>
+            <div class="db-header-subtitle" id="dbBreadcrumb">Loading...</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <button class="db-btn db-btn-icon" id="dbRefreshBtn" title="Refresh">↻</button>
+        </div>
+      </div>
+
+      <div id="dbLoading" class="db-loading"><div class="db-loading-spinner"></div><span>Connecting to PostgreSQL...</span></div>
+      <div id="dbError" class="db-error" style="display:none;"><span class="db-error-icon">⚠</span><span id="dbErrorText">Failed to connect</span><button class="db-btn db-btn-retry" id="dbRetryBtn">Retry</button></div>
+
+      <div id="dbContent" style="display:none;">
+        <div id="dbCardsView">
+          <div class="db-cards-grid">
+            <div class="db-action-card" onclick="showCreateForm()"><span class="db-action-icon">➕</span><h3>Create Database</h3><p>Create a new PostgreSQL database with custom configuration</p></div>
+            <div class="db-action-card" onclick="showManage()"><span class="db-action-icon">📋</span><h3>Manage Databases</h3><p>Edit config, browse tables, modify schema</p></div>
+            <div class="db-action-card" onclick="window.open('/pgadmin','_blank')"><span class="db-action-icon">🐘</span><h3>Access pgAdmin</h3><p>Open pgAdmin web interface for advanced management</p></div>
+            <div class="db-action-card" onclick="showQueryTerminal()"><span class="db-action-icon">⌨</span><h3>SQL Query</h3><p>Execute SQL queries, browse data, run schema commands</p></div>
+          </div>
+        </div>
+
+        <div id="dbSubViews" style="display:none">
+          <div id="dbManageList" class="db-manage-grid"></div>
+
+          <div id="dbConfView" style="display:none"><div id="dbConfContent"></div></div>
+
+          <div id="dbTablesView" style="display:none"><div id="dbTablesContent"></div></div>
+
+          <div id="dbEditorView" style="display:none"><div id="dbEditorContent"></div></div>
+          <div id="dbQueryView" style="display:none"><div id="dbQueryContent"></div></div>
+        </div>
+      </div>
+
+      <div class="fm-modal-overlay" id="dbModal" style="display:none" onclick="if(event.target===this)closeDBModal()">
+        <div class="fm-modal" style="max-width:540px;"><div class="fm-modal-header"><span>Database</span><button class="fm-modal-close" onclick="closeDBModal()">✕</button></div><div class="fm-modal-body" id="dbModalContent"></div></div>
+      </div>
+      <div id="dbToast" class="bk-toast" style="display:none;"></div>
+    </main>
+
+    <!-- Emails View -->
+    <main class="dashboard-content" id="viewEmails" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">✉️</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Email Accounts</div>
+            <div class="db-header-subtitle" id="emailBreadcrumb">s2u.me — 1 account</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <button class="db-btn db-btn-primary" id="emailCreateBtn">+ Create Email</button>
+          <div class="db-search-wrap">
+            <input type="text" id="emailSearchInput" class="db-search-input" placeholder="Search email accounts..." spellcheck="false">
+          </div>
+          <button class="db-btn db-btn-icon" id="emailRefreshBtn" title="Refresh">↻</button>
+        </div>
+      </div>
+
+      <div id="emailLoading" class="db-loading">
+        <div class="db-loading-spinner"></div>
+        <div class="db-loading-text">Loading email accounts...</div>
+      </div>
+
+      <div id="emailError" class="db-error" style="display:none;">
+        <span class="db-error-icon">⚠️</span>
+        <span id="emailErrorText">Failed to load</span>
+        <button class="db-btn db-btn-retry" id="emailRetryBtn">Retry</button>
+      </div>
+
+      <div id="emailContent" style="display:none;">
+        <div class="email-grid" id="emailGrid"></div>
+      </div>
+
+      <!-- Email Client View -->
+      <div id="emailClientView" style="display:none;">
+        <div class="ec-header">
+          <span class="ec-header-icon">✉️</span>
+          <span class="ec-header-title">Email Client</span>
+          <button class="ec-back-btn" id="ecBackBtn">← Back to Panel</button>
+        </div>
+        <div class="ec-body">
+          <div class="ec-sidebar">
+            <button class="ec-compose-btn" id="ecComposeBtn">
+              <span class="ec-compose-icon">📝</span>
+              <span>New Message</span>
+            </button>
+
+            <div class="ec-nav" id="ecNav">
+              <div class="ec-nav-item ec-nav-active" data-folder="INBOX">
+                <span class="ec-nav-icon">📥</span>
+                <span class="ec-nav-label">Inbox</span>
+                <span class="ec-nav-badge" id="ecBadgeINBOX"></span>
+              </div>
+              <div class="ec-nav-item" data-folder="Sent">
+                <span class="ec-nav-icon">📤</span>
+                <span class="ec-nav-label">Sent</span>
+                <span class="ec-nav-badge" id="ecBadgeSent"></span>
+              </div>
+              <div class="ec-nav-item" data-folder="Spam">
+                <span class="ec-nav-icon">📧</span>
+                <span class="ec-nav-label">Spam</span>
+                <span class="ec-nav-badge" id="ecBadgeSpam"></span>
+              </div>
+              <div class="ec-nav-item" data-folder="Trash">
+                <span class="ec-nav-icon">🗑️</span>
+                <span class="ec-nav-label">Trash</span>
+                <span class="ec-nav-badge" id="ecBadgeTrash"></span>
+              </div>
+            </div>
+
+            <div class="ec-sidebar-divider"></div>
+
+            <div class="ec-quota">
+              <div class="ec-quota-label">
+                <span>Storage</span>
+                <span id="ecQuotaText">—</span>
+              </div>
+              <div class="ec-quota-bar">
+                <div class="ec-quota-fill" id="ecQuotaFill" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="ec-main">
+            <!-- Folder toolbar -->
+            <div class="ec-toolbar" id="ecToolbar">
+              <div class="ec-toolbar-left">
+                <span class="ec-toolbar-folder" id="ecFolderName">Inbox</span>
+                <span class="ec-toolbar-count" id="ecFolderCount"></span>
+              </div>
+              <div class="ec-toolbar-right">
+                <div class="ec-search-wrap">
+                  <input type="text" id="ecSearchInput" class="db-search-input" placeholder="Search messages..." spellcheck="false">
+                </div>
+                <button class="db-btn db-btn-icon" id="ecRefreshBtn" title="Refresh">↻</button>
+              </div>
+            </div>
+
+            <!-- Message List -->
+            <div id="ecLoading" class="db-loading" style="display:none;">
+              <div class="db-loading-spinner"></div>
+              <div class="db-loading-text">Loading messages...</div>
+            </div>
+            <div id="ecError" class="db-error" style="display:none;">
+              <span class="db-error-icon">⚠️</span>
+              <span id="ecErrorText">Failed to load</span>
+              <button class="db-btn db-btn-retry" id="ecRetryBtn">Retry</button>
+            </div>
+            <div id="ecMessageList" class="ec-message-list"></div>
+
+            <!-- Message Reader -->
+            <div id="ecMessageView" style="display:none;">
+              <div class="msg-envelope" id="ecMsgEnvelope"></div>
+              <div class="msg-body" id="ecMsgBody"></div>
+              <div class="msg-attachments" id="ecMsgAttachments" style="display:none;"></div>
+              <div class="msg-actions" id="ecMsgActions">
+                <button class="fm-btn fm-btn-secondary" id="ecMsgBackBtn">← Back to List</button>
+                <div class="msg-action-group">
+                  <button class="fm-btn fm-btn-secondary" id="ecMsgReplyBtn">↩ Reply</button>
+                  <button class="fm-btn fm-btn-secondary" id="ecMsgReplyAllBtn">↩ Reply All</button>
+                  <button class="fm-btn fm-btn-secondary" id="ecMsgForwardBtn">↪ Forward</button>
+                </div>
+                <button class="fm-btn fm-btn-secondary" id="ecMsgDeleteBtn" style="margin-left:auto;">🗑️ Delete</button>
+              </div>
+            </div>
+
+            <!-- Compose View -->
+            <div id="ecComposeView" style="display:none;">
+              <div class="compose-header">
+                <span class="compose-title">New Message</span>
+                <button class="fm-btn fm-btn-secondary" id="ecComposeCancel">Cancel</button>
+              </div>
+              <form id="ecComposeForm" class="compose-form" autocomplete="off">
+                <div id="ecComposeError" class="form-error" style="display:none;"></div>
+                <div class="compose-field">
+                  <span class="compose-field-label">To</span>
+                  <input type="text" id="ecComposeTo" class="compose-input" placeholder="recipient@domain.com" required>
+                  <span class="compose-toggle-cb" id="ecToggleCcBcc">CC/BCC</span>
+                </div>
+                <div class="compose-ccbcc" id="ecCcBccFields" style="display:none;">
+                  <div class="compose-field">
+                    <span class="compose-field-label">CC</span>
+                    <input type="text" id="ecComposeCc" class="compose-input" placeholder="cc@domain.com (optional)">
+                  </div>
+                  <div class="compose-field">
+                    <span class="compose-field-label">BCC</span>
+                    <input type="text" id="ecComposeBcc" class="compose-input" placeholder="bcc@domain.com (optional)">
+                  </div>
+                </div>
+                <div class="compose-field">
+                  <span class="compose-field-label">Subject</span>
+                  <input type="text" id="ecComposeSubject" class="compose-input" placeholder="Message subject" required>
+                </div>
+                <div class="compose-field compose-field-body">
+                  <span class="compose-field-label">Body</span>
+                  <textarea id="ecComposeBody" class="compose-textarea" placeholder="Write your message..."></textarea>
+                </div>
+                <div class="compose-attachments" id="ecComposeAttachments">
+                  <div class="compose-attach-list" id="ecComposeAttachList"></div>
+                  <div class="compose-attach-actions">
+                    <button type="button" class="fm-btn fm-btn-secondary" id="ecAttachBtn">📎 Attach Files</button>
+                    <input type="file" id="ecAttachInput" style="display:none" multiple>
+                  </div>
+                </div>
+                <div class="compose-footer">
+                  <span id="ecComposeStatus" class="compose-status"></span>
+                  <button type="submit" class="fm-btn fm-btn-primary" id="ecComposeSend">
+                    <span class="btn-text">Send Message</span>
+                    <span class="btn-spinner" style="display:none;"></span>
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- Docker View -->
+    <main class="dashboard-content" id="viewDocker" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">🐳</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Docker Manager</div>
+            <div class="db-header-subtitle" id="dockerBreadcrumb">Containers</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <button class="db-btn db-btn-icon" id="dockerRefreshBtn" title="Refresh">↻</button>
+        </div>
+      </div>
+
+      <div id="dockerLoading" class="db-loading">
+        <div class="db-loading-spinner"></div>
+        <div class="db-loading-text">Connecting to Docker...</div>
+      </div>
+
+      <div id="dockerError" class="db-error" style="display:none;">
+        <span class="db-error-icon">⚠️</span>
+        <span id="dockerErrorText">Failed to connect to Docker</span>
+        <button class="db-btn db-btn-retry" id="dockerRetryBtn">Retry</button>
+      </div>
+
+      <div id="dockerContent" style="display:none;">
+        <div class="docker-tabs">
+          <button class="docker-tab active" data-tab="containers">Containers</button>
+          <button class="docker-tab" data-tab="images">Images</button>
+        </div>
+
+        <div id="dockerTabContainers" class="docker-tab-content active">
+          <div id="dockerContainerList"></div>
+        </div>
+
+        <div id="dockerTabImages" class="docker-tab-content">
+          <div id="dockerImageList"></div>
+        </div>
+      </div>
+
+      <!-- Logs Modal -->
+      <div id="dockerLogsModal" class="modal-overlay" style="display:none;" onclick="if(event.target===this)dockerCloseLogs()">
+        <div class="modal docker-logs-modal">
+          <div class="modal-header">
+            <span class="modal-title" id="dockerLogsTitle">Container Logs</span>
+            <button class="modal-close" onclick="dockerCloseLogs()">✕</button>
+          </div>
+          <div class="modal-body">
+            <pre id="dockerLogsContent" class="docker-logs-content"></pre>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="fm-btn fm-btn-primary" onclick="dockerCloseLogs()">Close</button>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- FTP View -->
+    <main class="dashboard-content" id="viewFTP" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">📡</span>
+          <div class="db-header-info">
+            <div class="db-header-title">FTP Accounts</div>
+            <div class="db-header-subtitle">vsftpd Management</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <button class="db-btn db-btn-primary" id="ftpAddBtn">+ Add User</button>
+          <button class="db-btn db-btn-icon" id="ftpRefreshBtn" title="Refresh">↻</button>
+        </div>
+      </div>
+
+      <div id="ftpStatusCards" class="ftp-status-grid"></div>
+
+      <div id="ftpLoading" class="db-loading">
+        <div class="db-loading-spinner"></div>
+        <div class="db-loading-text">Loading FTP accounts...</div>
+      </div>
+
+      <div id="ftpError" class="db-error" style="display:none;">
+        <span class="db-error-icon">⚠️</span>
+        <span id="ftpErrorText">Failed to load</span>
+        <button class="db-btn db-btn-retry" id="ftpRetryBtn">Retry</button>
+      </div>
+
+      <div id="ftpContent" style="display:none;">
+        <div class="users-table-wrap">
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th>Username</th>
+                <th>UID</th>
+                <th>Home</th>
+                <th>Disk Usage</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="ftpTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+    <!-- Domains View -->
+    <main class="dashboard-content" id="viewDomains" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">🌐</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Domain Manager</div>
+            <div class="db-header-subtitle">nginx Virtual Hosts & SSL</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <button class="db-btn db-btn-primary" id="domainsAddBtn">+ Add Domain</button>
+          <button class="db-btn db-btn-icon" id="domainsRefreshBtn" title="Refresh">↻</button>
+        </div>
+      </div>
+
+      <div id="domainsLoading" class="db-loading">
+        <div class="db-loading-spinner"></div>
+        <div class="db-loading-text">Loading domains...</div>
+      </div>
+
+      <div id="domainsError" class="db-error" style="display:none;">
+        <span class="db-error-icon">⚠️</span>
+        <span id="domainsErrorText">Failed to load</span>
+        <button class="db-btn db-btn-retry" id="domainsRetryBtn">Retry</button>
+      </div>
+
+      <div id="domainsContent" style="display:none;">
+        <div class="users-table-wrap">
+          <table class="users-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Domain</th>
+                <th>Port</th>
+                <th>SSL</th>
+                <th>Root</th>
+                <th>Created</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="domainsTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </main>
+
+
+    <main class="dashboard-content" id="viewTerminal" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">&#x1F4BB;</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Terminal</div>
+            <div class="db-header-subtitle">Server Shell</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <button class="db-btn db-btn-icon" id="termNanoToggle" title="NANO shortcuts">&#x1F3DD;</button>
+          <button class="db-btn db-btn-icon" id="termPresetToggle" title="Presets">&#x2699;</button>
+          <button class="db-btn db-btn-icon" id="termClearBtn" title="Clear">&#x1F5D1;</button>
+          <button class="db-btn db-btn-icon" id="termReconnectBtn" title="Reconnect">&#x21BB;</button>
+        </div>
+      </div>
+
+      <div id="termLoading" class="db-loading">
+        <div class="db-loading-spinner"></div>
+        <div class="db-loading-text">Connecting to server shell...</div>
+      </div>
+
+      <div id="termError" class="db-error" style="display:none;">
+        <span class="db-error-icon">&#x26A0;</span>
+        <span id="termErrorText">Failed to connect</span>
+        <button class="db-btn db-btn-retry" id="termReconnectBtn2">Retry</button>
+      </div>
+
+      <div id="termContent" class="term-wrapper" style="display:none;">
+        <div id="termNanoBar" class="term-nano-bar">
+          <div class="term-nano-header">
+            <span>NANO Editor Actions</span>
+            <button id="termNanoClose" class="term-nano-close">&times;</button>
+          </div>
+          <div class="term-nano-grid">
+            <button class="term-nano-btn" data-ctrl="o">^O Save</button>
+            <button class="term-nano-btn" data-ctrl="x">^X Exit</button>
+            <button class="term-nano-btn" data-ctrl="k">^K Cut</button>
+            <button class="term-nano-btn" data-ctrl="u">^U Paste</button>
+            <button class="term-nano-btn" data-ctrl="w">^W Search</button>
+            <button class="term-nano-btn" data-ctrl="c">^C Cancel</button>
+            <button class="term-nano-btn" data-ctrl="_">^_ Go To</button>
+            <button class="term-nano-btn" data-ctrl="t">^T Spell</button>
+            <button class="term-nano-btn" data-ctrl="j">^J Justify</button>
+            <button class="term-nano-btn" data-ctrl="r">^R Read</button>
+            <button class="term-nano-btn" data-ctrl="y">^Y PrevPg</button>
+            <button class="term-nano-btn" data-ctrl="v">^V NextPg</button>
+            <button class="term-nano-btn" data-ctrl="g">^G Help</button>
+          </div>
+        </div>
+        <div id="termContainer" class="term-container"></div>
+        <div id="termPresetPanel" class="term-preset-panel">
+          <div class="term-preset-header">
+            <span>Presets</span>
+            <button id="termAddPresetBtn" class="term-preset-add" title="Add preset">+</button>
+          </div>
+          <input id="termPresetSearch" class="term-preset-search" type="text" placeholder="Search presets...">
+          <div id="termPresetList" class="term-preset-list"></div>
+          <div id="termPresetForm" class="term-preset-form">
+            <input id="termPresetLabel" type="text" placeholder="Label (e.g. Docker PS)">
+            <input id="termPresetCmd" type="text" placeholder="Command (e.g. docker ps -a)">
+            <div class="term-preset-form-actions">
+              <button id="termPresetSave" class="fm-btn fm-btn-primary fm-btn-sm">Save</button>
+              <button id="termPresetCancel" class="fm-btn fm-btn-sm">Cancel</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <!-- File Manager View -->
+    <main class="dashboard-content" id="viewFiles" style="display:none;">
+      <div class="fm-toolbar">
+        <div class="fm-toolbar-left">
+          <button class="fm-btn" id="fmBackBtn" title="Go back">←</button>
+          <button class="fm-btn" id="fmUpBtn" title="Go up">↑</button>
+          <button class="fm-btn" id="fmRefreshBtn" title="Refresh">↻</button>
+          <div class="fm-path-input-wrap">
+            <input type="text" id="fmPathInput" class="fm-path-input" value="/" spellcheck="false" autocomplete="off">
+            <div id="fmPathSuggestions" class="fm-path-suggestions"></div>
+          </div>
+        </div>
+        <div class="fm-toolbar-right">
+          <div class="fm-search-wrap">
+            <button class="fm-btn" id="fmSearchToggle" title="Toggle search">🔍</button>
+            <div class="fm-search-panel" id="fmSearchPanel" style="display:none;">
+              <div class="fm-search-panel-header">
+                <input type="text" id="fmSearchInput" class="fm-search-input" placeholder="Search files & folders..." spellcheck="false">
+                <button class="fm-btn fm-btn-sm" id="fmSearchGo" title="Search">🔍</button>
+                <button class="fm-search-close" id="fmSearchPanelClose">✕</button>
+              </div>
+              <div class="fm-search-options">
+                <label class="fm-search-option">
+                  <span class="fm-search-opt-label">Scope</span>
+                  <select id="fmSearchScope">
+                    <option value="local">Current folder</option>
+                    <option value="global">Recursive (8 levels)</option>
+                  </select>
+                </label>
+                <label class="fm-search-option">
+                  <span class="fm-search-opt-label">Include</span>
+                  <input type="text" id="fmSearchInclude" placeholder="*.js, *.css" class="fm-search-opt-input">
+                </label>
+                <label class="fm-search-option">
+                  <span class="fm-search-opt-label">Exclude</span>
+                  <input type="text" id="fmSearchExclude" placeholder="node_modules, .git" class="fm-search-opt-input">
+                </label>
+              </div>
+              <div class="fm-search-stats" id="fmSearchStats"></div>
+              <div class="fm-search-results" id="fmSearchResults"></div>
+            </div>
+          </div>
+          <span id="fmBatchActions" class="fm-batch-actions" style="display:none;">
+            <button class="fm-btn fm-btn-sm" id="fmBatchBtnCopy" title="Copy selected">📋</button>
+            <button class="fm-btn fm-btn-sm" id="fmBatchBtnMove" title="Move selected">✂️</button>
+            <button class="fm-btn fm-btn-sm" id="fmBatchBtnArchive" title="Archive selected">📦</button>
+            <button class="fm-btn fm-btn-sm fm-btn-danger" id="fmBatchBtnDelete" title="Delete selected">🗑</button>
+          </span>
+          <label class="fm-toggle-label" title="Show hidden files">
+            <span class="fm-toggle-text">.</span>
+            <span class="fm-toggle-switch" id="fmHiddenToggle">
+              <span class="fm-toggle-knob"></span>
+            </span>
+          </label>
+          <button class="fm-btn" id="fmCreateBtn" title="New file or folder">+</button>
+          <button class="fm-btn" id="fmUploadBtn" title="Upload files">↑</button>
+          <button class="fm-btn" id="fmGitBtn" title="Git">⬡ Git</button>
+        </div>
+      </div>
+      <div class="fm-git-panel" id="fmGitPanel" style="display:none">
+        <div class="fm-git-header">
+          <span id="fmGitBranch">⬡ main</span>
+          <div>
+            <button class="fm-btn fm-btn-sm" onclick="fmGitPull()">↓ Pull</button>
+            <button class="fm-btn fm-btn-sm fm-btn-primary" onclick="fmGitPush()">↑ Push</button>
+            <button class="fm-btn fm-btn-sm" onclick="document.getElementById('fmGitPanel').style.display='none';document.getElementById('fmGitBtn').classList.remove('active')">✕</button>
+          </div>
+        </div>
+        <div id="fmGitFiles"></div>
+        <div class="fm-git-commit">
+          <input type="text" id="fmGitMsg" placeholder="Commit message..." class="fm-form-input" style="flex:1">
+          <button class="fm-btn fm-btn-primary fm-btn-sm" onclick="fmGitCommit()">Commit</button>
+        </div>
+        <div id="fmGitLog" style="display:none"></div>
+      </div>
+      <div class="fm-body">
+        <div class="fm-sidebar" id="fmSidebar">
+          <div class="fm-sidebar-title">Quick Access</div>
+          <div class="fm-sidebar-item" data-path="/root"><span class="fm-sidebar-icon">📂</span> /root</div>
+          <div class="fm-sidebar-item" data-path="/etc"><span class="fm-sidebar-icon">⚙</span> /etc</div>
+          <div class="fm-sidebar-item" data-path="/var"><span class="fm-sidebar-icon">📦</span> /var</div>
+          <div class="fm-sidebar-item" data-path="/home"><span class="fm-sidebar-icon">🏠</span> /home</div>
+          <div class="fm-sidebar-item" data-path="/tmp"><span class="fm-sidebar-icon">📁</span> /tmp</div>
+          <div class="fm-sidebar-item" data-path="/opt"><span class="fm-sidebar-icon">📦</span> /opt</div>
+          <div class="fm-sidebar-item" data-path="/usr"><span class="fm-sidebar-icon">📚</span> /usr</div>
+          <div class="fm-sidebar-item" data-path="/srv"><span class="fm-sidebar-icon">🌐</span> /srv</div>
+          <div class="fm-sidebar-item" data-path="/mnt"><span class="fm-sidebar-icon">💾</span> /mnt</div>
+          <div class="fm-sidebar-item" data-path="/media"><span class="fm-sidebar-icon">📀</span> /media</div>
+        </div>
+        <div class="fm-main" id="fmMain">
+          <div class="fm-loading" id="fmLoading">Loading...</div>
+          <div class="fm-entries" id="fmEntries"></div>
+          <div class="fm-empty" id="fmEmpty" style="display:none;">
+            <div class="fm-empty-icon">📂</div>
+            <div class="fm-empty-text">This folder is empty</div>
+          </div>
+        </div>
+      </div>
+      <div class="fm-status-bar" id="fmStatusBar">
+        <span id="fmStatusText">Ready</span>
+      </div>
+    </main>
+
+    <!-- Virus Scanner View -->
+    <main class="dashboard-content" id="viewVirusScanner" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">🛡️</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Virus Scanner</div>
+            <div class="db-header-subtitle">ClamAV malware detection & quarantine</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <span id="scannerStatusBadge"></span>
+          <button class="db-btn db-btn-icon" onclick="updateDefs()" id="scannerUpdateDefsBtn" title="Update virus definitions">↻</button>
+        </div>
+      </div>
+
+      <div id="scannerContent">
+        <div class="scanner-no-clam" id="scannerNoClam" style="display:none;">
+          <div class="scanner-no-clam-icon">⚠</div>
+          <div class="scanner-no-clam-title">ClamAV Not Installed</div>
+          <div class="scanner-no-clam-text">Install ClamAV to enable virus scanning:</div>
+          <pre class="scanner-no-clam-code">dnf install -y clamav clamav-update && freshclam</pre>
+        </div>
+
+        <div id="scannerReady">
+          <div class="scanner-targets">
+            <div class="scanner-targets-title">Select Scan Target</div>
+            <div class="scanner-targets-grid">
+              <div class="scanner-target" onclick="selectTarget('home', this)">
+                <div class="scanner-target-icon">🏠</div>
+                <div class="scanner-target-name">Entire Home Directory</div>
+                <div class="scanner-target-path">/home</div>
+              </div>
+              <div class="scanner-target" onclick="selectTarget('mail', this)">
+                <div class="scanner-target-icon">📧</div>
+                <div class="scanner-target-name">Mail</div>
+                <div class="scanner-target-path">/home/*/Maildir</div>
+              </div>
+              <div class="scanner-target" onclick="selectTarget('ftp', this)">
+                <div class="scanner-target-icon">📡</div>
+                <div class="scanner-target-name">Public FTP Space</div>
+                <div class="scanner-target-path">/etc/vsftpd</div>
+              </div>
+              <div class="scanner-target" onclick="selectTarget('web', this)">
+                <div class="scanner-target-icon">🌐</div>
+                <div class="scanner-target-name">Public Web Space</div>
+                <div class="scanner-target-path">/var/www</div>
+              </div>
+              <div class="scanner-target" onclick="selectTarget('custom', this)">
+                <div class="scanner-target-icon">📁</div>
+                <div class="scanner-target-name">Specific Directory</div>
+                <div class="scanner-target-path">Custom path</div>
+              </div>
+            </div>
+            <div class="scanner-custom-path" id="scannerCustomPathWrap" style="display:none;">
+              <input type="text" id="scannerCustomPath" class="db-search-input" placeholder="Enter full path e.g. /var/www/html" spellcheck="false">
+            </div>
+            <button class="db-btn db-btn-primary" id="scannerStartBtn" onclick="startScan()">▶ Start Scan</button>
+          </div>
+
+          <div class="scanner-progress" id="scannerProgress" style="display:none;">
+            <div class="scanner-progress-header">Scan in progress</div>
+            <div class="scanner-progress-bar-wrap">
+              <div class="scanner-progress-bar" id="scannerProgressBar" style="width:0%"></div>
+            </div>
+            <div class="scanner-progress-label" id="scannerProgressLabel">Starting...</div>
+            <div class="scanner-progress-stats">
+              <span>Scanned: <strong id="scannerProgressScan">0</strong></span>
+              <span>Infected: <strong id="scannerProgressInfected">0</strong></span>
+              <span>Errors: <strong id="scannerProgressErrors">0</strong></span>
+              <span>Elapsed: <strong id="scannerProgressTime">0m 0s</strong></span>
+            </div>
+            <button class="db-btn db-btn-danger" onclick="abortScan()">✕ Abort</button>
+          </div>
+
+          <div class="scanner-results" id="scannerResults" style="display:none;"></div>
+          <div class="scanner-quarantine-result" id="scannerQuarantineResult" style="display:none;"></div>
+        </div>
+
+        <div class="scanner-section">
+          <div class="scanner-section-header">
+            <span class="scanner-section-title">📦 Quarantine</span>
+            <span class="scanner-section-badge" id="scannerQuarantineCount">0</span>
+          </div>
+          <div id="scannerQuarantineList" class="scanner-q-list"></div>
+        </div>
+      </div>
+
+      <div id="scannerToast" class="scanner-toast" style="display:none;"></div>
+    </main>
+
+    <!-- MIME Types View -->
+    <main class="dashboard-content" id="viewMimetypes" style="display:none;">
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">📋</span>
+          <div class="db-header-info">
+            <div class="db-header-title">MIME Types</div>
+            <div class="db-header-subtitle">System & custom MIME type definitions</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <span id="mimeStats"></span>
+          <input type="text" id="mimeSystemSearch" class="db-search-input" placeholder="Search system types..." oninput="filterSystem()" style="width:200px">
+        </div>
+      </div>
+
+      <div id="mimeContent">
+        <div class="mime-section">
+          <div class="mime-section-header">
+            <span class="mime-section-title">📦 System MIME Types</span>
+            <span class="mime-section-desc">Read-only definitions from /etc/mime.types</span>
+          </div>
+          <div id="mimeSystemTypes" class="mime-system-types"></div>
+        </div>
+
+        <div class="mime-section">
+          <div class="mime-section-header">
+            <span class="mime-section-title">✏️ User-Defined MIME Types</span>
+            <button class="db-btn" onclick="openAddMime()">+ Add Custom MIME Type</button>
+          </div>
+          <div id="mimeUserTypes" class="mime-user-types"></div>
+        </div>
+      </div>
+
+      <div id="mimeToast" class="mime-toast" style="display:none;"></div>
+    </main>
+
+    <!-- MIME Type Modal -->
+    <div class="fm-modal-overlay" id="mimeModalOverlay" style="display:none;">
+      <div class="fm-modal" style="max-width:520px;">
+        <div class="fm-modal-header">
+          <span class="fm-modal-title" id="mimeModalTitle">Add Custom MIME Type</span>
+          <button class="fm-modal-close" onclick="closeMimeModal()">✕</button>
+        </div>
+        <div class="fm-modal-body">
+          <div class="mime-form-group">
+            <label class="mime-form-label">MIME Type</label>
+            <input class="mime-form-input" id="mimeModalType" placeholder="application/x-myformat">
+          </div>
+          <div class="mime-form-group">
+            <label class="mime-form-label">Extensions (comma-separated)</label>
+            <input class="mime-form-input" id="mimeModalExts" placeholder=".myext, .my">
+          </div>
+          <div class="mime-form-group">
+            <label class="mime-form-label">Description (optional)</label>
+            <input class="mime-form-input" id="mimeModalDesc" placeholder="My custom format">
+          </div>
+          <div class="mime-form-error" id="mimeModalError" style="display:none;"></div>
+          <div class="mime-form-actions">
+            <button class="fm-btn" onclick="closeMimeModal()">Cancel</button>
+            <button class="fm-btn fm-btn-primary" onclick="saveMime()">💾 Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+    <!-- Audit Trail View -->
+    <main class="dashboard-content" id="viewAudit" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📜</span><div class="db-header-info"><div class="db-header-title">Audit Trail</div><div class="db-header-subtitle">Admin activity log</div></div></div><div class="db-header-right"><input type="text" id="auditSearchInput" class="db-search-input" placeholder="Search..." oninput="auditFilter()" style="width:160px"><select id="auditActionFilter" class="db-search-input" onchange="auditFilter()" style="width:140px"><option value="">All Actions</option></select><button class="db-btn db-btn-icon" onclick="loadAudit()" title="Refresh">↻</button><button class="db-btn db-btn-icon" onclick="auditClear()" title="Clear">🗑</button></div></div>
+      <div id="auditContent"><div id="auditList" class="audit-list"></div><div id="auditPagination" class="audit-pagination"></div></div>
+    </main>
+    <!-- Service Manager View -->
+    <main class="dashboard-content" id="viewServices" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⚙</span><div class="db-header-info"><div class="db-header-title">Service Manager</div><div class="db-header-subtitle">Systemd service control</div></div></div><div class="db-header-right"><input type="text" id="svcFilter" class="db-search-input" placeholder="Filter..." oninput="svcFilter()" style="width:200px"><button class="db-btn db-btn-icon" onclick="loadServices()" title="Refresh">↻</button></div></div>
+      <div id="svcList" class="svc-list"></div>
+    </main>
+    <!-- Process Manager View -->
+    <main class="dashboard-content" id="viewProcesses" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📊</span><div class="db-header-info"><div class="db-header-title">Process Manager</div><div class="db-header-subtitle">Live process monitoring (refreshes every 5s)</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadProcesses()" title="Refresh">↻</button></div></div>
+      <div id="procList" class="proc-list"></div>
+    </main>
+    <!-- Log Viewer -->
+    <main class="dashboard-content" id="viewLogs" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📝</span><div class="db-header-info"><div class="db-header-title">Log Viewer</div><div class="db-header-subtitle">System log browser</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadLogList()" title="Refresh">↻</button></div></div>
+      <div class="log-layout"><div class="log-sidebar" id="logFileList"></div><div class="log-main"><div class="log-toolbar"><input type="text" id="logSearchInput" class="db-search-input" placeholder="Search in log..." onkeydown="if(event.key==='Enter')logSearch()" style="flex:1"><button class="fm-btn fm-btn-sm" onclick="logSearch()">🔍</button></div><pre class="log-viewer" id="logViewerContent"></pre></div></div>
+    </main>
+    <!-- Cron Jobs View -->
+    <main class="dashboard-content" id="viewCron" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⏰</span><div class="db-header-info"><div class="db-header-title">Cron Jobs</div><div class="db-header-subtitle">Scheduled task manager</div></div></div><div class="db-header-right"><span style="font-size:12px;color:var(--text-tertiary)">Owner:</span><select id="cronOwnerSel" class="db-search-input" onchange="cronOwnerChange()" style="width:120px"></select><button class="db-btn db-btn-primary" onclick="cronAddForm()">+ Add Job</button><button class="db-btn db-btn-icon" onclick="loadCron()" title="Refresh">↻</button></div></div>
+      <div id="cronList" class="cron-list"></div>
+    </main>
+    <!-- Firewall Rules View -->
+    <main class="dashboard-content" id="viewFirewall" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🛡</span><div class="db-header-info"><div class="db-header-title">Firewall Rules</div><div class="db-header-subtitle">iptables chain & rule manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="fwAddForm()">+ Add Rule</button><button class="db-btn db-btn-icon" onclick="loadFirewall()" title="Refresh">↻</button></div></div>
+      <div id="fwContent" class="fw-content"></div>
+    </main>
+    <!-- SSL Certificates View -->
+    <main class="dashboard-content" id="viewSSL" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔒</span><div class="db-header-info"><div class="db-header-title">SSL Certificates</div><div class="db-header-subtitle">Let's Encrypt certificate manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="sslIssueForm()">+ Issue Certificate</button><button class="db-btn db-btn-icon" onclick="loadSSL()" title="Refresh">↻</button></div></div>
+      <div id="sslList" class="ssl-list"></div>
+    </main>
+    <!-- PHP-FPM View -->
+    <main class="dashboard-content" id="viewPhpFPM" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🐘</span><div class="db-header-info"><div class="db-header-title">PHP-FPM Manager</div><div class="db-header-subtitle">Pool configuration & status</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="phpfpmRestart()">🔄 Restart PHP-FPM</button><button class="db-btn db-btn-icon" onclick="loadPhpFPM()" title="Refresh">↻</button></div></div>
+      <div id="phpfpmList" class="phpfpm-list"></div>
+    </main>
+    <!-- System Updates View -->
+    <main class="dashboard-content" id="viewUpdates" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔄</span><div class="db-header-info"><div class="db-header-title">System Updates</div><div class="db-header-subtitle">dnf package manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="checkUpdates()" title="Refresh">↻</button></div></div>
+      <div id="updList" class="upd-list"></div>
+    </main>
+    <!-- Cron Modal -->
+    <div class="fm-modal-overlay" id="cronModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('cronModalOverlay').style.display='none'">
+      <div class="fm-modal" style="max-width:520px;">
+        <div class="fm-modal-header"><span class="fm-modal-title" id="cronModalTitle">Add Cron Job</span><button class="fm-modal-close" onclick="document.getElementById('cronModalOverlay').style.display='none'">✕</button></div>
+        <div class="fm-modal-body">
+          <input type="hidden" id="cronEditIndex" value="-1">
+          <div class="cron-grid">
+            <div><label class="mime-form-label">Minute</label><input class="mime-form-input" id="cronMinute" placeholder="*"></div>
+            <div><label class="mime-form-label">Hour</label><input class="mime-form-input" id="cronHour" placeholder="*"></div>
+            <div><label class="mime-form-label">Day</label><input class="mime-form-input" id="cronDom" placeholder="*"></div>
+            <div><label class="mime-form-label">Month</label><input class="mime-form-input" id="cronMonth" placeholder="*"></div>
+            <div><label class="mime-form-label">Weekday</label><input class="mime-form-input" id="cronDow" placeholder="*"></div>
+          </div>
+          <div class="mime-form-group" style="margin-top:12px"><label class="mime-form-label">Command</label><input class="mime-form-input" id="cronCommand" placeholder="/usr/bin/script.sh"></div>
+          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('cronModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="cronSave()">💾 Save</button></div>
+        </div>
+      </div>
+    </div>
+    <!-- Firewall Modal -->
+    <div class="fm-modal-overlay" id="fwModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('fwModalOverlay').style.display='none'">
+      <div class="fm-modal" style="max-width:520px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Add Firewall Rule</span><button class="fm-modal-close" onclick="document.getElementById('fwModalOverlay').style.display='none'">✕</button></div>
+        <div class="fm-modal-body">
+          <div class="mime-form-group"><label class="mime-form-label">Chain</label><input class="mime-form-input" id="fwChain" placeholder="INPUT"></div>
+          <div class="mime-form-group"><label class="mime-form-label">Rule (iptables syntax)</label><input class="mime-form-input" id="fwRule" placeholder="-p tcp --dport 80 -j ACCEPT"></div>
+          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('fwModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="fwAddRule()">Add Rule</button></div>
+        </div>
+      </div>
+    </div>
+    <!-- SSL Modal -->
+    <div class="fm-modal-overlay" id="sslModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('sslModalOverlay').style.display='none'">
+      <div class="fm-modal" style="max-width:480px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Issue SSL Certificate</span><button class="fm-modal-close" onclick="document.getElementById('sslModalOverlay').style.display='none'">✕</button></div>
+        <div class="fm-modal-body">
+          <div class="mime-form-group"><label class="mime-form-label">Domain</label><input class="mime-form-input" id="sslDomain" placeholder="example.com"></div>
+          <div class="mime-form-group"><label class="mime-form-label">Email (optional)</label><input class="mime-form-input" id="sslEmail" placeholder="admin@example.com"></div>
+          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('sslModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="sslIssue()">Issue</button></div>
+        </div>
+      </div>
+    </div>
+    <!-- Audit Trail View -->
+    <main class="dashboard-content" id="viewAudit" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📜</span><div class="db-header-info"><div class="db-header-title">Audit Trail</div><div class="db-header-subtitle">Admin activity log</div></div></div><div class="db-header-right"><input type="text" id="auditSearchInput" class="db-search-input" placeholder="Search..." oninput="auditFilter()" style="width:160px"><select id="auditActionFilter" class="db-search-input" onchange="auditFilter()" style="width:140px"><option value="">All Actions</option></select><button class="db-btn db-btn-icon" onclick="loadAudit()" title="Refresh">↻</button><button class="db-btn db-btn-icon" onclick="auditClear()" title="Clear">🗑</button></div></div>
+      <div id="auditContent"><div id="auditList" class="audit-list"></div><div id="auditPagination" class="audit-pagination"></div></div>
+    </main>
+    <!-- Service Manager View -->
+    <main class="dashboard-content" id="viewServices" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⚙</span><div class="db-header-info"><div class="db-header-title">Service Manager</div><div class="db-header-subtitle">Systemd service control</div></div></div><div class="db-header-right"><input type="text" id="svcFilter" class="db-search-input" placeholder="Filter..." oninput="svcFilter()" style="width:200px"><button class="db-btn db-btn-icon" onclick="loadServices()" title="Refresh">↻</button></div></div>
+      <div id="svcList" class="svc-list"></div>
+    </main>
+    <!-- Process Manager View -->
+    <main class="dashboard-content" id="viewProcesses" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📊</span><div class="db-header-info"><div class="db-header-title">Process Manager</div><div class="db-header-subtitle">Live process monitoring (refreshes every 5s)</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadProcesses()" title="Refresh">↻</button></div></div>
+      <div id="procList" class="proc-list"></div>
+    </main>
+    <!-- Log Viewer -->
+    <main class="dashboard-content" id="viewLogs" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📝</span><div class="db-header-info"><div class="db-header-title">Log Viewer</div><div class="db-header-subtitle">System log browser</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadLogList()" title="Refresh">↻</button></div></div>
+      <div class="log-layout"><div class="log-sidebar" id="logFileList"></div><div class="log-main"><div class="log-toolbar"><input type="text" id="logSearchInput" class="db-search-input" placeholder="Search in log..." onkeydown="if(event.key==='Enter')logSearch()" style="flex:1"><button class="fm-btn fm-btn-sm" onclick="logSearch()">🔍</button></div><pre class="log-viewer" id="logViewerContent"></pre></div></div>
+    </main>
+    <!-- Cron Jobs View -->
+    <main class="dashboard-content" id="viewCron" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⏰</span><div class="db-header-info"><div class="db-header-title">Cron Jobs</div><div class="db-header-subtitle">Scheduled task manager</div></div></div><div class="db-header-right"><span style="font-size:12px;color:var(--text-tertiary)">Owner:</span><select id="cronOwnerSel" class="db-search-input" onchange="cronOwnerChange()" style="width:120px"></select><button class="db-btn db-btn-primary" onclick="cronAddForm()">+ Add Job</button><button class="db-btn db-btn-icon" onclick="loadCron()" title="Refresh">↻</button></div></div>
+      <div id="cronList" class="cron-list"></div>
+    </main>
+    <!-- Firewall Rules View -->
+    <main class="dashboard-content" id="viewFirewall" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🛡</span><div class="db-header-info"><div class="db-header-title">Firewall Rules</div><div class="db-header-subtitle">iptables chain & rule manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="fwAddForm()">+ Add Rule</button><button class="db-btn db-btn-icon" onclick="loadFirewall()" title="Refresh">↻</button></div></div>
+      <div id="fwContent" class="fw-content"></div>
+    </main>
+    <!-- SSL Certificates View -->
+    <main class="dashboard-content" id="viewSSL" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔒</span><div class="db-header-info"><div class="db-header-title">SSL Certificates</div><div class="db-header-subtitle">Let's Encrypt certificate manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="sslIssueForm()">+ Issue Certificate</button><button class="db-btn db-btn-icon" onclick="loadSSL()" title="Refresh">↻</button></div></div>
+      <div id="sslList" class="ssl-list"></div>
+    </main>
+    <!-- PHP-FPM View -->
+    <main class="dashboard-content" id="viewPhpFPM" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🐘</span><div class="db-header-info"><div class="db-header-title">PHP-FPM Manager</div><div class="db-header-subtitle">Pool configuration & status</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="phpfpmRestart()">🔄 Restart PHP-FPM</button><button class="db-btn db-btn-icon" onclick="loadPhpFPM()" title="Refresh">↻</button></div></div>
+      <div id="phpfpmList" class="phpfpm-list"></div>
+    </main>
+    <!-- System Updates View -->
+    <main class="dashboard-content" id="viewUpdates" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔄</span><div class="db-header-info"><div class="db-header-title">System Updates</div><div class="db-header-subtitle">dnf package manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="checkUpdates()" title="Refresh">↻</button></div></div>
+      <div id="panelUpdateInfo" style="margin-bottom:16px"></div>
+      <div id="updList" class="upd-list"></div>
+    </main>
+    <!-- Settings View -->
+    <main class="dashboard-content" id="viewSettings" style="display:none;">
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⚙️</span><div class="db-header-info"><div class="db-header-title">Settings</div><div class="db-header-subtitle">Panel configuration</div></div></div></div>
+      <div id="settingsContent"><div class="db-loading">Loading settings...</div></div>
+    </main>
+  </div><!-- /dashboardPage -->
+
+  <!-- File Manager Modals -->
+  <div class="fm-modal-overlay" id="fmModalOverlay" style="display:none;">
+    <div class="fm-modal" id="fmModal">
+      <div class="fm-modal-header">
+        <span class="fm-modal-title" id="fmModalTitle">Create</span>
+        <button class="fm-modal-close" id="fmModalClose">✕</button>
+      </div>
+      <div class="fm-modal-body" id="fmModalBody"></div>
+    </div>
+  </div>
+
+  <!-- Text Editor -->
+  <div class="fm-editor-overlay" id="fmEditorOverlay" style="display:none;">
+    <div class="fm-editor" id="fmEditor">
+      <div class="fm-editor-header">
+        <div class="fm-editor-info">
+          <span class="fm-editor-icon">📄</span>
+          <span class="fm-editor-filename" id="fmEditorFilename">untitled</span>
+          <span class="fm-editor-path" id="fmEditorPath"></span>
+        </div>
+        <div class="fm-editor-actions">
+          <span class="fm-editor-lang" id="fmEditorLang"></span>
+          <span class="fm-editor-status" id="fmEditorStatus"></span>
+          <button class="fm-btn fm-btn-sm" id="fmEditorWrap" title="Toggle word wrap">↩ Wrap</button>
+          <button class="fm-btn fm-btn-sm" id="fmEditorFullscreen" title="Toggle full screen">⛶</button>
+          <button class="fm-btn fm-btn-primary" id="fmEditorSave">💾 Save</button>
+          <button class="fm-btn" id="fmEditorClose">✕</button>
+        </div>
+      </div>
+      <div class="fm-editor-body">
+        <div id="fmEditorContainer"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- File Preview Overlay -->
+  <div class="fm-preview-overlay" id="fmPreviewOverlay" style="display:none;">
+    <div class="fm-preview" id="fmPreview">
+      <div class="fm-preview-header">
+        <span class="fm-preview-name" id="fmPreviewName"></span>
+        <button class="fm-modal-close" id="fmPreviewClose">✕</button>
+      </div>
+      <div class="fm-preview-body" id="fmPreviewBody"></div>
+    </div>
+  </div>
+
+  <!-- Context Menu -->
+  <div class="fm-context-menu" id="fmContextMenu" style="display:none;">
+    <div class="fm-context-item" data-action="open">📂 Open</div>
+    <div class="fm-context-item" data-action="download">⬇ Download</div>
+    <div class="fm-context-divider"></div>
+    <div class="fm-context-item" data-action="rename">✏ Rename</div>
+    <div class="fm-context-item" data-action="duplicate">📋 Duplicate</div>
+    <div class="fm-context-item" data-action="copy">📄 Copy path</div>
+    <div class="fm-context-divider"></div>
+    <div class="fm-context-item" data-action="copyto">🔗 Copy to...</div>
+    <div class="fm-context-item" data-action="moveto">✂️ Move to...</div>
+    <div class="fm-context-item fm-context-item-danger" data-action="delete">🗑 Delete</div>
+    <div class="fm-context-divider"></div>
+    <div class="fm-context-item" data-action="archive">📦 Archive</div>
+    <div class="fm-context-item" data-action="extract">📤 Extract</div>
+    <div class="fm-context-divider"></div>
+    <div class="fm-context-item" data-action="permissions">🔒 Permissions</div>
+    <!-- Empty-space actions (hidden by default) -->
+    <div class="fm-context-divider" id="fmCtxDividerEmpty"></div>
+    <div class="fm-context-item" data-action="create-file">+ 📄 Create File</div>
+    <div class="fm-context-item" data-action="create-folder">+ 📁 Create Folder</div>
+    <div class="fm-context-item" data-action="dir-permissions">🔒 Directory Permissions</div>
+    <div class="fm-context-item" data-action="details">ℹ️ Details</div>
+  </div>
+
+  <!-- Hidden File Upload Input -->
+  <input type="file" id="fmFileInput" multiple style="display:none">
+
+  <!-- Upload Progress Bar -->
+  <div id="fmUploadProgress" class="fm-upload-progress" style="display:none;">
+    <div class="fm-upload-progress-header">
+      <span id="fmUploadProgressTitle">Uploading...</span>
+      <button id="fmUploadCancel" class="fm-upload-cancel">✕</button>
+    </div>
+    <div class="fm-upload-progress-bar">
+      <div class="fm-upload-progress-fill" id="fmUploadProgressFill"></div>
+    </div>
+    <div class="fm-upload-progress-info">
+      <span id="fmUploadProgressText">0%</span>
+      <span id="fmUploadProgressSize">0 B / 0 B</span>
+    </div>
+  </div>
+
+  <!-- Toast Overlay -->
+  <div id="fmToast" class="fm-toast">
+    <span id="fmToastIcon"></span>
+    <span id="fmToastMsg"></span>
+  </div>
+
+  <!-- Reboot Overlay -->
+  <div class="reboot-overlay" id="rebootOverlay">
+    <div class="reboot-spinner"></div>
+    <div class="reboot-text">System is Rebooting</div>
+    <div class="reboot-sub">Please wait while the server restarts...</div>
+    <div class="reboot-progress-bar">
+      <div class="reboot-progress-fill"></div>
+    </div>
+  </div>
+  <!-- Users Form Modal -->
+  <div id="usersFormModal" class="modal-overlay users-form-modal" style="display:none;">
+    <div class="modal" style="max-width:540px;">
+      <div class="modal-header">
+        <span class="modal-icon">👥</span>
+        <span class="modal-title" id="usersFormTitle">Create VPS User</span>
+        <button class="modal-close" id="usersFormClose">✕</button>
+      </div>
+      <form id="usersForm" autocomplete="off">
+        <div class="modal-body">
+          <div id="usersFormError" class="form-error" style="display:none;"></div>
+          <div id="usersFormSuccess" class="form-success" style="display:none;"></div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Username</label>
+              <input type="text" id="usersFormUsername" class="form-input" placeholder="e.g. johndoe" spellcheck="false" required autofocus>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <input type="password" id="usersFormPassword" class="form-input" minlength="6">
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Login Shell</label>
+              <select id="usersFormShell" class="form-select"></select>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Groups <span class="form-hint" style="margin-left:6px;">Ctrl+click to select multiple</span></label>
+              <select id="usersFormGroups" class="form-select" multiple style="min-height:100px;"></select>
+            </div>
+          </div>
+
+          <div class="form-row" style="display:flex; gap:20px; flex-wrap:wrap;">
+            <label class="form-checkbox">
+              <input type="checkbox" id="usersFormSudo">
+              <span class="form-checkbox-mark"></span>
+              <span class="form-checkbox-label">sudo access</span>
+            </label>
+            <label class="form-checkbox">
+              <input type="checkbox" id="usersFormPanel" checked>
+              <span class="form-checkbox-mark"></span>
+              <span class="form-checkbox-label">Panel access</span>
+            </label>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Email (for panel user)</label>
+              <input type="email" id="usersFormEmail" class="form-input" placeholder="user@domain.com">
+              <span class="form-hint">Used for panel profile and mailbox auto-creation</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="fm-btn fm-btn-secondary" id="usersFormCancel">Cancel</button>
+          <button type="submit" class="fm-btn fm-btn-primary" id="usersFormSubmit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Create Email Modal -->
+  <div id="emailCreateModal" class="modal-overlay" style="display:none;">
+    <div class="modal email-create-modal">
+      <div class="modal-header">
+        <span class="modal-icon">✉️</span>
+        <span class="modal-title">Create Email Account</span>
+        <button class="modal-close" id="emailCreateClose">✕</button>
+      </div>
+      <form id="emailCreateForm" autocomplete="off">
+        <div class="modal-body">
+          <div id="emailCreateError" class="form-error" style="display:none;"></div>
+
+          <div class="form-row">
+            <div class="form-group form-group-email-name">
+              <label class="form-label">Email Name</label>
+              <div class="form-email-prefix">
+                <input type="text" id="emailCreateName" class="form-input form-input-email" placeholder="username" spellcheck="false" required autofocus>
+                <span class="form-email-at">@</span>
+                <select id="emailCreateDomain" class="form-select form-select-domain"></select>
+              </div>
+              <span class="form-hint">e.g. contact@domain.com</span>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <div class="form-password-wrap">
+                <input type="password" id="emailCreatePassword" class="form-input" placeholder="Minimum 6 characters" required minlength="6">
+                <button type="button" class="form-password-toggle" id="emailPwdToggle" title="Show password">👁️</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Mailbox Quota</label>
+              <div class="form-quota-options" id="emailQuotaOptions">
+                <label class="form-radio">
+                  <input type="radio" name="quota" value="unlimited" checked>
+                  <span class="form-radio-mark"></span>
+                  <span class="form-radio-label">Unlimited</span>
+                </label>
+                <label class="form-radio">
+                  <input type="radio" name="quota" value="custom">
+                  <span class="form-radio-mark"></span>
+                  <span class="form-radio-label">Custom</span>
+                </label>
+              </div>
+              <div class="form-quota-custom" id="emailQuotaCustom" style="display:none;">
+                <div class="form-quota-input-group">
+                  <input type="number" id="emailCreateQuota" class="form-input" placeholder="100" min="1" max="999999">
+                  <select id="emailQuotaUnit" class="form-select form-select-sm">
+                    <option value="MB">MB</option>
+                    <option value="GB">GB</option>
+                  </select>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="fm-btn fm-btn-secondary" id="emailCreateCancel">Cancel</button>
+          <button type="submit" class="fm-btn fm-btn-primary" id="emailCreateSubmit">
+            <span class="btn-text">Create Account</span>
+            <span class="btn-spinner" style="display:none;"></span>
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  </div>
+
+  <!-- Domain Form Modal -->
+  <div id="domainFormModal" class="modal-overlay domain-form-modal" style="display:none;">
+    <div class="modal" style="max-width:540px;">
+      <div class="modal-header">
+        <span class="modal-icon">🌐</span>
+        <span class="modal-title" id="domainFormTitle">Add Domain</span>
+        <button class="modal-close" id="domainFormClose">✕</button>
+      </div>
+      <form id="domainForm" autocomplete="off">
+        <div class="modal-body">
+          <div id="domainFormError" class="form-error" style="display:none;"></div>
+          <div id="domainFormSuccess" class="form-success" style="display:none;"></div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Domain Type</label>
+              <div style="display:flex;gap:16px;margin-top:4px;">
+                <label class="form-radio">
+                  <input type="radio" name="domainType" value="domain" id="domainFormTypeDomain" checked>
+                  <span class="form-radio-mark"></span>
+                  <span class="form-radio-label">Domain</span>
+                </label>
+                <label class="form-radio">
+                  <input type="radio" name="domainType" value="subdomain" id="domainFormTypeSub">
+                  <span class="form-radio-mark"></span>
+                  <span class="form-radio-label">Subdomain</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Domain Name</label>
+              <input type="text" id="domainFormName" class="form-input" placeholder="e.g. example.com or sub.example.com" spellcheck="false" required autofocus>
+              <span class="form-hint">Enter the full domain name</span>
+            </div>
+          </div>
+
+          <div class="form-row" id="domainFormParentRow" style="display:none;">
+            <div class="form-group">
+              <label class="form-label">Parent Domain</label>
+              <select id="domainFormParent" class="form-select"></select>
+              <span class="form-hint">Select the parent domain for this subdomain</span>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Custom Port</label>
+              <input type="number" id="domainFormPort" class="form-input" placeholder="Auto-assign (8000-9000)" min="1" max="65535">
+              <span class="form-hint">Leave empty to auto-assign an available port</span>
+            </div>
+          </div>
+
+          <div class="form-row">
+            <div class="form-group" style="display:flex;gap:20px;flex-wrap:wrap;">
+              <label class="form-checkbox">
+                <input type="checkbox" id="domainFormSSL" checked>
+                <span class="form-checkbox-mark"></span>
+                <span class="form-checkbox-label">Install SSL Certificate</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="fm-btn fm-btn-secondary" id="domainFormCancel">Cancel</button>
+          <button type="submit" class="fm-btn fm-btn-primary" id="domainFormSubmit">Create Domain</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- Nginx Config Preview/Edit Modal -->
+  <div id="nginxPreviewModal" class="modal-overlay domain-nginx-modal" style="display:none;">
+    <div class="domain-nginx-modal-inner" style="max-width:960px;">
+      <div class="modal-header">
+        <span class="modal-icon">⚙</span>
+        <span class="modal-title" id="nginxPreviewTitle">nginx Config</span>
+        <button class="modal-close" id="nginxPreviewClose">✕</button>
+      </div>
+      <div class="domain-nginx-body">
+        <div class="domain-nginx-left">
+          <div class="domain-nginx-toolbar">
+            <span class="domain-nginx-toolbar-title">nginx.conf</span>
+            <div class="domain-nginx-toolbar-actions">
+              <button class="fm-btn fm-btn-secondary fm-btn-sm" id="nginxEditBtn">✏ Edit Config</button>
+              <button class="fm-btn fm-btn-primary fm-btn-sm" id="nginxSaveBtn" style="display:none;">💾 Save</button>
+              <button class="fm-btn fm-btn-secondary fm-btn-sm" id="nginxCancelBtn" style="display:none;">Cancel</button>
+            </div>
+          </div>
+          <div class="domain-nginx-editor">
+            <pre class="domain-nginx-pre" id="nginxPreviewBlock"></pre>
+            <textarea class="domain-nginx-textarea" id="nginxTextarea" spellcheck="false"></textarea>
+          </div>
+          <div class="domain-nginx-status" id="nginxEditStatus"></div>
+        </div>
+        <div class="domain-nginx-right">
+          <div class="domain-info-card">
+            <div class="domain-info-title">Domain Details</div>
+            <div class="domain-info-row">
+              <span class="domain-info-label">Domain</span>
+              <span class="domain-info-value" id="nginxPreviewDomain">—</span>
+            </div>
+            <div class="domain-info-row">
+              <span class="domain-info-label">Type</span>
+              <span class="domain-info-value" id="nginxPreviewType">—</span>
+            </div>
+            <div class="domain-info-row">
+              <span class="domain-info-label">Port</span>
+              <span class="domain-info-value" id="nginxPreviewPort">—</span>
+            </div>
+            <div class="domain-info-row">
+              <span class="domain-info-label">Document Root</span>
+              <span class="domain-info-value domain-info-value-small" id="nginxPreviewRoot">—</span>
+            </div>
+            <div class="domain-info-row">
+              <span class="domain-info-label">SSL</span>
+              <span class="domain-info-value" id="nginxPreviewSSL">—</span>
+            </div>
+          </div>
+          <div class="domain-info-hint">
+            <strong>Tip:</strong> You can edit the nginx config directly using the Edit button. After saving, nginx will be reloaded automatically.
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FTP User Form Modal -->
+  <div id="ftpFormModal" class="modal-overlay ftp-form-modal" style="display:none;">
+    <div class="modal" style="max-width:540px;">
+      <div class="modal-header">
+        <span class="modal-icon">📡</span>
+        <span class="modal-title" id="ftpFormTitle">Create FTP User</span>
+        <button class="modal-close" id="ftpFormClose">✕</button>
+      </div>
+      <form id="ftpForm" autocomplete="off">
+        <div class="modal-body">
+          <div id="ftpFormError" class="form-error" style="display:none;"></div>
+          <div id="ftpFormSuccess" class="form-success" style="display:none;"></div>
+
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Username</label>
+              <input type="text" id="ftpFormUsername" class="form-input" placeholder="ftpuser" spellcheck="false" required autofocus>
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Password</label>
+              <input type="password" id="ftpFormPassword" class="form-input" minlength="6">
+            </div>
+          </div>
+          <div class="form-row">
+            <div class="form-group">
+              <label class="form-label">Home Directory</label>
+              <input type="text" id="ftpFormHome" class="form-input" placeholder="/home/ftpuser">
+            </div>
+          </div>
+          <div class="form-row" style="display:flex;gap:12px;">
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">Max Rate (bytes/s, 0=unlimited)</label>
+              <input type="number" id="ftpFormMaxRate" class="form-input" value="0" min="0">
+            </div>
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">Max Clients</label>
+              <input type="number" id="ftpFormMaxClients" class="form-input" value="5" min="1" max="50">
+            </div>
+          </div>
+          <div class="form-row" style="display:flex;gap:12px;">
+            <div class="form-group" style="flex:1;">
+              <label class="form-label">Max Per IP</label>
+              <input type="number" id="ftpFormMaxPerIP" class="form-input" value="2" min="1" max="10">
+            </div>
+            <div class="form-group" style="flex:1;display:flex;align-items:center;padding-top:24px;">
+              <label class="form-checkbox" id="ftpEnabledRow" style="display:none;">
+                <input type="checkbox" id="ftpFormEnabled" checked>
+                <span class="form-checkbox-mark"></span>
+                <span class="form-checkbox-label">Enabled</span>
+              </label>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="fm-btn fm-btn-secondary" id="ftpFormCancel">Cancel</button>
+          <button type="submit" class="fm-btn fm-btn-primary" id="ftpFormSubmit">Save</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+</body>
+</html>

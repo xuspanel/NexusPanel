@@ -1,6 +1,7 @@
-# Keep only TheNexusPanel in git
+# Keep only TheNexusPanel and nxApp in git
 /*
 !/TheNexusPanel
+!/nxApp
 !/.gitignore
 !/README.md
 

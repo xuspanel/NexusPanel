@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>License Required — NexusPanel</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: #0a0e1a;
+      color: #e2e8f0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+    .err-card {
+      background: rgba(17, 24, 39, 0.8);
+      backdrop-filter: blur(24px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 20px;
+      padding: 48px 40px;
+      max-width: 520px;
+      width: 100%;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+    }
+    .err-icon { font-size: 64px; margin-bottom: 16px; }
+    .err-title { font-size: 24px; font-weight: 800; margin-bottom: 8px; }
+    .err-reason { font-size: 15px; color: #ef4444; font-weight: 600; margin-bottom: 16px; }
+    .err-message { font-size: 14px; color: #94a3b8; line-height: 1.6; margin-bottom: 24px; }
+    .err-key {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 14px;
+      color: #06b6d4;
+      margin-bottom: 24px;
+    }
+    .err-btn {
+      display: inline-block;
+      padding: 12px 28px;
+      background: #06b6d4;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: background 0.2s;
+    }
+    .err-btn:hover { background: #0891b2; }
+    .err-footer {
+      margin-top: 24px;
+      font-size: 12px;
+      color: #64748b;
+    }
+    .err-footer a { color: #06b6d4; }
+  </style>
+</head>
+<body>
+  <div class="err-card">
+    <div class="err-icon">🔑</div>
+    <div class="err-title">License Required</div>
+    <div class="err-reason" id="errReason">Invalid or expired license</div>
+    <div class="err-message">
+      NexusPanel requires a valid license key to operate.<br>
+      Your license may be expired, suspended, revoked, or you may be offline.
+    </div>
+    <div class="err-key" id="errKey">••••-••••-••••-••••</div>
+    <a class="err-btn" href="https://nxl.xus.me" target="_blank">Get a License Key</a>
+    <div class="err-footer">
+      Need help? <a href="https://github.com/xuspanel/NexusPanel" target="_blank">GitHub</a> &middot; <a href="https://nxl.xus.me" target="_blank">License Portal</a>
+    </div>
+  </div>
+  <script>
+    fetch('/api/license-status').then(r => r.json()).then(d => {
+      if (d.reason) document.getElementById('errReason').textContent = 'License ' + d.reason.replace(/_/g, ' ');
+    }).catch(() => {});
+  </script>
+</body>
+</html>

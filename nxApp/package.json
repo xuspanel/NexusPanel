@@ -1,0 +1,30 @@
+{
+  "name": "nexuspanel",
+  "version": "1.0.0",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": "",
+  "dependencies": {
+    "adm-zip": "^0.5.17",
+    "archiver": "^8.0.0",
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "dotenv": "^17.4.2",
+    "express": "^5.2.1",
+    "express-rate-limit": "^8.5.2",
+    "helmet": "^8.2.0",
+    "jsonwebtoken": "^9.0.3",
+    "mailparser": "^3.9.12",
+    "multer": "^2.2.0",
+    "node-pty": "^1.1.0",
+    "qrcode": "^1.5.4",
+    "speakeasy": "^2.0.0",
+    "ws": "^8.21.0"
+  }
+}
