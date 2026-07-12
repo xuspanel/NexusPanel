@@ -6439,9 +6439,9 @@ body::before {
 .home-sub-title { font-size: 16px; font-weight: 700; color: var(--text-primary); letter-spacing: 0.3px; }
 
 .home-sub-list {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 8px;
 }
 
 /* Card Grid */
@@ -6454,25 +6454,21 @@ body::before {
 .home-card {
   position: relative;
   border-radius: var(--radius-sm);
-  padding: 10px 14px;
+  padding: 14px;
   cursor: pointer;
   overflow: hidden;
   background: var(--bg-card);
   border: 1px solid var(--glass-border);
   transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
-  display: flex;
-  align-items: center;
-  gap: 10px;
 }
 
 .home-card::before {
   content: '';
   position: absolute;
   top: 0; left: 0;
-  height: 100%;
-  width: 3px;
+  width: 100%;
+  height: 3px;
   background: var(--card-grad);
-  transition: width 0.2s ease;
 }
 
 .home-card-glow {
@@ -6488,30 +6484,27 @@ body::before {
 }
 
 .home-card:hover {
-  transform: translateX(3px);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 24px rgba(0,0,0,0.25);
   border-color: rgba(255,255,255,0.1);
 }
 
 .home-card:hover .home-card-glow {
-  opacity: 0.06;
+  opacity: 0.08;
 }
 
 .home-card:hover::before {
-  width: 4px;
+  height: 4px;
 }
 
 .home-card-icon {
-  font-size: 20px;
+  font-size: 24px;
   line-height: 1;
-  flex-shrink: 0;
-  width: 28px;
-  text-align: center;
+  margin-bottom: 6px;
 }
 
 .home-card-body {
-  flex: 1;
-  min-width: 0;
+  margin-bottom: 4px;
 }
 
 .home-card-title {
@@ -6524,18 +6517,13 @@ body::before {
   font-size: 11px;
   color: var(--text-muted);
   line-height: 1.3;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .home-card-arrow {
-  font-size: 12px;
-  color: var(--text-muted);
-  opacity: 0;
-  transform: translateX(-6px);
-  transition: all 0.2s ease;
-  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--text-primary);
+  opacity: 0.4;
+  text-align: right;
 }
 
 .home-card:hover .home-card-arrow {
@@ -6603,15 +6591,15 @@ body::before {
   .home-hero-stat { min-width: 70px; padding: 8px 12px; }
   .home-hero-stat-value { font-size: 15px; }
   .home-cards-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
-  .home-sub-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+  .home-sub-list { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 8px; }
   .home-sys-grid { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 480px) {
   .home-cards-grid { grid-template-columns: repeat(2, 1fr); }
-  .home-sub-grid { grid-template-columns: repeat(2, 1fr); }
-  .home-card { padding: 16px 14px 14px; }
-  .home-card-icon { font-size: 22px; }
+  .home-sub-list { grid-template-columns: 1fr; }
+  .home-card { padding: 12px; }
+  .home-card-icon { font-size: 20px; }
   .home-card-title { font-size: 12px; }
   .home-card-desc { display: none; }
 }

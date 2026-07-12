@@ -162,10 +162,8 @@ function renderHomeCards() {
           <div class="home-card" onclick="navigateTo('${c.view}')" style="--card-grad: ${c.gradient}">
             <div class="home-card-glow"></div>
             <div class="home-card-icon">${c.icon}</div>
-            <div class="home-card-body">
-              <div class="home-card-title">${c.title}</div>
-              <div class="home-card-desc">${c.desc}</div>
-            </div>
+            <div class="home-card-title">${c.title}</div>
+            <div class="home-card-desc">${c.desc}</div>
             <div class="home-card-arrow">→</div>
           </div>
         `).join('')}
