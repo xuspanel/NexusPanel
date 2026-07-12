@@ -8,27 +8,29 @@ const users = require('../services/users');
 const router = express.Router();
 
 router.post('/login', (req, res) => {
-  const { username, password } = req.body;
-  if (!username || !password) {
-    return res.status(400).json({ error: 'Username and password required' });
+  const { username, password, email } = req.body;
+  const loginName = username || email;
+  const loginPass = password;
+  if (!loginName || !loginPass) {
+    return res.status(400).json({ error: 'Email and password required' });
   }
-  const user = users.getPanelUser(username);
+  const user = users.getPanelUser(loginName);
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  if (!users.verifyPassword(username, password)) {
+  if (!users.verifyPassword(loginName, loginPass)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   if (user.twoFactorEnabled) {
     const tempToken = jwt.sign(
-      { username, role: user.role, step: '2fa' },
+      { username: loginName, role: user.role, step: '2fa' },
       process.env.JWT_SECRET,
       { expiresIn: '5m' }
     );
     return res.json({ twoFactorRequired: true, tempToken });
   }
   const token = jwt.sign(
-    { username, role: user.role },
+    { username: loginName, role: user.role },
     process.env.JWT_SECRET,
     { expiresIn: '2h' }
   );
@@ -36,7 +38,7 @@ router.post('/login', (req, res) => {
   res.cookie('token', token, {
     httpOnly: true, secure, sameSite: 'strict', maxAge: 2 * 60 * 60 * 1000,
   });
-  res.json({ success: true, username });
+  res.json({ success: true, username: loginName });
 });
 
 router.post('/login/2fa', (req, res) => {
@@ -81,7 +83,29 @@ router.post('/logout', (req, res) => {
 });
 
 router.get('/me', authMiddleware, (req, res) => {
-  res.json({ username: req.user.username, role: req.user.role });
+  const user = users.getPanelUser(req.user.username);
+  res.json({ username: req.user.username, role: req.user.role, email: user?.email || req.user.username, name: user?.email || '' });
+});
+
+router.post('/register', (req, res) => {
+  const { name, email, password } = req.body;
+  if (!email || !password) return res.status(400).json({ error: 'Email and password required' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  try {
+    const user = users.createPanelUser(email, email, password, 'user');
+    const token = jwt.sign({ username: email, role: 'user' }, process.env.JWT_SECRET, { expiresIn: '2h' });
+    const secure = req.protocol === 'https' && req.secure;
+    res.cookie('token', token, { httpOnly: true, secure, sameSite: 'strict', maxAge: 2 * 60 * 60 * 1000 });
+    res.json({ success: true, username: email });
+  } catch (e) {
+    res.status(400).json({ error: e.message });
+  }
+});
+
+router.put('/profile', authMiddleware, (req, res) => {
+  const { email, name } = req.body;
+  try { users.updatePanelUser(req.user.username, { email, displayName: name }); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 module.exports = router;

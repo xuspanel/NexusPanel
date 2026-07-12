@@ -1,18 +1,37 @@
-(async function(){
-  try{var r=await fetch('/api/cart');var d=await r.json();renderCart(d)}catch(e){}
+/* cart.js — TheNexusPanel cart page */
+
+(async function () {
+  var content = document.getElementById('cartContent');
+  var actions = document.getElementById('cartActions');
+  try {
+    var res = await fetch('/api/cart');
+    var data = await res.json();
+    if (!data.items || !data.items.length) {
+      content.innerHTML = '<div class="n-empty">Your cart is empty.</div><div style="text-align:center;margin-top:16px"><a href="/pricing" class="n-btn n-btn-primary">Browse Plans</a></div>';
+      return;
+    }
+    content.innerHTML = '<div class="n-cart-items">' +
+      data.items.map(function (item) {
+        return '<div class="n-cart-item">' +
+          '<div class="n-cart-item-info">' +
+          '<strong>' + esc(item.name) + '</strong> — ' + item.maxDomains + ' domain' + (item.maxDomains > 1 ? 's' : '') + ' — ' + item.months + ' months' +
+          '</div>' +
+          '<div class="n-cart-item-price">$' + item.price + ' x ' + item.quantity + '</div>' +
+          '<button class="n-cart-remove" onclick="removeItem(\'' + item.id + '\')">✕</button>' +
+          '</div>';
+      }).join('') +
+      '<div class="n-cart-total">Total: <strong>$' + data.total + '</strong></div></div>';
+    if (actions) actions.style.display = 'block';
+  } catch (e) {
+    content.innerHTML = '<div class="n-error">Failed to load cart. <button onclick="location.reload()" class="n-btn n-btn-sm">Retry</button></div>';
+  }
 })();
-function renderCart(d){
-  var el=document.getElementById('cartContent');
-  if(!d.items||!d.items.length){el.innerHTML='<div class="n-empty">Your cart is empty. <a href="/pricing">Browse plans</a></div>';return}
-  var html='';
-  d.items.forEach(function(i,idx){
-    html+='<div class="n-cart-item"><div><strong>'+i.name+'</strong><br><span style="color:var(--text3);font-size:12px">'+i.maxDomains+' domain'+(i.maxDomains>1?'s':'')+' · '+i.months+' months</span></div><div>$'+i.price+' x '+i.quantity+' <button class="n-btn n-btn-sm n-btn-ghost" onclick="removeCart(\''+i.id+'\')">✕</button></div></div>';
-  });
-  html+='<div class="n-cart-total">Total: $'+d.total+'</div>';
-  el.innerHTML=html;
-  document.getElementById('cartActions').style.display='block';
-}
-async function removeCart(id){
-  await fetch('/api/cart/'+id,{method:'DELETE'});
-  location.reload();
+
+function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+
+async function removeItem(id) {
+  try {
+    await fetch('/api/cart/' + id, { method: 'DELETE' });
+    location.reload();
+  } catch (e) { alert('Failed to remove item'); }
 }

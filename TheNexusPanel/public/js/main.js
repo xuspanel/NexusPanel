@@ -1,51 +1,55 @@
-(function(){
-  // Cookies consent
-  if(!localStorage.getItem('nxp_cookies')){
-    document.getElementById('nCookies').style.display='block';
-  }
-  window.acceptCookies=function(){localStorage.setItem('nxp_cookies','accepted');document.getElementById('nCookies').style.display='none'};
-  window.denyCookies=function(){localStorage.setItem('nxp_cookies','denied');document.getElementById('nCookies').style.display='none'};
+/* main.js — TheNexusPanel marketing site */
 
-  // Add to cart from any page
-  window.addToCart=async function(plan,price,maxDomains,months){
-    try{
-      var r=await fetch('/api/auth/me');
-      var d=await r.json();
-      if(!d.user){window.location.href='/login';return}
-      await fetch('/api/cart',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({plan:plan,price:price,maxDomains:maxDomains,months:months,quantity:1})});
-      updateCartBadge();
-      showToast(plan+' plan added to cart! <a href="/cart" style="color:#fff">View Cart</a>');
-    }catch(e){showToast('Please sign in to add items to cart. <a href="/login" style="color:#fff">Sign In</a>')}
-  };
-
-  // Toast notification
-  function showToast(msg){
-    var t=document.createElement('div');
-    t.className='n-toast';
-    t.innerHTML=msg;
-    t.style.cssText='position:fixed;bottom:24px;right:24px;background:var(--accent);color:#fff;padding:12px 20px;border-radius:var(--radius-sm);font-size:14px;font-weight:600;z-index:10000;box-shadow:0 8px 32px rgba(6,182,212,0.3);animation:nToastIn 0.4s ease';
-    document.body.appendChild(t);
-    setTimeout(function(){t.remove()},4000);
-    var style=document.createElement('style');
-    style.textContent='@keyframes nToastIn{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}';
-    document.head.appendChild(style);
-  }
-
-  // Cart badge
-  async function updateCartBadge(){
-    try{var r=await fetch('/api/cart');var d=await r.json();var b=document.getElementById('cartBadge');if(b){b.textContent=d.count||'0';b.style.display=d.count?'flex':'none'}}catch(e){}
-  }
-  updateCartBadge();
-
-  // Scroll reveal
-  var observer=new IntersectionObserver(function(entries){
-    entries.forEach(function(e){
-      if(e.isIntersecting){e.target.style.opacity='1';e.target.style.transform='translateY(0)'}
-    });
-  },{threshold:0.1});
-
-  document.querySelectorAll('.n-feature-card,.n-price-card,.n-doc-card,.n-order-card').forEach(function(el){
-    el.style.opacity='0';el.style.transform='translateY(20px)';el.style.transition='all 0.6s ease';
-    observer.observe(el);
+/* Cookie consent */
+(function () {
+  if (document.cookie.indexOf('nxp_cookies=') !== -1) return;
+  document.addEventListener('DOMContentLoaded', function () {
+    var banner = document.getElementById('nCookies');
+    if (banner) banner.style.display = 'flex';
   });
 })();
+
+function acceptCookies() {
+  var banner = document.getElementById('nCookies');
+  if (banner) banner.style.display = 'none';
+  var d = new Date(); d.setFullYear(d.getFullYear() + 1);
+  document.cookie = 'nxp_cookies=accepted; path=/; expires=' + d.toUTCString();
+}
+
+function denyCookies() {
+  var banner = document.getElementById('nCookies');
+  if (banner) banner.style.display = 'none';
+  document.cookie = 'nxp_cookies=denied; path=/; max-age=86400';
+}
+
+/* Cart badge */
+function updateCartBadge(count) {
+  var badge = document.getElementById('cartBadge');
+  if (badge) {
+    badge.textContent = count || 0;
+    badge.style.display = count > 0 ? 'inline' : 'none';
+  }
+}
+
+/* Load cart count on page ready */
+document.addEventListener('DOMContentLoaded', function () {
+  fetch('/api/cart').then(function (r) { return r.json(); }).then(function (d) {
+    updateCartBadge(d.count || 0);
+  }).catch(function () {});
+});
+
+/* Add to cart */
+function addToCart(plan, price, maxDomains, months, quantity) {
+  fetch('/api/cart', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ plan: plan, price: price, maxDomains: maxDomains, months: months, quantity: quantity || 1 }),
+  }).then(function (r) { return r.json(); }).then(function (d) {
+    updateCartBadge(d.count);
+    var el = document.getElementById('cartToast');
+    if (!el) { el = document.createElement('div'); el.id = 'cartToast'; el.className = 'n-toast'; document.body.appendChild(el); }
+    el.textContent = '\u2713 ' + plan + ' added to cart';
+    el.classList.add('show');
+    setTimeout(function () { el.classList.remove('show'); }, 2500);
+  });
+}

@@ -37,8 +37,8 @@ const authRoutes = require('./src/routes/auth');
 app.use('/', pagesRoutes);
 app.use('/api/cart', cartRoutes);
 app.use('/api/orders', ordersRoutes);
-app.use('/api/auth', profileRoutes);
 app.use('/api/auth', authRoutes);
+app.use('/api/auth', profileRoutes);
 
 app.get('/{*path}', (req, res) => {
   res.render('home', { user: req.user, title: 'NexusPanel — VPS Control Center', page: 'home' });

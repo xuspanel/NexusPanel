@@ -1,28 +1,45 @@
-(async function(){
-  var el=document.getElementById('checkoutSummary');
-  try{
-    var r=await fetch('/api/cart',{credentials:'same-origin'});
-    if(!r.ok){el.innerHTML='<div class="n-empty">Could not load cart. <a href="/cart">Go to cart</a></div>';return}
-    var d=await r.json();
-    if(!d.items||!d.items.length){el.innerHTML='<div class="n-empty">Your cart is empty. <a href="/pricing">Browse plans</a></div>';return}
-    var html='<h3>Order Summary</h3>';
-    d.items.forEach(function(i){html+='<div class="n-cart-item"><div><strong>'+i.name+'</strong></div><div>$'+i.price+' x '+i.quantity+'</div></div>'});
-    html+='<div class="n-cart-total">Total: $'+d.total+'</div>';
-    el.innerHTML=html;
-    window._cartItems=d.items;
-  }catch(e){el.innerHTML='<div class="n-empty">Could not load cart. <a href="/cart">Go to cart</a></div>'}
+/* checkout.js — TheNexusPanel checkout */
+
+(async function () {
+  try {
+    var res = await fetch('/api/cart');
+    var data = await res.json();
+    if (!data.items || !data.items.length) {
+      document.getElementById('checkoutSummary').innerHTML = '<p>Your cart is empty.</p><a href="/pricing" class="n-btn n-btn-primary">Browse Plans</a>';
+      return;
+    }
+    document.getElementById('checkoutSummary').innerHTML =
+      '<h3>Order Summary</h3>' +
+      data.items.map(function (item) {
+        return '<div class="n-checkout-item"><span>' + esc(item.name) + ' x ' + item.quantity + '</span><span>$' + (item.price * item.quantity) + '</span></div>';
+      }).join('') +
+      '<div class="n-checkout-total">Total: <strong>$' + data.total + '</strong></div>';
+  } catch (e) {
+    document.getElementById('checkoutSummary').innerHTML = '<p class="n-error">Failed to load cart</p>';
+  }
 })();
-async function placeOrder(){
-  var btn=document.getElementById('checkoutBtn');
-  if(!window._cartItems||!window._cartItems.length){showMsg('Your cart is empty. Add items first.','error');return}
-  btn.disabled=true;btn.textContent='Processing...';
-  try{
-    var r=await fetch('/api/orders',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({items:window._cartItems})});
-    var d=await r.json();
-    if(!r.ok)throw new Error(d.error);
-    await fetch('/api/cart',{method:'DELETE',credentials:'same-origin'});
-    showMsg('Order placed! License keys generated. <a href="/licenses" style="color:#10b981">View your licenses</a>','success');
-    btn.textContent='Done';
-  }catch(e){showMsg(e.message,'error');btn.disabled=false;btn.textContent='Place Order'}
+
+function esc(s) { return String(s).replace(/[&<>]/g, function (c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+
+async function placeOrder() {
+  var btn = document.getElementById('checkoutBtn');
+  var msg = document.getElementById('checkoutMsg');
+  if (btn) btn.disabled = true;
+  try {
+    var cr = await fetch('/api/cart');
+    var cart = await cr.json();
+    if (!cart.items || !cart.items.length) throw new Error('Cart is empty');
+    var res = await fetch('/api/orders', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: cart.items }),
+    });
+    var data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Order failed');
+    await fetch('/api/cart', { method: 'DELETE' });
+    window.location.href = '/orders';
+  } catch (e) {
+    if (msg) { msg.textContent = e.message; msg.className = 'n-form-msg n-form-error'; }
+    if (btn) btn.disabled = false;
+  }
 }
-function showMsg(msg,type){var el=document.getElementById('checkoutMsg');el.className='n-form-msg '+type;el.innerHTML=msg}
