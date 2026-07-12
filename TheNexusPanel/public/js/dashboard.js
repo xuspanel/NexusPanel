@@ -151,7 +151,7 @@ function renderHomeCards() {
     ]},
   ];
 
-  grid.innerHTML = sections.map(s => `
+  grid.innerHTML = '<div class="home-sections-row">' + sections.map(s => `
     <div class="home-section">
       <div class="home-sub-header">
         <span class="home-sub-icon">${s.icon}</span>
@@ -169,7 +169,7 @@ function renderHomeCards() {
         `).join('')}
       </div>
     </div>
-  `).join('');
+  `).join('') + '</div>';
 }
 
 function updateStatusBadge(stats) {
