@@ -55,8 +55,20 @@ const body = `
 <section class="n-section n-cta">
   <h2>Ready to Take Control?</h2>
   <p>Install NexusPanel on your VPS in under 5 minutes. One command, complete control.</p>
-  <div class="n-cta-code">bash &lt;(curl -s https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh)</div>
+  <div class="n-cta-code">bash &lt;(curl -s https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install.sh)</div>
   <a href="/docs/installation" class="n-btn n-btn-lg n-btn-primary">Read Installation Guide</a>
+</section>
+
+<section class="n-section">
+  <h2 class="n-section-title">Check Your <span class="n-gradient">License Key</span></h2>
+  <p class="n-section-sub">Verify your NexusPanel license key status instantly.</p>
+  <div class="n-validate-card">
+    <div class="n-validate-form">
+      <input type="text" id="validateKey" class="n-input n-validate-input" placeholder="NX-XXXX-XXXX-XXXX" maxlength="19" autocomplete="off" spellcheck="false">
+      <button class="n-btn n-btn-primary" id="validateBtn" onclick="checkKey()">Check Validity</button>
+    </div>
+    <div class="n-validate-result" id="validateResult" style="display:none"></div>
+  </div>
 </section>
 `;
 %>

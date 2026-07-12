@@ -112,14 +112,14 @@ function adminEmailBody(order, user, keys) {
 router.use(requireAuth);
 
 router.get('/', (req, res) => {
-  res.json(ordersService.getUserOrders(req.user.id));
+  res.json(ordersService.getUserOrders(req.user.username));
 });
 
 router.post('/', async (req, res) => {
   try {
     const { items } = req.body;
     if (!items || !items.length) return res.status(400).json({ error: 'Cart is empty' });
-    const order = ordersService.createOrder(req.user.id, items);
+    const order = ordersService.createOrder(req.user.username, items);
 
     const apiKey = process.env.NXL_CHECKOUT_API_KEY;
     const apiBase = process.env.NXL_LICENSE_API || 'http://127.0.0.1:3444';
@@ -189,7 +189,7 @@ router.post('/', async (req, res) => {
 
 router.get('/:id/invoice', (req, res) => {
   const order = ordersService.getOrder(req.params.id);
-  if (!order || order.userId !== req.user.id) return res.status(404).json({ error: 'Order not found' });
+  if (!order || order.userId !== req.user.username) return res.status(404).json({ error: 'Order not found' });
   const filePath = require('path').join(invoiceService.INVOICE_DIR, order.id + '.pdf');
   const fs = require('fs');
   if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'Invoice not yet generated' });

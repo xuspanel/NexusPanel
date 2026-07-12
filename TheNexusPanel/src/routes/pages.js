@@ -76,6 +76,24 @@ router.post('/api/contact', (req, res) => {
   }
 });
 
+router.post('/api/validate-key', async (req, res) => {
+  const { key } = req.body;
+  if (!key) return res.status(400).json({ error: 'key is required' });
+  try {
+    const apiUrl = process.env.NXL_LICENSE_API || 'http://127.0.0.1:3444';
+    const resp = await fetch(apiUrl + '/api/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key }),
+      signal: AbortSignal.timeout(8000),
+    });
+    const data = await resp.json();
+    res.json(data);
+  } catch (e) {
+    res.status(502).json({ valid: false, reason: 'server_error', error: 'Could not reach license server' });
+  }
+});
+
 router.get('/blog', (req, res) => {
   var blog = require('../services/blog');
   var posts = blog.listPosts();
