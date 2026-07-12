@@ -1,7 +1,8 @@
-# Keep only TheNexusPanel and nxApp in git
+# Keep only TheNexusPanel, nxApp, and nxLicensing in git
 /*
 !/TheNexusPanel
 !/nxApp
+!/nxLicensing
 !/.gitignore
 !/README.md
 
@@ -11,6 +12,11 @@
 /TheNexusPanel/data/users.json
 /TheNexusPanel/data/orders.json
 /TheNexusPanel/data/invoices/
+
+# nxLicensing exceptions
+/nxLicensing/node_modules/
+/nxLicensing/.env
+/nxLicensing/data/users.json
 
 # Existing ignore patterns (redundant but kept for safety)
 node_modules/
