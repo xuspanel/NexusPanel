@@ -47,31 +47,33 @@ if (article) {
 <%- include('../layout', { body: body }) %>
 <script>
 (function() {
-  var _origGrid = document.querySelector('.n-docs-grid').innerHTML;
-  var _origHeading = document.querySelector('.n-section h2').textContent;
+  var grid = document.querySelector('.n-docs-grid');
+  var _origGrid = grid ? grid.innerHTML : '';
+  var headEl = document.querySelector('.n-section h2') || document.querySelector('.n-section h1');
+  var _origHeading = headEl ? headEl.textContent : '';
 
   window.kbLiveSearch = function(val) {
     clearTimeout(window._kbTimer);
     if (!val || val.length < 2) {
-      var grid = document.querySelector('.n-docs-grid');
-      var heading = document.querySelector('.n-section h2');
-      if (grid) grid.innerHTML = _origGrid;
-      if (heading) heading.textContent = _origHeading;
+      var g = document.querySelector('.n-docs-grid');
+      var h = document.querySelector('.n-section h2') || document.querySelector('.n-section h1');
+      if (g) g.innerHTML = _origGrid;
+      if (h) h.textContent = _origHeading;
       return;
     }
     window._kbTimer = setTimeout(function() {
       fetch('/api/kb-search?q=' + encodeURIComponent(val))
         .then(function(r) { return r.json(); })
         .then(function(data) {
-          var grid = document.querySelector('.n-docs-grid');
-          var heading = document.querySelector('.n-section h2');
+          var g = document.querySelector('.n-docs-grid');
+          var h = document.querySelector('.n-section h2') || document.querySelector('.n-section h1');
           if (!data.results || !data.results.length) {
-            if (heading) heading.textContent = 'Search Results';
-            if (grid) grid.innerHTML = '<div class="n-empty">No articles matching "' + esc(val) + '"</div>';
+            if (h) h.textContent = 'Search Results';
+            if (g) g.innerHTML = '<div class="n-empty">No articles matching "' + esc(val) + '"</div>';
             return;
           }
-          if (heading) heading.textContent = 'Search Results (' + data.results.length + ')';
-          if (grid) grid.innerHTML = data.results.map(function(r) {
+          if (h) h.textContent = 'Search Results (' + data.results.length + ')';
+          if (g) g.innerHTML = data.results.map(function(r) {
             return '<a href="/kb/' + r.category + '/' + r.slug + '" class="n-doc-card"><span class="n-doc-icon">📄</span><h3>' + esc(r.title) + '</h3><p>' + esc(r.excerpt || '') + '</p><span class="n-doc-tag">' + esc(r.categoryName) + '</span></a>';
           }).join('');
         });
