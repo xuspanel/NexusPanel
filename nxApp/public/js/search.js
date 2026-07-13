@@ -1,7 +1,7 @@
 /* search.js — Global NexusPanel search */
-var searchTimer = null;
-var searchResults = [];
-var searchSelIdx = -1;
+var gsTimer = null;
+var gsResults = [];
+var gsSelIdx = -1;
 
 document.addEventListener('DOMContentLoaded', function () {
   var input = document.getElementById('globalSearchInput');
@@ -9,7 +9,7 @@ document.addEventListener('DOMContentLoaded', function () {
   input.addEventListener('input', onSearchInput);
   input.addEventListener('keydown', onSearchKey);
   input.addEventListener('focus', function () {
-    if (searchResults.length > 0) showResults();
+    if (gsResults.length > 0) showResults();
   });
   document.addEventListener('click', function (e) {
     if (!e.target.closest('#globalSearchWrap')) hideResults();
@@ -17,24 +17,24 @@ document.addEventListener('DOMContentLoaded', function () {
 });
 
 function onSearchInput() {
-  clearTimeout(searchTimer);
+  clearTimeout(gsTimer);
   searchSelIdx = -1;
   var q = this.value.trim();
   if (q.length < 2) { hideResults(); return; }
-  searchTimer = setTimeout(function () { doSearch(q); }, 250);
+  gsTimer = setTimeout(function () { doSearch(q); }, 250);
 }
 
 async function doSearch(q) {
   try {
     var data = await API.search(q);
-    searchResults = data.results || [];
-    if (searchResults.length === 0) {
+    gsResults = data.results || [];
+    if (gsResults.length === 0) {
       showEmpty(q);
     } else {
       renderResults();
     }
   } catch (e) {
-    searchResults = [];
+    gsResults = [];
     hideResults();
   }
 }
@@ -46,7 +46,7 @@ function renderResults() {
     file: '📄', folder: '📁', user: '👤', service: '⚙️', container: '🐳',
     domain: '🌐', cron: '⏰', firewall: '🛡', database: '🗄️'
   };
-  el.innerHTML = searchResults.map(function (r, i) {
+  el.innerHTML = gsResults.map(function (r, i) {
     var icon = icons[r.type] || '🔍';
     return '<div class="gsr-item' + (i === searchSelIdx ? ' active' : '') + '" data-idx="' + i + '" onmousedown="searchNavigate(' + i + ')">' +
       '<span class="gsr-icon">' + icon + '</span>' +
@@ -68,7 +68,7 @@ function showEmpty(q) {
 }
 
 function showResults() {
-  if (searchResults.length > 0) renderResults();
+  if (gsResults.length > 0) renderResults();
   else {
     var el = document.getElementById('globalSearchResults');
     if (el) el.style.display = 'block';
@@ -89,19 +89,19 @@ function onSearchKey(e) {
 }
 
 function moveSel(d) {
-  if (!searchResults.length) return;
-  searchSelIdx = Math.max(0, Math.min(searchResults.length - 1, searchSelIdx + d));
+  if (!gsResults.length) return;
+  searchSelIdx = Math.max(0, Math.min(gsResults.length - 1, searchSelIdx + d));
   renderResults();
 }
 
 function navigateSelected() {
-  if (searchSelIdx >= 0 && searchSelIdx < searchResults.length) {
+  if (searchSelIdx >= 0 && searchSelIdx < gsResults.length) {
     searchNavigate(searchSelIdx);
   }
 }
 
 function searchNavigate(idx) {
-  var r = searchResults[idx];
+  var r = gsResults[idx];
   if (!r) return;
   hideResults();
   document.getElementById('globalSearchInput').value = '';

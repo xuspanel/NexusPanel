@@ -54,4 +54,35 @@ function getArticle(category, slug) {
   } catch { return null; }
 }
 
-module.exports = { getCategories, getArticles, getArticle };
+function searchArticles(query) {
+  if (!query || query.length < 2) return [];
+  var q = query.toLowerCase();
+  var results = [];
+  var cats = getCategories();
+  cats.forEach(function(c) {
+    var articles = getArticles(c.slug);
+    articles.forEach(function(a) {
+      var score = 0;
+      var title = (a.title || '').toLowerCase();
+      var body = (a.body || '').toLowerCase();
+      if (title === q) score = 100;
+      else if (title.startsWith(q)) score = 80;
+      else if (title.includes(q)) score = 50;
+      else if (body.includes(q)) score = 20;
+      if (score > 0) {
+        results.push({
+          title: a.title || c.name,
+          slug: a.slug,
+          category: c.slug,
+          categoryName: c.name,
+          excerpt: (body.substring(0, 200) + '...'),
+          score: score
+        });
+      }
+    });
+  });
+  results.sort(function(a, b) { return b.score - a.score; });
+  return results;
+}
+
+module.exports = { getCategories, getArticles, getArticle, searchArticles };

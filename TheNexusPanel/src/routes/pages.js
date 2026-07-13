@@ -123,10 +123,20 @@ router.post('/blog/:slug/delete', (req, res) => {
   res.redirect('/blog');
 });
 
+router.get('/api/kb-search', (req, res) => {
+  var kb = require('../services/kb');
+  var q = (req.query.q || '').trim();
+  if (!q || q.length < 2) return res.json({ results: [] });
+  var results = kb.searchArticles(q);
+  res.json({ results: results });
+});
+
 router.get('/kb', (req, res) => {
   var kb = require('../services/kb');
   var cats = kb.getCategories();
-  res.render('kb/index', { user: req.user, title: 'Knowledge Base — NexusPanel', page: 'kb', kbCategories: cats, kbSearch: req.query.search || '' });
+  var search = req.query.search || '';
+  var results = search ? kb.searchArticles(search) : [];
+  res.render('kb/index', { user: req.user, title: 'Knowledge Base — NexusPanel', page: 'kb', kbCategories: cats, kbSearch: search, kbResults: results });
 });
 router.get('/kb/:category', (req, res) => {
   var kb = require('../services/kb');

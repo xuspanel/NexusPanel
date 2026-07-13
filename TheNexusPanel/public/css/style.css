@@ -148,6 +148,7 @@ textarea.n-input{resize:vertical;min-height:80px}
 .n-doc-icon{font-size:32px;margin-bottom:10px;display:block}
 .n-doc-card h3{font-size:16px;font-weight:700;margin-bottom:6px}
 .n-doc-card p{font-size:13px;color:var(--text2);line-height:1.5}
+.n-doc-tag{font-size:10px;color:var(--accent);background:rgba(6,182,212,0.1);padding:2px 8px;border-radius:10px;display:inline-block;margin-top:4px;font-weight:600}
 .n-code{background:rgba(0,0,0,0.3);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px 18px;font-family:var(--mono);font-size:13px;color:var(--accent);overflow-x:auto;white-space:pre-wrap;word-break:break-all;margin:12px 0}
 
 /* Footer */

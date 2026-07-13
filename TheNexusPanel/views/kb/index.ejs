@@ -1,6 +1,7 @@
 <%
 var cats = locals.kbCategories || [];
-var search = (locals.kbSearch || '').toLowerCase();
+var search = (locals.kbSearch || '');
+var results = locals.kbResults || [];
 var category = locals.kbCategory || '';
 var article = locals.kbArticle || null;
 var articles = locals.kbArticles || [];
@@ -25,12 +26,14 @@ if (article) {
 } else {
   body += '<section class="n-section n-docs"><h1>Knowledge Base</h1><p>Find answers to common questions about NexusPanel.</p>'
     + '<div style="margin-bottom:24px"><input type="text" id="kbSearch" class="n-input" placeholder="Search all articles..." value="' + search + '" oninput="kbLiveSearch(this.value)"></div>';
-  if (search) {
+  if (results.length > 0) {
     body += '<h2>Search Results</h2><div class="n-docs-grid">';
-    cats.forEach(function(c) {
-      body += '<a href="/kb/' + c.slug + '" class="n-doc-card"><span class="n-doc-icon">📚</span><h3>' + c.name + '</h3><p>' + c.count + ' articles</p></a>';
+    results.forEach(function(r) {
+      body += '<a href="/kb/' + r.category + '/' + r.slug + '" class="n-doc-card"><span class="n-doc-icon">📄</span><h3>' + r.title + '</h3><p>' + r.excerpt + '</p><span class="n-doc-tag">' + r.categoryName + '</span></a>';
     });
-    body += '</div><div class="n-empty" style="margin-top:16px">Full-text search coming soon. Browse categories above.</div>';
+    body += '</div>';
+  } else if (search) {
+    body += '<div class="n-empty">No articles matching "' + search + '". Try a different term.</div>';
   } else {
     body += '<div class="n-docs-grid">';
     cats.forEach(function(c) {
@@ -42,4 +45,30 @@ if (article) {
 }
 %>
 <%- include('../layout', { body: body }) %>
-<script>function kbLiveSearch(val){clearTimeout(window._kbTimer);window._kbTimer=setTimeout(function(){window.location.href='/kb?search='+encodeURIComponent(val)},500)}</script>
+<script>
+function kbLiveSearch(val) {
+  clearTimeout(window._kbTimer);
+  window._kbTimer = setTimeout(function() {
+    if (val.length < 2) {
+      window.location.href = '/kb';
+      return;
+    }
+    fetch('/api/kb-search?q=' + encodeURIComponent(val))
+      .then(function(r) { return r.json(); })
+      .then(function(data) {
+        var grid = document.querySelector('.n-docs-grid');
+        var heading = document.querySelector('.n-section h2');
+        if (!data.results || !data.results.length) {
+          if (heading) heading.textContent = 'Search Results';
+          if (grid) grid.innerHTML = '<div class="n-empty">No articles matching "' + val + '"</div>';
+          return;
+        }
+        if (heading) heading.textContent = 'Search Results';
+        if (grid) grid.innerHTML = data.results.map(function(r) {
+          return '<a href="/kb/' + r.category + '/' + r.slug + '" class="n-doc-card"><span class="n-doc-icon">📄</span><h3>' + esc(r.title) + '</h3><p>' + esc(r.excerpt || '') + '</p><span class="n-doc-tag">' + esc(r.categoryName) + '</span></a>';
+        }).join('');
+      });
+  }, 300);
+}
+function esc(s) { return String(s||'').replace(/[&<>]/g, function(c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+</script>
