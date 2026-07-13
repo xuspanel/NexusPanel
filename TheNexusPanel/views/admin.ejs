@@ -1,6 +1,8 @@
 <%
-if (!user) { %><%- include('layout', { body: '<section class="n-section n-auth-section"><div class="n-auth-card"><h2>Admin Access</h2><p>Please sign in to access the admin dashboard.</p><a href="/login" class="n-btn n-btn-primary">Sign In</a></div></section>' }) %><% return; } 
 var body = '';
+if (!user) {
+  body = '<section class="n-section n-auth-section"><div class="n-auth-card"><h2>Admin Access</h2><p>Please sign in to access the admin dashboard.</p><a href="/login" class="n-btn n-btn-primary">Sign In</a></div></section>';
+} else {
 body += '<section class="n-section n-docs"><h1>Admin Dashboard</h1>';
 body += '<p>Manage blog posts, knowledge base articles, and site content.</p>';
 
@@ -32,8 +34,9 @@ body += '<div><button class="n-btn n-btn-primary" onclick="kbSave()">Save</butto
 body += '</div></div>';
 
 body += '</section>';
-%>
+} /* end else */ %>
 <%- include('layout', { body: body }) %>
+<% if (user) { %>
 <script>
 var _posts = [];
 
@@ -129,3 +132,4 @@ function esc(s) { return String(s||'').replace(/[&<>]/g, function(c) { return '&
 
 loadBlog();
 </script>
+<% } %>
