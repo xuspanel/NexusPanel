@@ -4,6 +4,8 @@ const fs = require('fs');
 const path = require('path');
 const router = express.Router();
 
+router.get('/admin', (req, res) => { res.render('admin', { user: req.user, title: 'Admin — NexusPanel', page: 'admin' }); });
+
 router.get('/', (req, res) => res.render('home', { user: req.user, title: 'NexusPanel — VPS Control Center', page: 'home' }));
 router.get('/login', (req, res) => res.render('login', { user: req.user, title: 'Login — NexusPanel', page: 'login' }));
 router.get('/register', (req, res) => res.render('register', { user: req.user, title: 'Register — NexusPanel', page: 'register' }));
@@ -149,4 +151,75 @@ router.get('/kb/:category/:slug', (req, res) => {
   var article = kb.getArticle(req.params.category, req.params.slug);
   if (!article) return res.redirect('/kb');
   res.render('kb/index', { user: req.user, title: article.title + ' — Knowledge Base', page: 'kb', kbArticle: article });
+});
+
+/* ─── Admin API ─── */
+
+router.get('/api/admin/blog', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  var blog = require('../services/blog');
+  res.json({ posts: blog.listPosts() });
+});
+
+router.delete('/api/admin/blog/:slug', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  var blog = require('../services/blog');
+  blog.deletePost(req.params.slug);
+  res.json({ ok: true });
+});
+
+router.get('/api/admin/kb', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  var kb = require('../services/kb');
+  var cats = kb.getCategories().map(function(c) {
+    var articles = kb.getArticles(c.slug).map(function(a) { return { slug: a.slug, title: a.title || a.slug, body: a.body }; });
+    return { slug: c.slug, name: c.name, articles: articles };
+  });
+  res.json({ categories: cats });
+});
+
+router.post('/api/admin/kb', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  var { category, slug, title, body } = req.body;
+  if (!category || !slug || !title) return res.status(400).json({ error: 'Category, slug and title required' });
+  var catDir = path.join(require('../services/kb').KB_DIR || path.join(__dirname, '..', '..', 'data', 'kb'), category);
+  try {
+    if (!fs.existsSync(catDir)) fs.mkdirSync(catDir, { recursive: true });
+    var content = '---\ntitle: "' + title + '"\norder: 99\n---\n\n' + (body || '');
+    fs.writeFileSync(path.join(catDir, slug + '.md'), content);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.put('/api/admin/kb', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  var { slug, newSlug, category, title, body } = req.body;
+  if (!slug || !category) return res.status(400).json({ error: 'Missing parameters' });
+  var kb = require('../services/kb');
+  var catDir = path.join(kb.KB_DIR || path.join(__dirname, '..', '..', 'data', 'kb'), category);
+  var filePath = path.join(catDir, slug + '.md');
+  try {
+    var existing = '';
+    if (fs.existsSync(filePath)) existing = fs.readFileSync(filePath, 'utf8');
+    var i = existing.indexOf('---', 3); var fmBody = (i !== -1) ? existing.substring(i + 4).trim() : (body || '');
+    var content = '---\ntitle: "' + (title || slug) + '"\norder: 99\n---\n\n' + (body || fmBody);
+    if (newSlug && newSlug !== slug) {
+      if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      fs.writeFileSync(path.join(catDir, newSlug + '.md'), content);
+    } else {
+      fs.writeFileSync(filePath, content);
+    }
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.delete('/api/admin/kb/:category/:slug', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  var kb = require('../services/kb');
+  var catDir = path.join(kb.KB_DIR || path.join(__dirname, '..', '..', 'data', 'kb'), req.params.category);
+  var filePath = path.join(catDir, req.params.slug + '.md');
+  try {
+    if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+    res.json({ ok: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
 });

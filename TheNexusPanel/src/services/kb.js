@@ -85,4 +85,4 @@ function searchArticles(query) {
   return results;
 }
 
-module.exports = { getCategories, getArticles, getArticle, searchArticles };
+module.exports = { getCategories, getArticles, getArticle, searchArticles, KB_DIR };

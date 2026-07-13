@@ -1,0 +1,131 @@
+<%
+if (!user) { %><%- include('layout', { body: '<section class="n-section n-auth-section"><div class="n-auth-card"><h2>Admin Access</h2><p>Please sign in to access the admin dashboard.</p><a href="/login" class="n-btn n-btn-primary">Sign In</a></div></section>' }) %><% return; } 
+var body = '';
+body += '<section class="n-section n-docs"><h1>Admin Dashboard</h1>';
+body += '<p>Manage blog posts, knowledge base articles, and site content.</p>';
+
+/* Tabs */
+body += '<div class="n-tabs" style="margin:20px 0"><button class="n-tab active" onclick="switchTab(\'blog\',this)">📝 Blog Posts</button><button class="n-tab" onclick="switchTab(\'kb\',this)">📚 Knowledge Base</button></div>';
+
+/* Blog Tab */
+body += '<div id="tab-blog" class="n-tab-content">';
+body += '<div style="margin-bottom:16px"><a href="/blog/new" class="n-btn n-btn-primary">+ New Post</a></div>';
+body += '<div class="n-table-wrap"><table class="n-admin-table"><thead><tr><th>Title</th><th>Date</th><th>Slug</th><th>Actions</th></tr></thead><tbody id="blogTableBody"><tr><td colspan="4" class="n-loading">Loading...</td></tr></tbody></table></div>';
+body += '</div>';
+
+/* KB Tab */
+body += '<div id="tab-kb" class="n-tab-content" style="display:none">';
+body += '<div style="margin-bottom:16px"><button class="n-btn n-btn-primary" onclick="showKbAdd()">+ New Category</button> <button class="n-btn" onclick="showKbArticleAdd()">+ New Article</button></div>';
+body += '<div id="kbAdminContent" class="n-loading">Loading...</div>';
+body += '</div>';
+
+/* KB Add/Edit Form */
+body += '<div id="kbForm" style="display:none;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:var(--radius-sm);padding:20px;margin-bottom:16px">';
+body += '<h3 id="kbFormTitle">New KB Article</h3>';
+body += '<input type="hidden" id="kbFormSlug">';
+body += '<div style="display:grid;gap:12px">';
+body += '<div><label style="display:block;font-size:12px;margin-bottom:4px">Category</label><input id="kbFormCat" class="n-input" placeholder="e.g. getting-started"></div>';
+body += '<div><label style="display:block;font-size:12px;margin-bottom:4px">Title</label><input id="kbFormTitle" class="n-input" placeholder="Article title"></div>';
+body += '<div><label style="display:block;font-size:12px;margin-bottom:4px">Slug</label><input id="kbFormSlugF" class="n-input" placeholder="article-slug"></div>';
+body += '<div><label style="display:block;font-size:12px;margin-bottom:4px">Content (Markdown)</label><textarea id="kbFormBody" class="n-input" rows="8" style="font-family:monospace"></textarea></div>';
+body += '<div><button class="n-btn n-btn-primary" onclick="kbSave()">Save</button> <button class="n-btn" onclick="document.getElementById(\'kbForm\').style.display=\'none\'">Cancel</button></div>';
+body += '</div></div>';
+
+body += '</section>';
+%>
+<%- include('layout', { body: body }) %>
+<script>
+var _posts = [];
+
+function loadBlog() {
+  fetch('/api/admin/blog').then(r=>r.json()).then(function(d) {
+    _posts = d.posts || [];
+    var el = document.getElementById('blogTableBody');
+    if (!_posts.length) { el.innerHTML = '<tr><td colspan="4" class="n-empty">No posts yet</td></tr>'; return; }
+    el.innerHTML = _posts.map(function(p) {
+      return '<tr><td><strong>' + esc(p.title||'') + '</strong></td><td>' + (p.date||'') + '</td><td><code>' + esc(p.slug||'') + '</code></td><td><a href="/blog/' + esc(p.slug) + '" class="n-btn n-btn-sm">View</a> <button class="n-btn n-btn-sm n-btn-danger" onclick="deletePost(\'' + esc(p.slug) + '\')">Delete</button></td></tr>';
+    }).join('');
+  });
+}
+
+function deletePost(slug) {
+  if (!confirm('Delete "' + slug + '" permanently?')) return;
+  fetch('/api/admin/blog/' + slug, { method: 'DELETE' }).then(function(r) {
+    if (r.ok) loadBlog();
+    else alert('Delete failed');
+  });
+}
+
+function switchTab(tab, btn) {
+  document.querySelectorAll('.n-tab-content').forEach(function(el) { el.style.display = 'none'; });
+  document.querySelectorAll('.n-tab').forEach(function(el) { el.classList.remove('active'); });
+  document.getElementById('tab-' + tab).style.display = 'block';
+  if (btn) btn.classList.add('active');
+  if (tab === 'blog') loadBlog();
+  if (tab === 'kb') loadKb();
+}
+
+var _kbCategories = [];
+function loadKb() {
+  fetch('/api/admin/kb').then(r=>r.json()).then(function(d) {
+    _kbCategories = d.categories || [];
+    var el = document.getElementById('kbAdminContent');
+    if (!_kbCategories.length) { el.innerHTML = '<div class="n-empty">No categories yet</div>'; return; }
+    el.innerHTML = _kbCategories.map(function(c) {
+      return '<div class="n-kb-cat"><h3>📚 ' + esc(c.name) + ' (' + (c.articles||[]).length + ' articles)</h3>' +
+        (c.articles||[]).map(function(a) {
+          return '<div class="n-kb-art"><span>' + esc(a.title||a.slug) + '</span> <div><a href="/kb/' + esc(c.slug) + '/' + esc(a.slug) + '" class="n-btn n-btn-sm">View</a> <button class="n-btn n-btn-sm" onclick="kbEdit(\'' + esc(c.slug) + '\',\'' + esc(a.slug) + '\',\'' + esc(a.title||'') + '\',\'' + esc((a.body||'').replace(/\n/g,'\\n').replace(/'/g,'\\\'')) + '\')">Edit</button> <button class="n-btn n-btn-sm n-btn-danger" onclick="kbDelete(\'' + esc(c.slug) + '\',\'' + esc(a.slug) + '\')">Delete</button></div></div>';
+        }).join('') + '</div>';
+    }).join('');
+  });
+}
+
+function showKbArticleAdd() {
+  document.getElementById('kbForm').style.display = 'block';
+  document.getElementById('kbFormTitle').textContent = 'New KB Article';
+  document.getElementById('kbFormSlug').value = '';
+  document.getElementById('kbFormCat').value = '';
+  document.getElementById('kbFormTitle').value = '';
+  document.getElementById('kbFormSlugF').value = '';
+  document.getElementById('kbFormBody').value = '';
+}
+
+function kbEdit(cat, slug, title, body) {
+  document.getElementById('kbForm').style.display = 'block';
+  document.getElementById('kbFormTitle').textContent = 'Edit: ' + title;
+  document.getElementById('kbFormSlug').value = slug;
+  document.getElementById('kbFormCat').value = cat;
+  document.getElementById('kbFormTitle').value = title;
+  document.getElementById('kbFormSlugF').value = slug;
+  document.getElementById('kbFormBody').value = body;
+}
+
+function kbSave() {
+  var slug = document.getElementById('kbFormSlug').value;
+  var cat = document.getElementById('kbFormCat').value.trim();
+  var title = document.getElementById('kbFormTitle').value.trim();
+  var slugF = document.getElementById('kbFormSlugF').value.trim();
+  var body = document.getElementById('kbFormBody').value;
+  if (!cat || !title || !slugF) { alert('Category, title and slug are required'); return; }
+  var method = slug ? 'PUT' : 'POST';
+  var url = '/api/admin/kb';
+  fetch(url, { method: method, headers: {'Content-Type':'application/json'}, body: JSON.stringify({slug:slug||slugF, category:cat, title:title, newSlug:slugF, body:body}) })
+    .then(r=>r.json()).then(function(d) {
+      if (d.ok) { document.getElementById('kbForm').style.display = 'none'; loadKb(); }
+      else alert(d.error || 'Save failed');
+    });
+}
+
+function kbDelete(cat, slug) {
+  if (!confirm('Delete "' + slug + '"?')) return;
+  fetch('/api/admin/kb/' + encodeURIComponent(cat) + '/' + slug, { method: 'DELETE' })
+    .then(r=>r.json()).then(function(d) {
+      if (d.ok) loadKb();
+      else alert(d.error || 'Delete failed');
+    });
+}
+
+function esc(s) { return String(s||'').replace(/[&<>]/g, function(c) { return '&#' + c.charCodeAt(0) + ';'; }); }
+
+loadBlog();
+</script>
