@@ -278,4 +278,9 @@ const API = {
     markAllRead: () => API.request('POST', '/notifications/read-all'),
     clear: () => API.request('DELETE', '/notifications'),
   },
+  search(q) {
+    return this.request('GET', '/search?q=' + encodeURIComponent(q));
+  },
 };
+
+// For use as standalone: window.API.search = ...

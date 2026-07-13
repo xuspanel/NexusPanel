@@ -72,6 +72,7 @@ const phpfpmRoutes = require('./src/routes/phpfpm');
 const updatesRoutes = require('./src/routes/updates');
 const notificationsRoutes = require('./src/routes/notifications');
 const settingsRoutes = require('./src/routes/settings');
+const searchRoutes = require('./src/routes/search');
 
 app.use('/api/auth', loginLimiter, authRoutes);
 app.use('/api/system', apiLimiter, dashboardRoutes);
@@ -102,6 +103,7 @@ app.use('/api/phpfpm', apiLimiter, phpfpmRoutes);
 app.use('/api/updates', apiLimiter, updatesRoutes);
 app.use('/api/notifications', apiLimiter, notificationsRoutes);
 app.use('/api/settings', apiLimiter, settingsRoutes);
+app.use('/api/search', apiLimiter, searchRoutes);
 
 app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));
