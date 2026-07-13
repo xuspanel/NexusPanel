@@ -97,7 +97,7 @@ async function checkPanelVersion(force) {
 
 function fetchRemoteVersion() {
   return new Promise((resolve, reject) => {
-    https.get('https://raw.githubusercontent.com/xuspanel/NexusPanel/master/VERSION', (res) => {
+    https.get('https://raw.githubusercontent.com/xuspanel/NexusPanel/master/nxApp/VERSION', (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve(data.trim()));

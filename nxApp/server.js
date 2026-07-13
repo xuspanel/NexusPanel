@@ -10,21 +10,17 @@ const { securityHeaders, loginLimiter, apiLimiter } = require('./src/middleware/
 const users = require('./src/services/users');
 const terminal = require('./src/services/terminal');
 
-const licenseService = require('./src/services/license');
-const licenseMiddleware = require('./src/middleware/license');
-
-users.init();
-
 const app = express();
 const server = http.createServer(app);
 const PORT = process.env.PORT || 3443;
+
+users.init();
 
 app.set('trust proxy', 1);
 app.use(securityHeaders);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
-app.use(licenseMiddleware);
 
 const audit = require('./src/services/audit');
 app.use('/api', (req, res, next) => {
@@ -213,17 +209,16 @@ function parseCookies(cookieHeader) {
 const updates_ = require('./src/services/updates');
 const settings_ = require('./src/services/settings');
 
-server.listen(PORT, '127.0.0.1', async () => {
+server.listen(PORT, '127.0.0.1', () => {
   console.log(`NexusPanel running on http://127.0.0.1:${PORT}`);
-
-  await licenseService.bootstrapLicense();
-  licenseService.startRevalidationTimer();
 
   // Startup panel version check (5s delay, respects auto-update setting)
   setTimeout(async () => {
     try {
       const result = await updates_.checkPanelVersion(false);
       if (result.updateAvailable) {
+        notificationService.add('info', 'New NexusPanel Version Available',
+          'Version ' + result.remoteVersion + ' is available. Current: ' + result.localVersion + '. Go to Updates to install.');
         const s = settings_.load();
         if (s.autoUpdate) {
           console.log('[AutoUpdate] New version available (' + result.remoteVersion + '), applying...');
