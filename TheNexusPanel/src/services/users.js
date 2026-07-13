@@ -57,6 +57,14 @@ function getPanelUser(username) {
   return users[username] || null;
 }
 
+function findByEmail(email) {
+  const users = loadAll();
+  for (const [key, u] of Object.entries(users)) {
+    if (u.email === email) return { ...u, username: key };
+  }
+  return null;
+}
+
 function panelUserExists(username) {
   const users = loadAll();
   return !!users[username];
@@ -441,6 +449,7 @@ function getAvailableShells() {
 module.exports = {
   init,
   getPanelUser,
+  findByEmail,
   panelUserExists,
   listPanelUsers,
   createPanelUser,

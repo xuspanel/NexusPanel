@@ -14,11 +14,15 @@ router.post('/login', (req, res) => {
   if (!loginName || !loginPass) {
     return res.status(400).json({ error: 'Email and password required' });
   }
-  const user = users.getPanelUser(loginName);
+  let user = users.getPanelUser(loginName);
+  if (!user) {
+    user = users.findByEmail(loginName);
+  }
   if (!user) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
-  if (!users.verifyPassword(loginName, loginPass)) {
+  const verifyName = users.getPanelUser(loginName) ? loginName : user.username;
+  if (!users.verifyPassword(verifyName, loginPass)) {
     return res.status(401).json({ error: 'Invalid credentials' });
   }
   if (user.twoFactorEnabled) {
