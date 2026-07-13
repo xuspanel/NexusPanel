@@ -1,5 +1,5 @@
 <% if (!user || user.role !== 'admin') { %>
-<%- include('../layout', { body: '<section class="n-section"><div class="n-auth-card"><h2>Admin only</h2></div></section>' }) %>
+<%- include('../layout', { body: '<section class="n-section n-auth-section"><div class="n-auth-card"><h2>Admin Only</h2><p>Please sign in as an admin to create blog posts.</p><a href="/login" class="n-btn n-btn-primary">Sign In</a></div></section>' }) %>
 <% } else { %>
 <%
 var body = '';
@@ -14,7 +14,7 @@ body += '<div class="n-form-group"><label>Tags (comma-separated)</label><input n
 body += '<div class="n-form-group"><label>Content</label><div id="blogEditor" style="background:rgba(255,255,255,0.04);border-radius:8px"></div></div>';
 body += '<button class="n-btn n-btn-primary" onclick="publishPost()">Publish</button></section>';
 %>
-<%- include('layout', { body: body }) %>
+<%- include('../layout', { body: body }) %>
 <script src="https://cdn.quilljs.com/1.3.7/quill.min.js"></script>
 <script>
 var blogQuill;
