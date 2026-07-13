@@ -32,7 +32,8 @@ body += '<div><label style="display:block;font-size:12px;margin-bottom:4px">Cate
 body += '<div><label style="display:block;font-size:12px;margin-bottom:4px">Title</label><input id="kbFormTitle" class="n-input" placeholder="Article title"></div>';
 body += '<div><label style="display:block;font-size:12px;margin-bottom:4px">Slug</label><input id="kbFormSlugF" class="n-input" placeholder="article-slug"></div>';
 body += '<div><label style="display:block;font-size:12px;margin-bottom:4px">Content</label><div id="kbFormBody" style="background:rgba(255,255,255,0.04);border-radius:8px"></div></div>';
-body += '<div><button class="n-btn n-btn-primary" onclick="kbSave()">Save</button> <button class="n-btn" onclick="document.getElementById(\'kbForm\').style.display=\'none\'">Cancel</button></div>';
+body += '</div>'; /* close grid */
+body += '<div style="margin-top:16px"><button class="n-btn n-btn-primary" onclick="kbSave()">Save</button> <button class="n-btn" onclick="document.getElementById(\'kbForm\').style.display=\'none\'">Cancel</button></div>';
 body += '</div></div>';
 
 body += '</section>';

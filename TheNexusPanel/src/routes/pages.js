@@ -114,8 +114,10 @@ router.post('/api/blog', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
   try {
     var blog = require('../services/blog');
-    blog.createPost(req.body.slug, req.body.title, req.body.date, req.body.body, req.body.excerpt, req.body.tags);
-    res.redirect('/blog/' + req.body.slug);
+    var { slug, title, date, body, excerpt, tags } = req.body;
+    if (!slug || !title || !date) return res.status(400).json({ error: 'Slug, title and date required' });
+    blog.createPost(slug, title, date, body || '', excerpt || '', tags || '');
+    res.json({ ok: true, slug: slug });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 router.post('/blog/:slug/delete', (req, res) => {
