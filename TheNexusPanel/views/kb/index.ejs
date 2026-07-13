@@ -10,7 +10,7 @@ var body = '';
 if (article) {
   body += '<section class="n-section n-docs"><a href="/kb/' + category + '" style="color:var(--text3)">← Back</a>'
     + '<h1>' + article.title + '</h1>'
-    + '<div class="n-blog-content">' + (article.body || '').replace(/\n/g, '<br>') + '</div></section>';
+    + '<div class="n-blog-content">' + (article.body && article.body.trim().startsWith('<') ? article.body : (article.body || '').replace(/\n/g, '<br>')) + '</div></section>';
 } else if (category) {
   body += '<section class="n-section n-docs"><a href="/kb" style="color:var(--text3);display:block;margin-bottom:16px">← All Categories</a><h1>Knowledge Base</h1>';
   if (!articles.length) {
