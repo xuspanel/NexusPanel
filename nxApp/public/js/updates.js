@@ -2,8 +2,9 @@ let updState = { updates: [], count: 0, checking: false };
 let panelState = { localVersion: '—', remoteVersion: '—', updateAvailable: false, changelog: [], checking: false };
 
 window.initUpdates = async function () {
-  var me = await API.me();
-  if (me.role !== 'admin') return;
+  var me;
+  try { me = await API.me(); } catch(e) {}
+  if (!me || me.role !== 'admin') return;
   checkUpdates();
   checkPanelUpdate();
 };

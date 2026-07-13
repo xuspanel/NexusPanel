@@ -1370,88 +1370,6 @@
         </div>
       </div>
     </div>
-    <!-- Audit Trail View -->
-    <main class="dashboard-content" id="viewAudit" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📜</span><div class="db-header-info"><div class="db-header-title">Audit Trail</div><div class="db-header-subtitle">Admin activity log</div></div></div><div class="db-header-right"><input type="text" id="auditSearchInput" class="db-search-input" placeholder="Search..." oninput="auditFilter()" style="width:160px"><select id="auditActionFilter" class="db-search-input" onchange="auditFilter()" style="width:140px"><option value="">All Actions</option></select><button class="db-btn db-btn-icon" onclick="loadAudit()" title="Refresh">↻</button><button class="db-btn db-btn-icon" onclick="auditClear()" title="Clear">🗑</button></div></div>
-      <div id="auditContent"><div id="auditList" class="audit-list"></div><div id="auditPagination" class="audit-pagination"></div></div>
-    </main>
-    <!-- Service Manager View -->
-    <main class="dashboard-content" id="viewServices" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⚙</span><div class="db-header-info"><div class="db-header-title">Service Manager</div><div class="db-header-subtitle">Systemd service control</div></div></div><div class="db-header-right"><input type="text" id="svcFilter" class="db-search-input" placeholder="Filter..." oninput="svcFilter()" style="width:200px"><button class="db-btn db-btn-icon" onclick="loadServices()" title="Refresh">↻</button></div></div>
-      <div id="svcList" class="svc-list"></div>
-    </main>
-    <!-- Process Manager View -->
-    <main class="dashboard-content" id="viewProcesses" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📊</span><div class="db-header-info"><div class="db-header-title">Process Manager</div><div class="db-header-subtitle">Live process monitoring (refreshes every 5s)</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadProcesses()" title="Refresh">↻</button></div></div>
-      <div id="procList" class="proc-list"></div>
-    </main>
-    <!-- Log Viewer -->
-    <main class="dashboard-content" id="viewLogs" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📝</span><div class="db-header-info"><div class="db-header-title">Log Viewer</div><div class="db-header-subtitle">System log browser</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadLogList()" title="Refresh">↻</button></div></div>
-      <div class="log-layout"><div class="log-sidebar" id="logFileList"></div><div class="log-main"><div class="log-toolbar"><input type="text" id="logSearchInput" class="db-search-input" placeholder="Search in log..." onkeydown="if(event.key==='Enter')logSearch()" style="flex:1"><button class="fm-btn fm-btn-sm" onclick="logSearch()">🔍</button></div><pre class="log-viewer" id="logViewerContent"></pre></div></div>
-    </main>
-    <!-- Cron Jobs View -->
-    <main class="dashboard-content" id="viewCron" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⏰</span><div class="db-header-info"><div class="db-header-title">Cron Jobs</div><div class="db-header-subtitle">Scheduled task manager</div></div></div><div class="db-header-right"><span style="font-size:12px;color:var(--text-tertiary)">Owner:</span><select id="cronOwnerSel" class="db-search-input" onchange="cronOwnerChange()" style="width:120px"></select><button class="db-btn db-btn-primary" onclick="cronAddForm()">+ Add Job</button><button class="db-btn db-btn-icon" onclick="loadCron()" title="Refresh">↻</button></div></div>
-      <div id="cronList" class="cron-list"></div>
-    </main>
-    <!-- Firewall Rules View -->
-    <main class="dashboard-content" id="viewFirewall" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🛡</span><div class="db-header-info"><div class="db-header-title">Firewall Rules</div><div class="db-header-subtitle">iptables chain & rule manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="fwAddForm()">+ Add Rule</button><button class="db-btn db-btn-icon" onclick="loadFirewall()" title="Refresh">↻</button></div></div>
-      <div id="fwContent" class="fw-content"></div>
-    </main>
-    <!-- SSL Certificates View -->
-    <main class="dashboard-content" id="viewSSL" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔒</span><div class="db-header-info"><div class="db-header-title">SSL Certificates</div><div class="db-header-subtitle">Let's Encrypt certificate manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="sslIssueForm()">+ Issue Certificate</button><button class="db-btn db-btn-icon" onclick="loadSSL()" title="Refresh">↻</button></div></div>
-      <div id="sslList" class="ssl-list"></div>
-    </main>
-    <!-- PHP-FPM View -->
-    <main class="dashboard-content" id="viewPhpFPM" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🐘</span><div class="db-header-info"><div class="db-header-title">PHP-FPM Manager</div><div class="db-header-subtitle">Pool configuration & status</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="phpfpmRestart()">🔄 Restart PHP-FPM</button><button class="db-btn db-btn-icon" onclick="loadPhpFPM()" title="Refresh">↻</button></div></div>
-      <div id="phpfpmList" class="phpfpm-list"></div>
-    </main>
-    <!-- System Updates View -->
-    <main class="dashboard-content" id="viewUpdates" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔄</span><div class="db-header-info"><div class="db-header-title">System Updates</div><div class="db-header-subtitle">dnf package manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="checkUpdates()" title="Refresh">↻</button></div></div>
-      <div id="updList" class="upd-list"></div>
-    </main>
-    <!-- Cron Modal -->
-    <div class="fm-modal-overlay" id="cronModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('cronModalOverlay').style.display='none'">
-      <div class="fm-modal" style="max-width:520px;">
-        <div class="fm-modal-header"><span class="fm-modal-title" id="cronModalTitle">Add Cron Job</span><button class="fm-modal-close" onclick="document.getElementById('cronModalOverlay').style.display='none'">✕</button></div>
-        <div class="fm-modal-body">
-          <input type="hidden" id="cronEditIndex" value="-1">
-          <div class="cron-grid">
-            <div><label class="mime-form-label">Minute</label><input class="mime-form-input" id="cronMinute" placeholder="*"></div>
-            <div><label class="mime-form-label">Hour</label><input class="mime-form-input" id="cronHour" placeholder="*"></div>
-            <div><label class="mime-form-label">Day</label><input class="mime-form-input" id="cronDom" placeholder="*"></div>
-            <div><label class="mime-form-label">Month</label><input class="mime-form-input" id="cronMonth" placeholder="*"></div>
-            <div><label class="mime-form-label">Weekday</label><input class="mime-form-input" id="cronDow" placeholder="*"></div>
-          </div>
-          <div class="mime-form-group" style="margin-top:12px"><label class="mime-form-label">Command</label><input class="mime-form-input" id="cronCommand" placeholder="/usr/bin/script.sh"></div>
-          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('cronModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="cronSave()">💾 Save</button></div>
-        </div>
-      </div>
-    </div>
-    <!-- Firewall Modal -->
-    <div class="fm-modal-overlay" id="fwModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('fwModalOverlay').style.display='none'">
-      <div class="fm-modal" style="max-width:520px;">
-        <div class="fm-modal-header"><span class="fm-modal-title">Add Firewall Rule</span><button class="fm-modal-close" onclick="document.getElementById('fwModalOverlay').style.display='none'">✕</button></div>
-        <div class="fm-modal-body">
-          <div class="mime-form-group"><label class="mime-form-label">Chain</label><input class="mime-form-input" id="fwChain" placeholder="INPUT"></div>
-          <div class="mime-form-group"><label class="mime-form-label">Rule (iptables syntax)</label><input class="mime-form-input" id="fwRule" placeholder="-p tcp --dport 80 -j ACCEPT"></div>
-          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('fwModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="fwAddRule()">Add Rule</button></div>
-        </div>
-      </div>
-    </div>
-    <!-- SSL Modal -->
-    <div class="fm-modal-overlay" id="sslModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('sslModalOverlay').style.display='none'">
-      <div class="fm-modal" style="max-width:480px;">
-        <div class="fm-modal-header"><span class="fm-modal-title">Issue SSL Certificate</span><button class="fm-modal-close" onclick="document.getElementById('sslModalOverlay').style.display='none'">✕</button></div>
-        <div class="fm-modal-body">
-          <div class="mime-form-group"><label class="mime-form-label">Domain</label><input class="mime-form-input" id="sslDomain" placeholder="example.com"></div>
-          <div class="mime-form-group"><label class="mime-form-label">Email (optional)</label><input class="mime-form-input" id="sslEmail" placeholder="admin@example.com"></div>
-          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('sslModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="sslIssue()">Issue</button></div>
         </div>
       </div>
     </div>
@@ -1506,6 +1424,46 @@
       <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⚙️</span><div class="db-header-info"><div class="db-header-title">Settings</div><div class="db-header-subtitle">Panel configuration</div></div></div></div>
       <div id="settingsContent"><div class="db-loading">Loading settings...</div></div>
     </main>
+    <!-- Cron Modal -->
+    <div class="fm-modal-overlay" id="cronModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('cronModalOverlay').style.display='none'">
+      <div class="fm-modal" style="max-width:520px;">
+        <div class="fm-modal-header"><span class="fm-modal-title" id="cronModalTitle">Add Cron Job</span><button class="fm-modal-close" onclick="document.getElementById('cronModalOverlay').style.display='none'">✕</button></div>
+        <div class="fm-modal-body">
+          <input type="hidden" id="cronEditIndex" value="-1">
+          <div class="cron-grid">
+            <div><label class="mime-form-label">Minute</label><input class="mime-form-input" id="cronMinute" placeholder="*"></div>
+            <div><label class="mime-form-label">Hour</label><input class="mime-form-input" id="cronHour" placeholder="*"></div>
+            <div><label class="mime-form-label">Day</label><input class="mime-form-input" id="cronDom" placeholder="*"></div>
+            <div><label class="mime-form-label">Month</label><input class="mime-form-input" id="cronMonth" placeholder="*"></div>
+            <div><label class="mime-form-label">Weekday</label><input class="mime-form-input" id="cronDow" placeholder="*"></div>
+          </div>
+          <div class="mime-form-group" style="margin-top:12px"><label class="mime-form-label">Command</label><input class="mime-form-input" id="cronCommand" placeholder="/usr/bin/script.sh"></div>
+          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('cronModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="cronSave()">💾 Save</button></div>
+        </div>
+      </div>
+    </div>
+    <!-- Firewall Modal -->
+    <div class="fm-modal-overlay" id="fwModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('fwModalOverlay').style.display='none'">
+      <div class="fm-modal" style="max-width:520px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Add Firewall Rule</span><button class="fm-modal-close" onclick="document.getElementById('fwModalOverlay').style.display='none'">✕</button></div>
+        <div class="fm-modal-body">
+          <div class="mime-form-group"><label class="mime-form-label">Chain</label><input class="mime-form-input" id="fwChain" placeholder="INPUT"></div>
+          <div class="mime-form-group"><label class="mime-form-label">Rule (iptables syntax)</label><input class="mime-form-input" id="fwRule" placeholder="-p tcp --dport 80 -j ACCEPT"></div>
+          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('fwModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="fwAddRule()">Add Rule</button></div>
+        </div>
+      </div>
+    </div>
+    <!-- SSL Modal -->
+    <div class="fm-modal-overlay" id="sslModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('sslModalOverlay').style.display='none'">
+      <div class="fm-modal" style="max-width:480px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Issue SSL Certificate</span><button class="fm-modal-close" onclick="document.getElementById('sslModalOverlay').style.display='none'">✕</button></div>
+        <div class="fm-modal-body">
+          <div class="mime-form-group"><label class="mime-form-label">Domain</label><input class="mime-form-input" id="sslDomain" placeholder="example.com"></div>
+          <div class="mime-form-group"><label class="mime-form-label">Email (optional)</label><input class="mime-form-input" id="sslEmail" placeholder="admin@example.com"></div>
+          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('sslModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="sslIssue()">Issue</button></div>
+        </div>
+      </div>
+    </div>
   </div><!-- /dashboardPage -->
 
   <!-- File Manager Modals -->
