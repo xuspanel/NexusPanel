@@ -66,6 +66,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     navItems.forEach(i => i.classList.toggle('active', i.dataset.view === view));
     closeSideNav();
     if (view === 'dashboard' && window.initDashboard) window.initDashboard();
+    if (view === 'dashboard' && window.initNotifications) window.initNotifications();
     if (view === 'profile' && window.initProfile) window.initProfile();
     if (view === 'files' && window.initFileManager) window.initFileManager();
     if (view === 'databases' && window.initDatabases) window.initDatabases();
@@ -116,6 +117,7 @@ document.addEventListener('DOMContentLoaded', async () => {
   try {
     const user = await API.me();
     if (user.username) {
+      if (window.initNotifications) window.initNotifications();
       setNavUser(user.username, user.role);
       showPage('dashboard');
       switchView('dashboard');
@@ -146,6 +148,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       showPage('dashboard');
       switchView('dashboard');
       if (window.initDashboard) window.initDashboard();
+      if (window.initNotifications) window.initNotifications();
     } catch (err) {
       loginError.textContent = err.message || 'Invalid credentials';
       loginError.classList.add('show');
