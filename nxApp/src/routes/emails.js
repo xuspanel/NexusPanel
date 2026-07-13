@@ -9,6 +9,32 @@ const { authMiddleware } = require('../middleware/auth');
 const router = express.Router();
 router.use(authMiddleware);
 
+const EMAIL_DOMAINS_FILE = path.join(__dirname, '..', '..', 'data', 'email-domains.json');
+
+function loadEmailDomains() {
+  try { return JSON.parse(fs.readFileSync(EMAIL_DOMAINS_FILE, 'utf8')); }
+  catch { return {}; }
+}
+
+function saveEmailDomains(data) {
+  try {
+    const dir = path.dirname(EMAIL_DOMAINS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(EMAIL_DOMAINS_FILE, JSON.stringify(data, null, 2));
+  } catch {}
+}
+
+function getEmailDomain(username) {
+  const map = loadEmailDomains();
+  return map[username] || null;
+}
+
+function setEmailDomain(username, domain) {
+  const map = loadEmailDomains();
+  map[username] = domain;
+  saveEmailDomains(map);
+}
+
 const FOLDER_MAP = {
   INBOX: '',
   Sent: '.Sent',
@@ -133,8 +159,28 @@ function countFolder(basePath) {
 
 router.get('/domains', async (req, res) => {
   try {
-    const domain = await execCmd("postconf -h mydomain 2>/dev/null | head -1 || hostname -f 2>/dev/null || echo 'localhost'");
-    res.json([domain.trim()]);
+    const domains = new Set();
+    try {
+      const mydomain = await execCmd("postconf -h mydomain 2>/dev/null || echo ''");
+      if (mydomain.trim()) domains.add(mydomain.trim());
+    } catch {}
+    try {
+      const mydest = await execCmd("postconf -h mydestination 2>/dev/null || echo ''");
+      mydest.split(',').map(d => d.trim()).filter(Boolean).forEach(d => {
+        if (d && d !== 'localhost' && d !== 'localhost.' && !d.startsWith('local')) domains.add(d);
+      });
+    } catch {}
+    try {
+      const virt = await execCmd("postconf -h virtual_alias_domains 2>/dev/null || echo ''");
+      virt.split(',').map(d => d.trim()).filter(Boolean).forEach(d => {
+        if (d && d !== 'localhost' && d !== 'localhost.' && !d.startsWith('local') && !d.startsWith('$') && !d.startsWith('hash:') && !d.startsWith('mysql:') && !d.startsWith('pgsql:')) domains.add(d);
+      });
+    } catch {}
+    const hostname = await execCmd("hostname -f 2>/dev/null || echo ''");
+    if (hostname.trim() && !hostname.includes('localhost')) domains.add(hostname.trim());
+    const arr = Array.from(domains).sort();
+    if (arr.length === 0) arr.push('localhost');
+    res.json(arr);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -169,6 +215,7 @@ router.post('/create', async (req, res) => {
     }
     for (const cmd of cmds) await execCmd(cmd);
     ensureDovecotQuota();
+    setEmailDomain(sanitized, domainClean);
     res.json({ success: true, email: sanitized + '@' + domainClean, username: sanitized, domain: domainClean, home: homeDir, quota: hasCustomQuota ? quotaMB : 'unlimited' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -501,14 +548,15 @@ router.get('/:username/quota', async (req, res) => {
 
 router.get('/list', async (req, res) => {
   try {
-    const domain = await execCmd("postconf -h mydomain 2>/dev/null | head -1 || hostname -f 2>/dev/null || echo 'localhost'");
+    const defaultDomain = await execCmd("postconf -h mydomain 2>/dev/null | head -1 || hostname -f 2>/dev/null || echo 'localhost'");
     const passwdRaw = await execCmd("getent passwd");
     const allUsers = parsePasswd(passwdRaw);
     const emailUsers = allUsers.filter(u => u.uid >= 1000 && u.username !== 'nobody');
     const accounts = [];
 
     for (const u of emailUsers) {
-      const email = u.username + '@' + domain.trim();
+      const userDomain = getEmailDomain(u.username) || defaultDomain.trim();
+      const email = u.username + '@' + userDomain;
       let hasMaildir = false, messageCount = 0, folderCount = 0, diskUsage = null, diskUsageBytes = 0;
       const maildirPath = u.home + '/Maildir';
       try {
@@ -522,7 +570,7 @@ router.get('/list', async (req, res) => {
       }
       const canLogin = !u.shell || (!u.shell.includes('/sbin/nologin') && !u.shell.includes('/bin/false'));
       accounts.push({
-        username: u.username, email, domain: domain.trim(), home: u.home, hasMaildir,
+        username: u.username, email, domain: userDomain, home: u.home, hasMaildir,
         messageCount, folderCount, diskUsage, diskUsageBytes, canLogin, shell: u.shell, name: u.gecos || u.username,
       });
     }
