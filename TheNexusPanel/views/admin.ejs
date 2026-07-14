@@ -25,7 +25,7 @@ body += '</div>';
 
 /* KB Add/Edit Form */
 body += '<div id="kbForm" style="display:none;background:rgba(255,255,255,0.02);border:1px solid var(--border);border-radius:var(--radius-sm);padding:20px;margin-bottom:16px">';
-body += '<h3 id="kbFormTitle">New KB Article</h3>';
+body += '<h3 id="kbFormHeading">New KB Article</h3>';
 body += '<input type="hidden" id="kbFormSlug">';
 body += '<div style="display:grid;gap:12px">';
 body += '<div><label style="display:block;font-size:12px;margin-bottom:4px">Category</label><input id="kbFormCat" class="n-input" placeholder="e.g. getting-started"></div>';
@@ -109,9 +109,16 @@ function loadKb() {
   });
 }
 
+function showKbAdd() {
+  var name = prompt('Enter category name (e.g. getting-started):');
+  if (!name || !name.trim()) return;
+  fetch('/api/admin/kb/category', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({ name: name.trim() }) })
+    .then(function(r) { loadKb(); });
+}
+
 function showKbArticleAdd() {
   document.getElementById('kbForm').style.display = 'block';
-  document.getElementById('kbFormTitle').textContent = 'New KB Article';
+  document.getElementById('kbFormHeading').textContent = 'New KB Article';
   document.getElementById('kbFormSlug').value = '';
   document.getElementById('kbFormCat').value = '';
   document.getElementById('kbFormTitle').value = '';
@@ -121,7 +128,7 @@ function showKbArticleAdd() {
 
 function kbEdit(cat, slug, title, body) {
   document.getElementById('kbForm').style.display = 'block';
-  document.getElementById('kbFormTitle').textContent = 'Edit: ' + title;
+  document.getElementById('kbFormHeading').textContent = 'Edit: ' + title;
   document.getElementById('kbFormSlug').value = slug;
   document.getElementById('kbFormCat').value = cat;
   document.getElementById('kbFormTitle').value = title;
@@ -139,7 +146,6 @@ function kbSave() {
   var title = document.getElementById('kbFormTitle').value.trim();
   var slugF = document.getElementById('kbFormSlugF').value.trim();
   var body = quillEditor ? quillEditor.root.innerHTML : '';
-  if (!cat || !title || !slugF) { alert('Category, title and slug are required'); return; }
   if (!cat || !title || !slugF) { alert('Category, title and slug are required'); return; }
   var method = slug ? 'PUT' : 'POST';
   var url = '/api/admin/kb';

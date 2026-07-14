@@ -1,4 +1,7 @@
-require('dotenv').config();
+process.on('uncaughtException', function(err) { console.error('UNCAUGHT EXCEPTION:', err.message, err.stack); });
+process.on('unhandledRejection', function(reason) { console.error('UNHANDLED REJECTION:', reason); });
+
+require('dotenv').config({ path: __dirname + '/.env' });
 const express = require('express');
 const session = require('express-session');
 const cookieParser = require('cookie-parser');

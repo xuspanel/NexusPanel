@@ -21,7 +21,12 @@ echo ""
 
 # ─── Root Check ──────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
-  echo -e "${RED}Please run as root: sudo bash install.sh${NC}"
+  if command -v sudo >/dev/null 2>&1; then
+    echo -e "${YELLOW}Not running as root. Re-executing with sudo...${NC}"
+    exec sudo bash "$0" "$@"
+  fi
+  echo -e "${RED}Root privileges are required to install system packages and configure services.${NC}"
+  echo -e "${RED}Please run with sudo: sudo bash install.sh${NC}"
   exit 1
 fi
 

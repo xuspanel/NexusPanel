@@ -180,6 +180,18 @@ router.get('/api/admin/kb', (req, res) => {
   res.json({ categories: cats });
 });
 
+router.post('/api/admin/kb/category', (req, res) => {
+  if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
+  var kb = require('../services/kb');
+  var slug = (req.body.name || '').trim().toLowerCase().replace(/\s+/g, '-').replace(/[^a-z0-9-]/g, '');
+  if (!slug) return res.status(400).json({ error: 'Invalid category name' });
+  var catDir = path.join(kb.KB_DIR, slug);
+  try {
+    if (!fs.existsSync(catDir)) fs.mkdirSync(catDir, { recursive: true });
+    res.json({ ok: true, slug: slug });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.post('/api/admin/kb', (req, res) => {
   if (!req.user) return res.status(401).json({ error: 'Unauthorized' });
   var { category, slug, title, body } = req.body;
