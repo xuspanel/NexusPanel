@@ -22,8 +22,25 @@ echo ""
 # ─── Root Check ──────────────────────────────────────
 if [ "$EUID" -ne 0 ]; then
   if command -v sudo >/dev/null 2>&1; then
-    echo -e "${YELLOW}Not running as root. Re-executing with sudo...${NC}"
-    exec sudo bash "$(realpath "$0" 2>/dev/null || readlink -f "$0" 2>/dev/null || echo "$0")" "$@"
+    SELF="$0"
+    # When piped via bash <(curl ...), $0 is /dev/fd/* which dies after exec
+    case "$SELF" in
+      /dev/fd/*|/proc/self/fd/*)
+        # $0 is a pipe fd that won't survive exec — re-download to temp file
+        TMP=$(mktemp)
+        if curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install.sh" -o "$TMP" 2>/dev/null; then
+          chmod +x "$TMP"
+          echo -e "${YELLOW}Re-executing with sudo...${NC}"
+          exec sudo bash "$TMP" "$@"
+        fi
+        echo -e "${RED}Cannot re-execute piped script with sudo.${NC}"
+        echo -e "${YELLOW}Please download the script and run it directly:${NC}"
+        echo "  curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install.sh -o install.sh"
+        echo "  sudo bash install.sh"
+        exit 1
+        ;;
+    esac
+    exec sudo bash "$(realpath "$SELF" 2>/dev/null || readlink -f "$SELF" 2>/dev/null || echo "$SELF")" "$@"
   fi
   echo -e "${RED}Root privileges are required to install system packages and configure services.${NC}"
   echo -e "${RED}Please run with sudo: sudo bash install.sh${NC}"
