@@ -46,7 +46,7 @@ install_system_deps() {
   run_cmd apt-get update -qq
 
   local base_packages=(
-    curl wget git openssl
+    curl wget git openssl build-essential
     nginx certbot python3-certbot-nginx
     ufw
     unattended-upgrades
