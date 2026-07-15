@@ -99,55 +99,55 @@ Admin user management. 2FA via TOTP (speakeasy + QR code). Session-based JWT aut
 ### One-liner (auto-detects OS)
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install.sh)
+bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh)
 ```
 
 ### Ubuntu / Debian
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install-ubuntu.sh)
+bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-ubuntu.sh)
 ```
 
 ### AlmaLinux / RHEL
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install-almalinux.sh)
+bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-almalinux.sh)
 ```
 
 ### CentOS Stream
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install-centos.sh)
+bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-centos.sh)
 ```
 
 ### Rocky Linux
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install-rocky.sh)
+bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-rocky.sh)
 ```
 
 ### Fedora
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install-fedora.sh)
+bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-fedora.sh)
 ```
 
 ### macOS
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install-macos.sh)
+bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-macos.sh)
 ```
 
 ### Windows (PowerShell 7+)
 
 ```powershell
-iwr -useb https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install-windows.ps1 | iex
+iwr -useb https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-windows.ps1 | iex
 ```
 
 ### Docker
 
 ```bash
-bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install-docker.sh)
+bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-docker.sh)
 ```
 
 ---

@@ -88,7 +88,7 @@ fetch_versions() {
       | awk -F/ '{print $3}' | sort -V | tail -1 || echo "0.0.0")
   else
     CURRENT_VERSION=$(grep -oP '"version": "\K[^"]+' "${INSTALL_DIR}/package.json" 2>/dev/null || echo "0.0.0")
-    LATEST_VERSION=$(curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/package.json" \
+    LATEST_VERSION=$(curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/package.json" \
       | grep -oP '"version": "\K[^"]+' 2>/dev/null || echo "0.0.0")
   fi
 

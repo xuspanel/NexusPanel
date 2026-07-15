@@ -10,7 +10,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "${SCRIPT_DIR}/install-common.sh" ]; then
   source "${SCRIPT_DIR}/install-common.sh"
 else
-  source <(curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install-common.sh")
+  source <(curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-common.sh")
 fi
 
 DOCKER_COMPOSE_VERSION="2.24.0"

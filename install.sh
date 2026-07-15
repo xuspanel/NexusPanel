@@ -4,9 +4,9 @@
 # Detects OS and delegates to the appropriate installer script.
 #
 # Usage:
-#   curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install.sh | bash
+#   curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh | bash
 #   bash install.sh [--license KEY] [--domain DOMAIN] [--port PORT] [--docker] [--postgres] [--unattended] [--dry-run]
-#   pwsh -c "iwr https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install.sh | iex"
+#   pwsh -c "iwr https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh | iex"
 # ============================================================================
 set -euo pipefail
 IFS=$'\n\t'
@@ -116,7 +116,7 @@ handle_piped_execution() {
     for script in install.sh install-common.sh install-ubuntu.sh install-debian.sh \
                   install-almalinux.sh install-centos.sh install-rocky.sh install-fedora.sh \
                   install-macos.sh install-windows.ps1; do
-      curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/${script}" \
+      curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/${script}" \
         -o "/tmp/nexuspanel-${$}/${script}" 2>/dev/null || true
     done
     chmod +x "/tmp/nexuspanel-${$}/"*.sh 2>/dev/null || true
@@ -181,7 +181,7 @@ show_usage() {
   echo "  -h, --help        Show this help"
   echo ""
   echo "Quick install:"
-  echo "  curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install.sh | bash"
+  echo "  curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh | bash"
 }
 
 # ─── Main ─────────────────────────────────────────────

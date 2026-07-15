@@ -120,13 +120,13 @@ check_root() {
       case "$SELF" in
         /dev/fd/*|/proc/self/fd/*)
           TMP=$(mktemp)
-          if curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install.sh" -o "$TMP" 2>/dev/null; then
+          if curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh" -o "$TMP" 2>/dev/null; then
             chmod +x "$TMP"
             exec sudo bash "$TMP" "$@"
           fi
           echo -e "${RED}Cannot re-execute piped script with sudo.${NC}"
           echo -e "${YELLOW}Download and run directly:${NC}"
-          echo "  curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/nxApp/install.sh -o install.sh"
+          echo "  curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh -o install.sh"
           echo "  sudo bash install.sh"
           exit ${EXIT_ROOT_REQUIRED}
           ;;
