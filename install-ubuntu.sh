@@ -47,7 +47,6 @@ install_system_deps() {
 
   local base_packages=(
     curl wget git openssl
-    nodejs npm
     nginx certbot python3-certbot-nginx
     ufw
     unattended-upgrades
