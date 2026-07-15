@@ -537,7 +537,7 @@ LimitNOFILE=65536
 WantedBy=multi-user.target
 SYSTEMD
 
-  systemctl daemon-reload
+  systemctl daemon-reload 2>/dev/null || true
   systemctl enable "${service_name}" 2>/dev/null || true
   log_info "Systemd service created: ${service_name}"
 }
