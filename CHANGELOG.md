@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.2.0] - 2026-07-15
+### Added
+- OS abstraction layer: `detect_os()`, `pkg_*()`, `service_manage()`, `fw_*()`, `detect_mac()` in `install-common.sh`
+- Package-manager fallback for unrecognized distros (apt-get/dnf/yum/apk/pacman/zypper)
+- `install-centos.sh` and `install-fedora.sh` now source `install-almalinux.sh` (fixes broken undefined functions)
+
+### Changed
+- `install-ubuntu.sh` and `install-almalinux.sh` refactored to use shared OS abstractions instead of direct apt-get/dnf/ufw/firewall-cmd calls
+- `uninstall.sh` and `upgrade.sh` now source `install-common.sh` for shared detection and service management
+- `install.sh` uses array-based args with `--key=value` format for reliable inner-installer delegation
+
+### Fixed
+- `install-centos.sh` and `install-fedora.sh` called 5 undefined functions (`get_user_input`, `install_app`, `setup_ssl`, `start_service`, `show_summary`)
+- Args passed from `install.sh` to OS-specific installers were concatenated into a single string due to missing `--key=value` format
+
 ## [1.1.0] - 2026-07-15
 ### Added
 - Loading skeleton animations for dashboard stats, progress bars, and charts
