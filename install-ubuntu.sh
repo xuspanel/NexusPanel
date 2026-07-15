@@ -59,6 +59,7 @@ install_system_deps() {
   node_ver=$(node -v 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1 || echo "0")
   if [ "${node_ver}" -lt 18 ]; then
     log_info "Installing Node.js 20.x..."
+    apt-get remove -y libnode-dev nodejs npm 2>/dev/null || true
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
     run_cmd apt-get install -y nodejs
   fi
