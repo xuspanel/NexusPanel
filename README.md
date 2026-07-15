@@ -102,51 +102,27 @@ Admin user management. 2FA via TOTP (speakeasy + QR code). Session-based JWT aut
 bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh)
 ```
 
-### Ubuntu / Debian
+### Per-OS (direct)
 
 ```bash
+# Ubuntu / Debian
 bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-ubuntu.sh)
-```
 
-### AlmaLinux / RHEL
-
-```bash
+# AlmaLinux / RHEL
 bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-almalinux.sh)
-```
 
-### CentOS Stream
-
-```bash
+# CentOS Stream, Rocky Linux, Fedora (thin wrappers)
 bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-centos.sh)
-```
-
-### Rocky Linux
-
-```bash
 bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-rocky.sh)
-```
-
-### Fedora
-
-```bash
 bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-fedora.sh)
-```
 
-### macOS
-
-```bash
+# macOS (Homebrew + LaunchDaemon)
 bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-macos.sh)
-```
 
-### Windows (PowerShell 7+)
+# Windows (PowerShell 7+)
+pwsh -c "iwr -useb https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-windows.ps1 | iex"
 
-```powershell
-iwr -useb https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-windows.ps1 | iex
-```
-
-### Docker
-
-```bash
+# Docker (any OS with Docker)
 bash <(curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-docker.sh)
 ```
 
@@ -285,29 +261,101 @@ sudo bash logs.sh
 
 ---
 
+## Installer Architecture
+
+The NexusPanel installer suite uses a layered architecture with automatic OS detection, shared abstraction functions, and optional per-OS thin wrappers.
+
+### How it works
+
+```
+install.sh  (universal entry point)
+  ├── Auto-detects OS via /etc/os-release or package-manager fallback
+  ├── Delegates to OS-specific installer (install-ubuntu.sh, install-almalinux.sh, etc.)
+  └── Sets up args in --key=value format for reliable passthrough
+
+install-common.sh  (shared library — sourced by all installers)
+  ├── OS detection:        detect_os()  →  OS_FAMILY, OS_ID, OS_VERSION
+  ├── Package management:  pkg_update, pkg_install, pkg_remove, pkg_add_repo
+  ├── Init system:         detect_init, service_manage
+  ├── Firewall:            detect_firewall, fw_allow, fw_remove
+  ├── MAC (SELinux/AA):    detect_mac
+  └── Utilities:           run_cmd, run_with_retry, checkpoint, .env generation
+
+OS-specific installer    (e.g. install-ubuntu.sh, install-almalinux.sh)
+  └── Validates OS family, calls shared pkg_* / fw_* / service_manage functions
+
+Thin wrappers             (install-centos.sh, install-fedora.sh, install-rocky.sh)
+  └── ~25 lines each — check OS, source install-almalinux.sh
+```
+
+### OS Family Mapping
+
+| `/etc/os-release` ID | `OS_FAMILY` | Delegated Installer |
+|---|---|---|
+| `ubuntu`, `debian` | `debian` | `install-ubuntu.sh` |
+| `almalinux`, `rocky`, `centos`, `rhel` | `rhel` | `install-almalinux.sh` |
+| `fedora` | `fedora` | `install-almalinux.sh` |
+| Any macOS | `macos` | `install-macos.sh` |
+| Any Windows | `windows` | `install-windows.ps1` |
+
+### Package Manager Fallback
+
+When `/etc/os-release` is missing or the distro ID is unrecognized, `detect_os()` falls back to detecting the package manager:
+
+| Detected Command | `OS_FAMILY` | `OS_ID` |
+|---|---|---|
+| `apt-get` | `debian` | `ubuntu` |
+| `dnf` | `rhel` | `almalinux` |
+| `yum` | `rhel` | `centos` |
+| `apk` | `alpine` | `alpine` |
+| `pacman` | `arch` | `arch` |
+| `zypper` | `suse` | `suse` |
+
+### Abstraction Functions
+
+All OS-specific scripts use these shared functions instead of calling package managers or firewalls directly:
+
+| Function | Purpose | debian | rhel/fedora | alpine | arch |
+|---|---|---|---|---|---|
+| `pkg_update` | Refresh package lists | `apt-get update` | `dnf check-update` | `apk update` | `pacman -Sy` |
+| `pkg_install` | Install packages | `apt-get install -y` | `dnf install -y` | `apk add` | `pacman -S` |
+| `pkg_remove` | Remove packages | `apt-get remove -y` | `dnf remove -y` | `apk del` | `pacman -R` |
+| `service_manage` | Start/stop/enable | `systemctl` / `service` | `systemctl` | `rc-service` | `systemctl` |
+| `fw_allow` | Open firewall port | `ufw allow` | `firewall-cmd` | — | — |
+| `fw_remove` | Close firewall port | `ufw delete allow` | `firewall-cmd --remove` | — | — |
+| `detect_mac` | Detect SELinux/AppArmor | AppArmor | SELinux | — | — |
+
+### Args passthrough
+
+`install.sh` accepts CLI flags and forwards them to the OS-specific installer using bash arrays with `--key=value` format:
+
+```bash
+bash install.sh --license=NX-XXXX --domain=panel.example.com --port=3443 --unattended
+```
+
+Available flags: `--license`, `--domain`, `--port`, `--admin-user`, `--admin-pass`, `--docker`, `--postgres`, `--unattended`, `--dry-run`
+
+---
+
 ## Project Structure
 
 ```
 NexusPanel/
-├── install.sh                    # Universal installer (auto-detects OS)
-├── install-common.sh             # Shared installer library
-├── install-ubuntu.sh             # Ubuntu/Debian installer
-├── install-debian.sh             # Debian installer (sources Ubuntu)
-├── install-almalinux.sh          # AlmaLinux/RHEL installer
-├── install-centos.sh             # CentOS Stream installer
-├── install-rocky.sh              # Rocky Linux installer (sources AlmaLinux)
-├── install-fedora.sh             # Fedora installer
+├── install.sh                    # Universal entry point — auto-detects OS, delegates
+├── install-common.sh             # Shared library — OS abstraction, pkg_*, fw_*, service_*
+├── install-ubuntu.sh             # Debian-family installer (apt-get + ufw + AppArmor)
+├── install-debian.sh             # Debian thin wrapper (sources install-ubuntu.sh)
+├── install-almalinux.sh          # RHEL-family installer (dnf + firewalld + SELinux)
+├── install-centos.sh             # CentOS thin wrapper (sources install-almalinux.sh)
+├── install-rocky.sh              # Rocky thin wrapper (sources install-almalinux.sh)
+├── install-fedora.sh             # Fedora thin wrapper (sources install-almalinux.sh)
 ├── install-macos.sh              # macOS installer (Homebrew + LaunchDaemon)
 ├── install-windows.ps1           # Windows installer (Chocolatey + NSSM)
-├── install-docker.sh             # Docker containerized installer
-├── uninstall.sh                  # Comprehensive uninstaller
-├── upgrade.sh                    # Config-preserving upgrade utility
-├── update.sh                     # Legacy update script
+├── install-docker.sh             # OS-agnostic Docker installer
+├── uninstall.sh                  # Comprehensive uninstaller (sources install-common.sh)
+├── upgrade.sh                    # Config-preserving upgrade (sources install-common.sh)
 ├── config.example.json           # Default configuration template
 ├── troubleshoot.sh               # Diagnostic wizard
-├── errors.sh                     # Error code reference
-├── health.sh                     # Health check script
-├── logs.sh                       # Log viewer
 ├── nexuspanel.service            # systemd service unit
 ├── server.js                     # Express app entry point
 ├── package.json
