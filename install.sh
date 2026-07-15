@@ -53,29 +53,26 @@ show_banner() {
 }
 
 # ─── OS Detection ────────────────────────────────────
+# Tries shared detect_os() from install-common.sh first, falls back to inline
 detect_os() {
-  local os=""
-  local distro=""
+  # Try to source install-common.sh for the shared detect_os()
+  if [ -f "${SCRIPT_SOURCE}/install-common.sh" ]; then
+    source "${SCRIPT_SOURCE}/install-common.sh"
+    detect_os  # calls the shared version, sets OS_FAMILY/OS_ID/OS_VERSION
+    echo "${OS_ID:-unknown}"
+    return 0
+  fi
 
+  # Inline fallback if install-common.sh is not available
+  local distro="unknown"
   case "$(uname -s)" in
     Darwin)
-      os="macos"
       distro="macos"
       ;;
     Linux)
-      os="linux"
       if [ -f /etc/os-release ]; then
         . /etc/os-release
-        case "${ID,,}" in
-          ubuntu) distro="ubuntu" ;;
-          debian) distro="debian" ;;
-          almalinux) distro="almalinux" ;;
-          rocky) distro="rocky" ;;
-          centos) distro="centos" ;;
-          fedora) distro="fedora" ;;
-          rhel)  distro="almalinux" ;;
-          *)     distro="${ID,,}" ;;
-        esac
+        distro="${ID,,}"
       elif [ -f /etc/redhat-release ]; then
         if grep -qi "almalinux" /etc/redhat-release; then
           distro="almalinux"
@@ -90,15 +87,19 @@ detect_os() {
         fi
       elif [ -f /etc/debian_version ]; then
         distro="ubuntu"
+      else
+        # Package-manager fallback for unrecognized distros
+        if command -v apt-get >/dev/null 2>&1; then
+          distro="ubuntu"
+        elif command -v dnf >/dev/null 2>&1; then
+          distro="almalinux"
+        elif command -v yum >/dev/null 2>&1; then
+          distro="centos"
+        fi
       fi
       ;;
     MINGW*|MSYS*|CYGWIN*)
-      os="windows"
       distro="windows"
-      ;;
-    *)
-      os="unknown"
-      distro="unknown"
       ;;
   esac
 
@@ -200,17 +201,17 @@ main() {
   log_info "Detected OS: ${distro}"
   echo ""
 
-  # Build common args
-  local common_args=""
-  [ -n "${LICENSE_KEY}" ]    && common_args+=" --license ${LICENSE_KEY}"
-  [ -n "${DOMAIN}" ]         && common_args+=" --domain ${DOMAIN}"
-  [ -n "${PORT}" ]           && common_args+=" --port ${PORT}"
-  [ -n "${ADMIN_USER}" ]     && common_args+=" --admin-user ${ADMIN_USER}"
-  [ -n "${ADMIN_PASS}" ]     && common_args+=" --admin-pass ${ADMIN_PASS}"
-  ${INSTALL_DOCKER}          && common_args+=" --docker"
-  ${INSTALL_POSTGRES}        && common_args+=" --postgres"
-  ${UNATTENDED}              && common_args+=" --unattended"
-  ${DRY_RUN}                 && common_args+=" --dry-run"
+  # Build common args (use --key=value format for inner parse_args)
+  local common_args=()
+  [ -n "${LICENSE_KEY}" ]    && common_args+=(--license="${LICENSE_KEY}")
+  [ -n "${DOMAIN}" ]         && common_args+=(--domain="${DOMAIN}")
+  [ -n "${PORT}" ]           && common_args+=(--port="${PORT}")
+  [ -n "${ADMIN_USER}" ]     && common_args+=(--admin-user="${ADMIN_USER}")
+  [ -n "${ADMIN_PASS}" ]     && common_args+=(--admin-pass="${ADMIN_PASS}")
+  ${INSTALL_DOCKER}          && common_args+=(--docker)
+  ${INSTALL_POSTGRES}        && common_args+=(--postgres)
+  ${UNATTENDED}              && common_args+=(--unattended)
+  ${DRY_RUN}                 && common_args+=(--dry-run)
 
   local installer=""
   case "${distro}" in
@@ -220,7 +221,7 @@ main() {
     debian)
       installer="${SCRIPT_SOURCE}/install-debian.sh"
       ;;
-    almalinux)
+    almalinux|rhel)
       installer="${SCRIPT_SOURCE}/install-almalinux.sh"
       ;;
     rocky)
@@ -269,7 +270,7 @@ main() {
   echo ""
 
   # Execute the OS-specific installer
-  exec bash "${installer}" $common_args
+  exec bash "${installer}" "${common_args[@]}"
 }
 
 main "$@"

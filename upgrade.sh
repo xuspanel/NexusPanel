@@ -8,13 +8,19 @@ IFS=$'\n\t'
 
 VERSION="2.0.0"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'
-BOLD='\033[1m'; NC='\033[0m'
-
-log_info()  { echo -e " ${CYAN}[INFO]${NC}  $*"; }
-log_ok()    { echo -e "  ${GREEN}[OK]${NC}  $*"; }
-log_warn()  { echo -e " ${YELLOW}[WARN]${NC}  $*"; }
-log_error() { echo -e "  ${RED}[ERR]${NC}  $*"; }
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "${SCRIPT_DIR}/install-common.sh" ]; then
+  source "${SCRIPT_DIR}/install-common.sh"
+elif [ -f "./install-common.sh" ]; then
+  source "./install-common.sh"
+else
+  source <(curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-common.sh") 2>/dev/null || {
+    RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'
+    BOLD='\033[1m'; NC='\033[0m'
+    echo -e " ${RED}[ERR]${NC}  Cannot find install-common.sh — please download the full suite"
+    exit 1
+  }
+fi
 
 show_banner() {
   echo ""
@@ -188,13 +194,12 @@ restart_service() {
 
   case "$(uname -s)" in
     Darwin)
-      launchctl unload /Library/LaunchDaemons/com.nexuspanel.plist 2>/dev/null || true
-      launchctl load -w /Library/LaunchDaemons/com.nexuspanel.plist 2>/dev/null || true
+      service_manage restart nexuspanel
       ;;
     Linux)
       systemctl daemon-reload 2>/dev/null || true
-      systemctl restart nexuspanel 2>/dev/null || true
-      systemctl restart nginx 2>/dev/null || true
+      service_manage restart nexuspanel
+      service_manage restart nginx 2>/dev/null || true
       ;;
   esac
 

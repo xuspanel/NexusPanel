@@ -8,13 +8,19 @@ IFS=$'\n\t'
 
 VERSION="2.0.0"
 
-RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'
-BOLD='\033[1m'; NC='\033[0m'
-
-log_info()  { echo -e " ${CYAN}[INFO]${NC}  $*"; }
-log_ok()    { echo -e "  ${GREEN}[OK]${NC}  $*"; }
-log_warn()  { echo -e " ${YELLOW}[WARN]${NC}  $*"; }
-log_error() { echo -e "  ${RED}[ERR]${NC}  $*"; }
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+if [ -f "${SCRIPT_DIR}/install-common.sh" ]; then
+  source "${SCRIPT_DIR}/install-common.sh"
+elif [ -f "./install-common.sh" ]; then
+  source "./install-common.sh"
+else
+  source <(curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-common.sh") 2>/dev/null || {
+    RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'
+    BOLD='\033[1m'; NC='\033[0m'
+    echo -e " ${RED}[ERR]${NC}  Cannot find install-common.sh — please download the full suite"
+    exit 1
+  }
+fi
 
 show_banner() {
   echo ""
@@ -29,27 +35,6 @@ show_banner() {
   echo -e "         ${BOLD}NexusPanel Uninstaller${NC} v${VERSION}"
   echo -e "         ${YELLOW}Use with caution — this will remove all components${NC}"
   echo ""
-}
-
-# ─── OS Detection ────────────────────────────────────
-detect_os() {
-  case "$(uname -s)" in
-    Darwin)   echo "macos" ;;
-    Linux)
-      if [ -f /etc/os-release ]; then
-        . /etc/os-release
-        echo "${ID,,}"
-      elif [ -f /etc/redhat-release ]; then
-        echo "rhel"
-      elif [ -f /etc/debian_version ]; then
-        echo "debian"
-      else
-        echo "linux"
-      fi
-      ;;
-    MINGW*|MSYS*|CYGWIN*) echo "windows" ;;
-    *) echo "unknown" ;;
-  esac
 }
 
 check_root() {
@@ -89,15 +74,14 @@ detect_paths() {
 
 # ─── Service Removal ────────────────────────────────
 remove_services() {
+  detect_os
   log_info "Removing NexusPanel services..."
 
-  case "$(detect_os)" in
+  case "${OS_FAMILY}" in
     macos)
-      if [ -f /Library/LaunchDaemons/com.nexuspanel.plist ]; then
-        launchctl unload /Library/LaunchDaemons/com.nexuspanel.plist 2>/dev/null || true
-        rm -f /Library/LaunchDaemons/com.nexuspanel.plist
-        log_ok "LaunchDaemon removed"
-      fi
+      service_manage stop nexuspanel
+      rm -f /Library/LaunchDaemons/com.nexuspanel.plist
+      log_ok "LaunchDaemon removed"
       ;;
     windows)
       if command -v nssm >/dev/null 2>&1; then
@@ -111,9 +95,8 @@ remove_services() {
       fi
       ;;
     *)
-      # systemd
-      systemctl stop nexuspanel 2>/dev/null || true
-      systemctl disable nexuspanel 2>/dev/null || true
+      service_manage stop nexuspanel
+      service_manage disable nexuspanel
       rm -f /etc/systemd/system/nexuspanel.service
       rm -f /etc/systemd/system/nexuspanel.target
       systemctl daemon-reload 2>/dev/null || true
@@ -200,6 +183,7 @@ remove_files() {
 
 # ─── Reverse Dependencies ───────────────────────────
 remove_dependencies() {
+  detect_os
   log_info "Checking optional dependencies installed by NexusPanel..."
 
   echo ""
@@ -212,16 +196,16 @@ remove_dependencies() {
   echo -n "Remove dependencies? This may affect other applications. [y/N]: "
   read -r answer
   if [[ "${answer}" =~ ^[Yy]$ ]]; then
-    case "$(detect_os)" in
-      ubuntu|debian)
-        apt-get remove -y nginx certbot python3-certbot-nginx fail2ban 2>/dev/null || true
-        apt-get autoremove -y 2>/dev/null || true
+    case "${OS_FAMILY}" in
+      debian)
+        pkg_remove nginx certbot python3-certbot-nginx fail2ban 2>/dev/null || true
+        run_cmd apt-get autoremove -y 2>/dev/null || true
         rm -f /etc/apt/sources.list.d/nodesource.list
         log_ok "Dependencies removed"
         ;;
-      almalinux|rocky|centos|fedora|rhel)
-        dnf remove -y nginx certbot python3-certbot-nginx fail2ban 2>/dev/null || true
-        dnf autoremove -y 2>/dev/null || true
+      rhel|fedora)
+        pkg_remove nginx certbot python3-certbot-nginx fail2ban 2>/dev/null || true
+        run_cmd dnf autoremove -y 2>/dev/null || true
         rm -f /etc/yum.repos.d/nodesource-nodejs.repo
         log_ok "Dependencies removed"
         ;;
@@ -242,26 +226,10 @@ cleanup_firewall() {
   echo -n "Remove NexusPanel firewall rules? [y/N]: "
   read -r answer
   if [[ "${answer}" =~ ^[Yy]$ ]]; then
-    case "$(detect_os)" in
-      ubuntu|debian)
-        ufw delete allow 3443/tcp 2>/dev/null || true
-        ufw delete allow 80/tcp 2>/dev/null || true
-        ufw delete allow 443/tcp 2>/dev/null || true
-        log_ok "UFW rules removed"
-        ;;
-      almalinux|rocky|centos|fedora)
-        firewall-cmd --permanent --remove-port=3443/tcp 2>/dev/null || true
-        firewall-cmd --permanent --remove-port=80/tcp 2>/dev/null || true
-        firewall-cmd --permanent --remove-port=443/tcp 2>/dev/null || true
-        firewall-cmd --reload 2>/dev/null || true
-        log_ok "Firewalld rules removed"
-        ;;
-      macos)
-        /usr/libexec/ApplicationFirewall/socketfilterfw --remove \
-          "$(which node 2>/dev/null || echo "")" 2>/dev/null || true
-        log_ok "macOS firewall rules removed"
-        ;;
-    esac
+    fw_remove "3443"
+    fw_remove "80"
+    fw_remove "443"
+    log_ok "Firewall rules removed"
   fi
 }
 

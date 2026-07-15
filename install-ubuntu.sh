@@ -15,35 +15,25 @@ else
   source <(curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-common.sh")
 fi
 
-# ─── OS Detection ─────────────────────────────────────
-detect_os() {
-  if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$ID
-    OS_VERSION=$VERSION_ID
-    OS_CODENAME=$VERSION_CODENAME
-  else
-    log_error "Cannot detect OS"
-    exit ${EXIT_GENERAL_ERROR}
-  fi
-
-  case "${OS}" in
-    ubuntu|debian) ;;
+# ─── OS Detection Validation ──────────────────────────
+validate_os_family() {
+  detect_os
+  case "${OS_FAMILY}" in
+    debian) ;;
     *)
-      log_error "This script supports Ubuntu/Debian only (detected: ${OS})"
+      log_error "This script supports Ubuntu/Debian only (detected: ${OS_ID})"
       log_info "Please use the appropriate installer for your OS"
       exit ${EXIT_GENERAL_ERROR}
       ;;
   esac
-
-  log_info "Detected: ${OS} ${OS_VERSION} (${OS_CODENAME})"
+  log_info "Detected: ${OS_ID} ${OS_VERSION} (${OS_CODENAME:-})"
 }
 
 # ─── Dependency Installation ──────────────────────────
 install_system_deps() {
   log_info "Installing system dependencies..."
 
-  run_cmd apt-get update -qq
+  pkg_update
 
   local base_packages=(
     curl wget git openssl build-essential
@@ -52,16 +42,16 @@ install_system_deps() {
     unattended-upgrades
   )
 
-  run_cmd apt-get install -y "${base_packages[@]}" 2>/dev/null || true
+  pkg_install "${base_packages[@]}" 2>/dev/null || true
 
   # Ensure Node.js 20+
   local node_ver
   node_ver=$(node -v 2>/dev/null | cut -d'v' -f2 | cut -d'.' -f1 || echo "0")
   if [ "${node_ver}" -lt 18 ]; then
     log_info "Installing Node.js 20.x..."
-    apt-get remove -y libnode-dev nodejs npm 2>/dev/null || true
+    pkg_remove libnode-dev nodejs npm 2>/dev/null || true
     curl -fsSL https://deb.nodesource.com/setup_20.x | bash -
-    run_cmd apt-get install -y nodejs
+    pkg_install nodejs
   fi
 
   log_success "System dependencies installed"
@@ -90,33 +80,32 @@ install_optional_deps() {
 
   if ${INSTALL_PG}; then
     log_info "Installing PostgreSQL..."
-    run_cmd apt-get install -y postgresql postgresql-contrib 2>/dev/null || true
-    run_cmd systemctl enable --now postgresql 2>/dev/null || true
+    pkg_install postgresql postgresql-contrib 2>/dev/null || true
+    service_manage enable postgresql 2>/dev/null || true
+    service_manage start postgresql 2>/dev/null || true
   fi
 
   if ${INSTALL_CLAMAV}; then
     log_info "Installing ClamAV..."
-    run_cmd apt-get install -y clamav clamav-daemon 2>/dev/null || true
-    run_cmd systemctl enable --now clamav-daemon 2>/dev/null || true
+    pkg_install clamav clamav-daemon 2>/dev/null || true
+    service_manage enable clamav-daemon 2>/dev/null || true
+    service_manage start clamav-daemon 2>/dev/null || true
     freshclam 2>/dev/null || true
   fi
 }
 
 # ─── Firewall Configuration ───────────────────────────
 configure_firewall() {
-  log_info "Configuring UFW firewall..."
-
-  if ${DRY_RUN}; then
-    log_info "[DRY-RUN] Would configure UFW"
-    return 0
+  log_info "Configuring firewall..."
+  if ! ${DRY_RUN}; then
+    fw_allow "${PORT:-3443}"
   fi
-
-  configure_ufw "${PORT:-3443}"
 }
 
 # ─── AppArmor Configuration ───────────────────────────
 configure_apparmor() {
-  if command -v aa-status >/dev/null 2>&1; then
+  detect_mac
+  if [ "${MAC_BACKEND}" = "apparmor" ]; then
     log_info "AppArmor is active — creating profile for NexusPanel"
     local profile_file="/etc/apparmor.d/usr.bin.nexuspanel"
     if [ ! -f "${profile_file}" ]; then
@@ -165,7 +154,7 @@ main() {
   parse_args "$@"
   setup_logging
 
-  detect_os
+  validate_os_family
   check_prerequisites "$@"
 
   if ! ${MINIMAL}; then

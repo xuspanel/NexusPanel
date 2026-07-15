@@ -364,6 +364,281 @@ run_with_retry() {
   return 1
 }
 
+# ─── OS Detection ────────────────────────────────────
+# Sets: OS_FAMILY, OS_ID, OS_VERSION, OS_CODENAME, OS_ARCH
+detect_os() {
+  OS_ARCH=$(uname -m 2>/dev/null || echo "unknown")
+
+  case "$(uname -s)" in
+    Darwin)
+      OS_FAMILY="macos"
+      OS_ID="macos"
+      OS_VERSION=$(sw_vers -productVersion 2>/dev/null || echo "unknown")
+      OS_CODENAME=""
+      return 0
+      ;;
+    Linux)
+      if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        OS_ID="${ID,,}"
+        OS_VERSION="${VERSION_ID:-}"
+        OS_CODENAME="${VERSION_CODENAME:-}"
+
+        case "${OS_ID}" in
+          ubuntu|debian)          OS_FAMILY="debian" ;;
+          almalinux|rocky|centos|rhel) OS_FAMILY="rhel" ;;
+          fedora)                 OS_FAMILY="fedora" ;;
+          ol|amzn)                OS_FAMILY="rhel" ;;
+          alpine)                 OS_FAMILY="alpine" ;;
+          arch|manjaro|endeavouros) OS_FAMILY="arch" ;;
+          suse|opensuse*|sles)    OS_FAMILY="suse" ;;
+          *)                      OS_FAMILY="unknown" ;;
+        esac
+      elif [ -f /etc/debian_version ]; then
+        OS_FAMILY="debian"
+        OS_ID="debian"
+        OS_VERSION=$(cat /etc/debian_version 2>/dev/null)
+      elif [ -f /etc/redhat-release ]; then
+        OS_FAMILY="rhel"
+        OS_ID="rhel"
+        OS_VERSION=$(rpm -q --queryformat '%{VERSION}' redhat-release 2>/dev/null || echo "unknown")
+      elif [ -f /etc/alpine-release ]; then
+        OS_FAMILY="alpine"
+        OS_ID="alpine"
+        OS_VERSION=$(cat /etc/alpine-release 2>/dev/null)
+      elif [ -f /etc/arch-release ]; then
+        OS_FAMILY="arch"
+        OS_ID="arch"
+      else
+        # Package-manager fallback for unrecognized distros
+        if command -v apt-get >/dev/null 2>&1; then
+          OS_FAMILY="debian"; OS_ID="ubuntu"; OS_VERSION=""
+        elif command -v dnf >/dev/null 2>&1; then
+          OS_FAMILY="rhel"; OS_ID="almalinux"; OS_VERSION=""
+        elif command -v yum >/dev/null 2>&1; then
+          OS_FAMILY="rhel"; OS_ID="centos"; OS_VERSION=""
+        elif command -v apk >/dev/null 2>&1; then
+          OS_FAMILY="alpine"; OS_ID="alpine"; OS_VERSION=""
+        elif command -v pacman >/dev/null 2>&1; then
+          OS_FAMILY="arch"; OS_ID="arch"; OS_VERSION=""
+        else
+          OS_FAMILY="unknown"
+          OS_ID="unknown"
+          OS_VERSION=""
+        fi
+      fi
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      OS_FAMILY="windows"
+      OS_ID="windows"
+      OS_VERSION=""
+      OS_CODENAME=""
+      ;;
+    *)
+      OS_FAMILY="unknown"
+      OS_ID="unknown"
+      OS_VERSION=""
+      OS_CODENAME=""
+      ;;
+  esac
+}
+
+# ─── Package Manager Abstraction ──────────────────────
+pkg_update() {
+  case "${OS_FAMILY}" in
+    debian)   run_cmd apt-get update -qq ;;
+    rhel|fedora) run_cmd dnf check-update 2>/dev/null || true ;;
+    alpine)   run_cmd apk update ;;
+    arch)     run_cmd pacman -Sy ;;
+    suse)     run_cmd zypper refresh ;;
+    *)        log_warning "No pkg_update for OS family: ${OS_FAMILY}" ;;
+  esac
+}
+
+pkg_install() {
+  case "${OS_FAMILY}" in
+    debian)   run_cmd apt-get install -y "$@" ;;
+    rhel|fedora) run_cmd dnf install -y "$@" ;;
+    alpine)   run_cmd apk add "$@" ;;
+    arch)     run_cmd pacman -S --noconfirm "$@" ;;
+    suse)     run_cmd zypper install -y "$@" ;;
+    *)        log_error "No pkg_install for OS family: ${OS_FAMILY}" ; return 1 ;;
+  esac
+}
+
+pkg_remove() {
+  case "${OS_FAMILY}" in
+    debian)   run_cmd apt-get remove -y "$@" ;;
+    rhel|fedora) run_cmd dnf remove -y "$@" ;;
+    alpine)   run_cmd apk del "$@" ;;
+    arch)     run_cmd pacman -R --noconfirm "$@" ;;
+    suse)     run_cmd zypper remove -y "$@" ;;
+    *)        log_warning "No pkg_remove for OS family: ${OS_FAMILY}" ; return 1 ;;
+  esac
+}
+
+pkg_add_repo() {
+  local url="$1"
+  case "${OS_FAMILY}" in
+    debian)
+      local codename="${OS_CODENAME}"
+      [ -z "${codename}" ] && codename=$(. /etc/os-release 2>/dev/null && echo "${VERSION_CODENAME}")
+      local repo_name="nexuspanel-${url##*/}"
+      echo "deb ${url} ${codename} main" > "/etc/apt/sources.list.d/${repo_name}.list" 2>/dev/null || true
+      run_cmd apt-get update -qq 2>/dev/null || true
+      ;;
+    rhel|fedora)
+      run_cmd dnf config-manager --add-repo "${url}" 2>/dev/null || true
+      ;;
+    *) log_warning "No pkg_add_repo for OS family: ${OS_FAMILY}" ;;
+  esac
+}
+
+# ─── Init System Detection ────────────────────────────
+detect_init() {
+  if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ] 2>/dev/null; then
+    INIT_SYSTEM="systemd"
+  elif command -v rc-service >/dev/null 2>&1; then
+    INIT_SYSTEM="openrc"
+  elif command -v service >/dev/null 2>&1; then
+    INIT_SYSTEM="sysvinit"
+  elif command -v launchctl >/dev/null 2>&1; then
+    INIT_SYSTEM="launchd"
+  else
+    INIT_SYSTEM="unknown"
+  fi
+}
+
+service_manage() {
+  local action="$1"
+  local service="$2"
+
+  detect_init
+  case "${INIT_SYSTEM}" in
+    systemd)
+      run_cmd systemctl "${action}" "${service}" 2>/dev/null || true
+      ;;
+    openrc)
+      run_cmd rc-service "${service}" "${action}" 2>/dev/null || true
+      ;;
+    sysvinit)
+      run_cmd service "${service}" "${action}" 2>/dev/null || true
+      ;;
+    launchd)
+      local plist="/Library/LaunchDaemons/com.${service}.plist"
+      case "${action}" in
+        start|restart|load)   run_cmd launchctl load -w "${plist}" 2>/dev/null || true ;;
+        stop|unload)          run_cmd launchctl unload "${plist}" 2>/dev/null || true ;;
+        status)               launchctl list | grep -q "com.${service}" 2>/dev/null || true ;;
+        enable)               run_cmd launchctl load -w "${plist}" 2>/dev/null || true ;;
+        disable)              run_cmd launchctl unload "${plist}" 2>/dev/null || true ;;
+      esac
+      ;;
+    *) log_warning "Unknown init system: ${INIT_SYSTEM}" ;;
+  esac
+}
+
+# ─── Firewall Detection ───────────────────────────────
+detect_firewall() {
+  if command -v ufw >/dev/null 2>&1 && ufw status >/dev/null 2>&1; then
+    FW_BACKEND="ufw"
+  elif command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
+    FW_BACKEND="firewalld"
+  elif command -v /usr/libexec/ApplicationFirewall/socketfilterfw >/dev/null 2>&1; then
+    FW_BACKEND="macos"
+  elif command -v nft >/dev/null 2>&1; then
+    FW_BACKEND="nftables"
+  elif command -v iptables >/dev/null 2>&1; then
+    FW_BACKEND="iptables"
+  else
+    FW_BACKEND="none"
+  fi
+}
+
+fw_allow() {
+  local port="${1:-3443}"
+  local proto="${2:-tcp}"
+
+  detect_firewall
+  case "${FW_BACKEND}" in
+    ufw)
+      run_cmd ufw allow "${port}/${proto}" 2>/dev/null || true
+      run_cmd ufw allow 80/tcp 2>/dev/null || true
+      run_cmd ufw allow 443/tcp 2>/dev/null || true
+      ;;
+    firewalld)
+      run_cmd firewall-cmd --add-port="${port}/${proto}" --permanent 2>/dev/null || true
+      run_cmd firewall-cmd --add-service=http --permanent 2>/dev/null || true
+      run_cmd firewall-cmd --add-service=https --permanent 2>/dev/null || true
+      run_cmd firewall-cmd --reload 2>/dev/null || true
+      ;;
+    macos)
+      /usr/libexec/ApplicationFirewall/socketfilterfw --add "$(command -v node)" 2>/dev/null || true
+      ;;
+    nftables|iptables)
+      log_warning "Manual firewall config may be needed for ${FW_BACKEND}"
+      ;;
+    none)
+      log_info "No active firewall detected"
+      ;;
+  esac
+}
+
+fw_remove() {
+  local port="${1:-3443}"
+  local proto="${2:-tcp}"
+
+  detect_firewall
+  case "${FW_BACKEND}" in
+    ufw)
+      run_cmd ufw delete allow "${port}/${proto}" 2>/dev/null || true
+      run_cmd ufw delete allow 80/tcp 2>/dev/null || true
+      run_cmd ufw delete allow 443/tcp 2>/dev/null || true
+      ;;
+    firewalld)
+      run_cmd firewall-cmd --permanent --remove-port="${port}/${proto}" 2>/dev/null || true
+      run_cmd firewall-cmd --permanent --remove-port=80/tcp 2>/dev/null || true
+      run_cmd firewall-cmd --permanent --remove-port=443/tcp 2>/dev/null || true
+      run_cmd firewall-cmd --reload 2>/dev/null || true
+      ;;
+    macos)
+      /usr/libexec/ApplicationFirewall/socketfilterfw --remove "$(command -v node)" 2>/dev/null || true
+      ;;
+  esac
+}
+
+# ─── MAC (Mandatory Access Control) Detection ─────────
+detect_mac() {
+  if command -v getenforce >/dev/null 2>&1 && [ "$(getenforce 2>/dev/null)" != "Disabled" ]; then
+    MAC_BACKEND="selinux"
+  elif command -v aa-status >/dev/null 2>&1 && aa-status --enabled 2>/dev/null; then
+    MAC_BACKEND="apparmor"
+  else
+    MAC_BACKEND="none"
+  fi
+}
+
+# ─── Package Manager Fallback Detection ──────────────
+detect_pkg_manager() {
+  if command -v apt-get >/dev/null 2>&1; then
+    echo "apt-get"
+  elif command -v dnf >/dev/null 2>&1; then
+    echo "dnf"
+  elif command -v yum >/dev/null 2>&1; then
+    echo "yum"
+  elif command -v apk >/dev/null 2>&1; then
+    echo "apk"
+  elif command -v pacman >/dev/null 2>&1; then
+    echo "pacman"
+  elif command -v zypper >/dev/null 2>&1; then
+    echo "zypper"
+  elif command -v brew >/dev/null 2>&1; then
+    echo "brew"
+  else
+    echo "unknown"
+  fi
+}
+
 # ─── Checkpoint System ────────────────────────────────
 CHECKPOINT_FILE="${LOG_DIR}/.checkpoint"
 
@@ -761,3 +1036,5 @@ export EXIT_DATABASE_FAILURE EXIT_SERVICE_FAILURE EXIT_USER_ABORT
 export EXIT_PERMISSION EXIT_TIMEOUT EXIT_VERSION_MISMATCH EXIT_INVALID_ARGS
 export RED GREEN CYAN YELLOW MAGENTA NC BOLD
 export INTERACTIVE FORCE DRY_RUN DEBUG MINIMAL
+export OS_FAMILY OS_ID OS_VERSION OS_CODENAME OS_ARCH
+export INIT_SYSTEM FW_BACKEND MAC_BACKEND

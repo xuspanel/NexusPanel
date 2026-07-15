@@ -16,45 +16,36 @@ else
   source <(curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-common.sh")
 fi
 
-# ─── OS Detection ─────────────────────────────────────
-detect_os() {
-  if [ -f /etc/os-release ]; then
-    . /etc/os-release
-    OS=$ID
-    OS_VERSION=$VERSION_ID
-  else
-    log_error "Cannot detect OS"
-    exit ${EXIT_GENERAL_ERROR}
-  fi
-
-  case "${OS}" in
-    almalinux|rocky|rhel|centos|fedora) ;;
+# ─── OS Detection Validation ──────────────────────────
+validate_os_family() {
+  detect_os
+  case "${OS_FAMILY}" in
+    rhel|fedora) ;;
     *)
-      log_error "This script supports RHEL-family only (detected: ${OS})"
+      log_error "This script supports RHEL/Fedora family only (detected: ${OS_ID})"
       log_info "Please use the appropriate installer for your OS"
       exit ${EXIT_GENERAL_ERROR}
       ;;
   esac
-
-  log_info "Detected: ${OS} ${OS_VERSION}"
+  log_info "Detected: ${OS_ID} ${OS_VERSION} (${OS_CODENAME:-})"
 }
 
 # ─── Repository Configuration ─────────────────────────
 configure_repos() {
   log_info "Configuring repositories..."
 
-  case "${OS}" in
+  case "${OS_ID}" in
     almalinux|rocky)
-      run_cmd dnf install -y epel-release 2>/dev/null || true
+      pkg_install epel-release 2>/dev/null || true
       run_cmd dnf config-manager --set-enabled crb 2>/dev/null || \
       run_cmd dnf config-manager --set-enabled powertools 2>/dev/null || true
       ;;
     rhel)
-      run_cmd dnf install -y https://dl.fedoraproject.org/pub/epel/epel-release-latest-${OS_VERSION}.noarch.rpm 2>/dev/null || true
+      pkg_install "https://dl.fedoraproject.org/pub/epel/epel-release-latest-${OS_VERSION}.noarch.rpm" 2>/dev/null || true
       run_cmd dnf config-manager --set-enabled codeready-builder-for-rhel-${OS_VERSION}-rhui-rpms 2>/dev/null || true
       ;;
     centos)
-      run_cmd dnf install -y epel-release 2>/dev/null || true
+      pkg_install epel-release 2>/dev/null || true
       run_cmd dnf config-manager --set-enabled powertools 2>/dev/null || true
       ;;
     fedora)
@@ -65,8 +56,8 @@ configure_repos() {
 
 # ─── SELinux Configuration ────────────────────────────
 configure_selinux() {
-  if ! command -v getenforce >/dev/null 2>&1; then
-    log_info "SELinux not installed — skipping"
+  detect_mac
+  if [ "${MAC_BACKEND}" != "selinux" ]; then
     return 0
   fi
 
@@ -142,7 +133,7 @@ install_system_deps() {
 
   # Install Node.js via DNF module
   run_cmd dnf module enable -y nodejs:20 2>/dev/null || true
-  run_cmd dnf install -y "${base_packages[@]}" 2>/dev/null || true
+  pkg_install "${base_packages[@]}" 2>/dev/null || true
 
   # Verify Node.js version
   local node_ver
@@ -150,7 +141,7 @@ install_system_deps() {
   if [ "${node_ver}" -lt 18 ]; then
     log_info "Installing Node.js 20.x via nodesource..."
     curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
-    run_cmd dnf install -y nodejs
+    pkg_install nodejs
   fi
 
   log_success "System dependencies installed"
@@ -161,8 +152,9 @@ install_optional_deps() {
     log_info "Installing Docker..."
     if ! command -v docker >/dev/null 2>&1; then
       run_cmd dnf config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo 2>/dev/null || true
-      run_cmd dnf install -y docker-ce docker-ce-cli containerd.io 2>/dev/null || true
-      run_cmd systemctl enable --now docker
+      pkg_install docker-ce docker-ce-cli containerd.io 2>/dev/null || true
+      service_manage enable docker 2>/dev/null || true
+      service_manage start docker 2>/dev/null || true
     else
       log_info "Docker already installed"
     fi
@@ -180,29 +172,27 @@ install_optional_deps() {
 
   if ${INSTALL_PG}; then
     log_info "Installing PostgreSQL..."
-    run_cmd dnf install -y postgresql-server postgresql-contrib 2>/dev/null || true
+    pkg_install postgresql-server postgresql-contrib 2>/dev/null || true
     postgresql-setup --initdb 2>/dev/null || true
-    run_cmd systemctl enable --now postgresql 2>/dev/null || true
+    service_manage enable postgresql 2>/dev/null || true
+    service_manage start postgresql 2>/dev/null || true
   fi
 
   if ${INSTALL_CLAMAV}; then
     log_info "Installing ClamAV..."
-    run_cmd dnf install -y clamav clamav-update 2>/dev/null || true
+    pkg_install clamav clamav-update 2>/dev/null || true
     freshclam 2>/dev/null || true
-    run_cmd systemctl enable --now clamd 2>/dev/null || true
+    service_manage enable clamd 2>/dev/null || true
+    service_manage start clamd 2>/dev/null || true
   fi
 }
 
 # ─── Firewall Configuration ───────────────────────────
 configure_firewall() {
-  log_info "Configuring Firewalld..."
-
-  if ${DRY_RUN}; then
-    log_info "[DRY-RUN] Would configure Firewalld"
-    return 0
+  log_info "Configuring firewall..."
+  if ! ${DRY_RUN}; then
+    fw_allow "${PORT:-3443}"
   fi
-
-  configure_firewalld "${PORT:-3443}"
 }
 
 # ─── Automatic Updates ────────────────────────────────
@@ -215,7 +205,8 @@ configure_auto_updates() {
 
   if [ -f /etc/dnf/automatic.conf ]; then
     sed -i 's/^apply_updates.*/apply_updates = yes/' /etc/dnf/automatic.conf
-    run_cmd systemctl enable --now dnf-automatic.timer 2>/dev/null || true
+    service_manage enable dnf-automatic.timer 2>/dev/null || true
+    service_manage start dnf-automatic.timer 2>/dev/null || true
     log_info "dnf-automatic configured for security updates"
   fi
 }
@@ -229,16 +220,17 @@ if \$programname == 'nexuspanel' then {
     stop
 }
 RSYSLOG
-    run_cmd systemctl restart rsyslog 2>/dev/null || true
+    service_manage restart rsyslog 2>/dev/null || true
   fi
 }
 
 # ─── Main ─────────────────────────────────────────────
 main() {
   show_banner
+  parse_args "$@"
   setup_logging
 
-  detect_os
+  validate_os_family
   check_prerequisites "$@"
 
   if ! ${MINIMAL}; then
