@@ -76,7 +76,9 @@ parse_args() {
       --with-clamav) INSTALL_CLAMAV=true ;;
       --with-pgadmin) INSTALL_PGADMIN=true ;;
       --remove-ssl) REMOVE_SSL=true ;;
-      --yes|-y) FORCE=true; INTERACTIVE=false ;;
+      --yes|-y|--unattended) FORCE=true; INTERACTIVE=false ;;
+      --docker) INSTALL_DOCKER=true ;;
+      --postgres) INSTALL_PG=true ;;
       *) echo -e "${RED}Unknown option: $1${NC}"; show_help; exit ${EXIT_INVALID_ARGS} ;;
     esac
     shift

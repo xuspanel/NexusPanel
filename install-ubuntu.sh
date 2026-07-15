@@ -162,6 +162,7 @@ CONF
 # ─── Main ─────────────────────────────────────────────
 main() {
   show_banner
+  parse_args "$@"
   setup_logging
 
   detect_os
