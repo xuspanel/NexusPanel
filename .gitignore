@@ -1,24 +1,83 @@
-# Keep only TheNexusPanel, nxApp, and nxLicensing in git
-/*
-!/TheNexusPanel
-!/nxApp
-!/nxLicensing
-!/.gitignore
-!/README.md
+# NexusPanel Public .gitignore
+# ================================
 
-# TheNexusPanel exceptions
-/TheNexusPanel/node_modules/
-/TheNexusPanel/.env
-/TheNexusPanel/data/users.json
-/TheNexusPanel/data/orders.json
-/TheNexusPanel/data/invoices/
-
-# nxLicensing exceptions
-/nxLicensing/node_modules/
-/nxLicensing/.env
-/nxLicensing/data/users.json
-
-# Existing ignore patterns (redundant but kept for safety)
-node_modules/
-data/
+# Environment files
 .env
+.env.local
+.env.production
+.env.*.local
+
+# Node modules
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Logs
+logs/
+*.log
+/var/log/
+
+# Database files
+*.db
+*.sqlite
+*.sqlite3
+/data/
+/database/
+
+# SSL certificates
+*.pem
+*.key
+*.crt
+*.csr
+*.p12
+*.pfx
+
+# Backup files
+*.backup
+*.bak
+/backups/
+
+# OS files
+.DS_Store
+Thumbs.db
+*.tmp
+
+# IDE files
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Build output
+dist/
+build/
+*.min.js
+*.min.css
+
+# Test coverage
+coverage/
+.nyc_output/
+
+# Docker files (exclude sensitive)
+docker-compose.override.yml
+
+# Proprietary directories (safety net — should NEVER be here)
+TheNexusPanel/
+nxLicensing/
+NexusPanel/
+development/
+sandbox/
+
+# Domain-specific nginx configs
+panel.*.com.conf
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+# Deployment files
+deploy/
+deployment/

@@ -1,0 +1,96 @@
+{
+  "_comment": "NexusPanel Default Configuration Template",
+  "_version": "2.0.0",
+
+  "server": {
+    "port": 3443,
+    "host": "0.0.0.0",
+    "ssl_enabled": false,
+    "ssl_key": "/etc/nexuspanel/ssl/nexuspanel.key",
+    "ssl_cert": "/etc/nexuspanel/ssl/nexuspanel.crt",
+    "trust_proxy": true,
+    "body_limit": "10mb"
+  },
+
+  "auth": {
+    "jwt_secret": "CHANGE_ME_TO_A_RANDOM_64_CHAR_STRING",
+    "jwt_expires_in": "24h",
+    "session_timeout": 3600,
+    "max_login_attempts": 5,
+    "lockout_duration": 900,
+    "password_min_length": 8,
+    "require_https": false
+  },
+
+  "database": {
+    "type": "sqlite",
+    "path": "/usr/local/opt/nexuspanel/data/nexuspanel.db",
+    "backup_enabled": true,
+    "backup_interval": 86400,
+    "backup_count": 7,
+    "backup_path": "/usr/local/opt/nexuspanel/backups"
+  },
+
+  "license": {
+    "key": "",
+    "domain": "",
+    "validation_server": "https://nxl.xus.me/api",
+    "validation_interval": 86400,
+    "offline_grace_period": 172800
+  },
+
+  "notifications": {
+    "email_enabled": false,
+    "smtp_host": "",
+    "smtp_port": 587,
+    "smtp_user": "",
+    "smtp_pass": "",
+    "smtp_secure": true,
+    "from_address": "nexuspanel@example.com",
+    "webhook_enabled": false,
+    "webhook_url": ""
+  },
+
+  "monitoring": {
+    "metrics_enabled": true,
+    "retention_days": 30,
+    "alert_cpu_threshold": 90,
+    "alert_memory_threshold": 90,
+    "alert_disk_threshold": 90,
+    "check_interval": 60
+  },
+
+  "updates": {
+    "check_on_startup": true,
+    "auto_update": false,
+    "update_channel": "stable",
+    "update_url": "https://api.github.com/repos/xuspanel/NexusPanel/releases/latest"
+  },
+
+  "security": {
+    "rate_limit_window": 900000,
+    "rate_limit_max": 100,
+    "cors_origin": "*",
+    "content_security_policy": "default-src 'self'",
+    "hsts_max_age": 31536000,
+    "enable_helmet": true
+  },
+
+  "logging": {
+    "level": "info",
+    "directory": "/usr/local/var/log/nexuspanel",
+    "max_size_mb": 10,
+    "max_files": 10,
+    "console_output": true
+  },
+
+  "panel": {
+    "name": "NexusPanel",
+    "theme": "dark",
+    "language": "en",
+    "items_per_page": 20,
+    "enable_registration": false,
+    "maintenance_mode": false,
+    "admin_email": "admin@example.com"
+  }
+}
