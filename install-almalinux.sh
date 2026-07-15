@@ -289,7 +289,7 @@ main() {
   if [ -d "${INSTALL_DIR}/.git" ]; then
     cd "${INSTALL_DIR}" && git pull origin main 2>/dev/null || true
   else
-    git clone https://github.com/xuspanel/NexusPanel.git "${INSTALL_DIR}" 2>/dev/null || {
+    git clone -b main --single-branch https://github.com/xuspanel/NexusPanel.git "${INSTALL_DIR}" 2>/dev/null || {
       log_warning "Git clone failed — using local copy"
       if [ -d "${SCRIPT_DIR}/nxApp" ]; then
         cp -r "${SCRIPT_DIR}/nxApp/"* "${INSTALL_DIR}/" 2>/dev/null || true

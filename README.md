@@ -217,7 +217,7 @@ In-app notification system:
 ### Quick Start
 ```bash
 # Clone and install
-git clone <repo>
+git clone https://github.com/xuspanel/NexusPanel.git
 cd NexusPanel
 npm install
 

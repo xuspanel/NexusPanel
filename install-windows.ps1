@@ -244,7 +244,7 @@ function Install-Application {
     if (Test-Path $repoDir) {
         Remove-Item -Recurse -Force $repoDir
     }
-    git clone "https://github.com/xuspanel/NexusPanel.git" $repoDir 2>$null
+    git clone -b main --single-branch "https://github.com/xuspanel/NexusPanel.git" $repoDir 2>$null
     if (Test-Path "$repoDir\nxApp") {
         Copy-Item "$repoDir\nxApp\*" $InstallDir -Recurse -Force
     }
