@@ -2,6 +2,7 @@ let cpuChartInstance = null;
 let pollInterval = null;
 let isRebootingFlag = false;
 let dashboardInitialized = false;
+let dashboardActive = true;
 
 function initParticles() {
   const canvas = document.getElementById('particles-canvas');
@@ -9,6 +10,7 @@ function initParticles() {
   let particles = [];
   let w, h;
   let running = true;
+  let animFrame = null;
 
   function resize() {
     w = canvas.width = window.innerWidth;
@@ -69,19 +71,30 @@ function initParticles() {
     ctx.clearRect(0, 0, w, h);
     particles.forEach(p => { p.update(); p.draw(); });
     connectParticles();
-    requestAnimationFrame(animate);
+    animFrame = requestAnimationFrame(animate);
   }
   animate();
 
   window.reinitParticles = function () {
     running = false;
+    if (animFrame) cancelAnimationFrame(animFrame);
     ctx.clearRect(0, 0, w, h);
     particles = [];
     for (let i = 0; i < count; i++) particles.push(new Particle());
     running = true;
-    requestAnimationFrame(animate);
+    animFrame = requestAnimationFrame(animate);
   };
-  return function () { running = false; };
+
+  window.pauseParticles = function (paused) {
+    if (paused && running) {
+      running = false;
+      if (animFrame) cancelAnimationFrame(animFrame);
+    } else if (!paused && !running) {
+      running = true;
+      animFrame = requestAnimationFrame(animate);
+    }
+  };
+  return function () { running = false; if (animFrame) cancelAnimationFrame(animFrame); };
 }
 
 function updateClock() {
@@ -100,8 +113,8 @@ function copyRootCommand() {
     navigator.clipboard.writeText(text.textContent).catch(() => {});
     const hint = document.querySelector('.copy-hint');
     if (hint) {
-      hint.textContent = '✅ Copied!';
-      setTimeout(() => { hint.textContent = '📋 Click to copy'; }, 2000);
+      hint.textContent = 'Copied!';
+      setTimeout(() => { hint.textContent = 'Click to copy'; }, 2000);
     }
   }
 }
@@ -109,6 +122,16 @@ function copyRootCommand() {
 function navigateTo(view) {
   const btn = document.querySelector('.side-nav-item[data-view="' + view + '"]');
   if (btn) btn.click();
+}
+
+function removeSkeletons() {
+  document.querySelectorAll('.skeleton, .skeleton-progress').forEach(function (el) {
+    el.classList.remove('skeleton', 'skeleton-text', 'skeleton-inline', 'skeleton-progress');
+    if (el.tagName === 'SPAN' && !el.textContent.trim()) {
+      if (el.style.width) el.textContent = '';
+      else el.textContent = '';
+    }
+  });
 }
 
 function renderHomeCards() {
@@ -154,14 +177,14 @@ function renderHomeCards() {
   grid.innerHTML = sections.map(s => `
     <div class="home-section">
       <div class="home-sub-header">
-        <span class="home-sub-icon">${s.icon}</span>
+        <span class="home-sub-icon" aria-hidden="true">${s.icon}</span>
         <span class="home-sub-title">${s.name}</span>
       </div>
       <div class="home-sub-grid">
         ${s.cards.map(c => `
-          <div class="home-card" onclick="navigateTo('${c.view}')" style="--card-grad: ${c.gradient}">
+          <div class="home-card" onclick="navigateTo('${c.view}')" style="--card-grad: ${c.gradient}" role="button" tabindex="0" onkeydown="if(event.key==='Enter'||event.key===' ')navigateTo('${c.view}')" aria-label="${c.title}: ${c.desc}">
             <div class="home-card-glow"></div>
-            <div class="home-card-icon">${c.icon}</div>
+            <div class="home-card-icon" aria-hidden="true">${c.icon}</div>
             <div class="home-card-title">${c.title}</div>
             <div class="home-card-desc">${c.desc}</div>
           </div>
@@ -182,18 +205,22 @@ function updateStatusBadge(stats) {
 }
 
 function updateDashboard(stats) {
-  document.getElementById('homeHeroSubtitle').textContent = stats.hostname ? stats.hostname + ' • VPS Control Center' : 'VPS Control Center';
+  removeSkeletons();
 
-  document.getElementById('homeStatCores').textContent = stats.cpuCores || '—';
-  document.getElementById('homeStatRam').textContent = stats.memory ? stats.memory.total + ' GB' : '—';
-  document.getElementById('homeStatUptime').textContent = stats.uptime || '—';
-  document.getElementById('homeStatOS').textContent = stats.os ? stats.os.split(' ')[0] : '—';
+  document.getElementById('homeHeroSubtitle').textContent = stats.hostname ? stats.hostname + ' \u2022 VPS Control Center' : 'VPS Control Center';
 
-  document.getElementById('homeRootCommandText').textContent = stats.rootAccess || 'ssh root@—';
+  document.getElementById('homeStatCores').textContent = stats.cpuCores || '\u2014';
+  document.getElementById('homeStatRam').textContent = stats.memory ? stats.memory.total + ' GB' : '\u2014';
+  document.getElementById('homeStatUptime').textContent = stats.uptime || '\u2014';
+  document.getElementById('homeStatOS').textContent = stats.os || '\u2014';
+
+  document.getElementById('homeRootCommandText').textContent = stats.rootAccess || 'ssh root@\u2014';
 
   if (stats.memory) {
     const percent = parseFloat(stats.memory.percent);
-    document.getElementById('homeRamText').textContent = stats.memory.usedFormatted + ' used of ' + stats.memory.totalFormatted;
+    const usedFormatted = stats.memory.usedFormatted || stats.memory.used + ' GB';
+    const totalFormatted = stats.memory.totalFormatted || stats.memory.total + ' GB';
+    document.getElementById('homeRamText').textContent = usedFormatted + ' used of ' + totalFormatted;
     document.getElementById('homeRamPercent').textContent = percent + '%';
     const ramFill = document.getElementById('homeRamFill');
     ramFill.style.width = Math.min(percent, 100) + '%';
@@ -204,7 +231,9 @@ function updateDashboard(stats) {
 
   if (stats.disk) {
     const diskPercent = parseFloat(stats.disk.percent);
-    document.getElementById('homeDiskText').textContent = stats.disk.used + ' used of ' + stats.disk.total;
+    const usedFormatted = stats.disk.usedFormatted || stats.disk.used;
+    const totalFormatted = stats.disk.totalFormatted || stats.disk.total;
+    document.getElementById('homeDiskText').textContent = usedFormatted + ' used of ' + totalFormatted;
     document.getElementById('homeDiskPercent').textContent = diskPercent + '%';
     const diskFill = document.getElementById('homeDiskFill');
     diskFill.style.width = Math.min(diskPercent, 100) + '%';
@@ -213,13 +242,18 @@ function updateDashboard(stats) {
     );
   }
 
-  const cpuPercent = parseFloat(stats.cpuUsage || 0);
+  var cpuPercent = parseFloat(stats.cpuUsage || 0);
   document.getElementById('homeCpuPercent').textContent = cpuPercent + '%';
-  const cpuFill = document.getElementById('homeCpuFill');
+  var cpuFill = document.getElementById('homeCpuFill');
   cpuFill.style.width = Math.min(cpuPercent, 100) + '%';
   cpuFill.className = 'progress-fill ' + (
     cpuPercent > 90 ? 'progress-fill-red' : cpuPercent > 70 ? 'progress-fill-gold' : 'progress-fill-green'
   );
+
+  if (stats.cpuLoad !== undefined && stats.cpuCores) {
+    var loadEl = document.querySelector('#homeCpuFill').closest('.home-sys-card').querySelector('.progress-text');
+    if (loadEl) loadEl.textContent = 'Load: ' + stats.cpuLoad + ' / ' + stats.cpuCores + ' cores';
+  }
 
   if (stats.traffic) {
     document.getElementById('homeTrafficRx').textContent = stats.traffic.rxFormatted || '0 B';
@@ -232,7 +266,7 @@ function updateDashboard(stats) {
   if (stats.rebooting) {
     isRebootingFlag = true;
     showRebootOverlay();
-    if (rebootStatus) rebootStatus.textContent = '⚠ Server is rebooting...';
+    if (rebootStatus) rebootStatus.textContent = '\u26a0 Server is rebooting...';
   } else {
     isRebootingFlag = false;
     if (rebootStatus) rebootStatus.textContent = 'Server is running normally';
@@ -248,6 +282,7 @@ function hideRebootOverlay() {
 }
 
 async function fetchStats() {
+  if (!dashboardActive) return;
   if (isRebootingFlag) {
     try {
       const status = await API.rebootStatus();
@@ -270,37 +305,42 @@ async function fetchStats() {
   }
 }
 
+function stopDashboardPolling() {
+  dashboardActive = false;
+}
+
+function resumeDashboardPolling() {
+  dashboardActive = true;
+}
+
 async function initDashboard() {
-  if (dashboardInitialized) {
-    await fetchStats();
-    return;
+  if (!dashboardInitialized) {
+    dashboardInitialized = true;
+    updateClock();
+    setInterval(updateClock, 1000);
+    renderHomeCards();
+    loadHistoryCharts();
+    if (pollInterval) clearInterval(pollInterval);
+    pollInterval = setInterval(fetchStats, 10000);
+
+    document.getElementById('homeRebootBtn').addEventListener('click', async () => {
+      if (isRebootingFlag) return;
+      const btn = document.getElementById('homeRebootBtn');
+      btn.disabled = true;
+      btn.innerHTML = '<span class="icon">\u23f3</span> Rebooting...';
+      try {
+        await API.reboot();
+        document.getElementById('homeRebootStatus').textContent = '\u26a0 Reboot scheduled in 1 minute...';
+        isRebootingFlag = true;
+      } catch (err) {
+        btn.innerHTML = '<span class="icon">\u{1f503}</span> Reboot Server';
+        btn.disabled = false;
+        document.getElementById('homeRebootStatus').textContent = '\u2716 Failed to initiate reboot';
+      }
+    });
   }
-  dashboardInitialized = true;
-  updateClock();
-  setInterval(updateClock, 1000);
-
-  renderHomeCards();
-  loadHistoryCharts();
-
+  dashboardActive = true;
   await fetchStats();
-  if (pollInterval) clearInterval(pollInterval);
-  pollInterval = setInterval(fetchStats, 5000);
-
-  document.getElementById('homeRebootBtn').addEventListener('click', async () => {
-    if (isRebootingFlag) return;
-    const btn = document.getElementById('homeRebootBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<span class="icon">⏳</span> Rebooting...';
-    try {
-      await API.reboot();
-      document.getElementById('homeRebootStatus').textContent = '⚠ Reboot scheduled in 1 minute...';
-      isRebootingFlag = true;
-    } catch (err) {
-      btn.innerHTML = '<span class="icon">🔃</span> Reboot Server';
-      btn.disabled = false;
-      document.getElementById('homeRebootStatus').textContent = '✖ Failed to initiate reboot';
-    }
-  });
 }
 
 document.addEventListener('DOMContentLoaded', () => {
@@ -308,39 +348,94 @@ document.addEventListener('DOMContentLoaded', () => {
   if (rootCmd) rootCmd.addEventListener('click', copyRootCommand);
 });
 
+document.addEventListener('visibilitychange', function () {
+  if (document.hidden) {
+    dashboardActive = false;
+    if (window.pauseParticles) window.pauseParticles(true);
+  } else {
+    dashboardActive = true;
+    if (window.pauseParticles) window.pauseParticles(false);
+    if (window.initDashboard) window.initDashboard();
+  }
+});
+
 window.initParticles = initParticles;
 window.initDashboard = initDashboard;
 window.navigateTo = navigateTo;
+window.stopDashboardPolling = stopDashboardPolling;
+window.resumeDashboardPolling = resumeDashboardPolling;
 
-/* ─── Resource History Charts ─── */
+/* \u2500\u2500 Resource History Charts \u2500\u2500 */
 var historyCharts = {};
 var historyPeriod = '24h';
+var historyFetching = false;
 
 async function loadHistoryCharts() {
   var container = document.getElementById('homeHistoryCharts');
+  var errorEl = document.getElementById('homeChartsError');
   if (!container) return;
+  if (historyFetching) return;
+  historyFetching = true;
+  if (errorEl) errorEl.style.display = 'none';
   try {
     var data = await API.metrics.history(historyPeriod);
-    if (!data || !data.length) { container.innerHTML = ''; return; }
+    if (!data || !data.length) {
+      showChartEmpty();
+      historyFetching = false;
+      return;
+    }
+    hideChartEmpty();
     renderHistoryCharts(data);
-  } catch (e) {}
+  } catch (e) {
+    showChartError();
+  }
+  historyFetching = false;
+}
+
+function showChartEmpty() {
+  var container = document.getElementById('homeHistoryCharts');
+  if (!container) return;
+  var emptyEls = container.querySelectorAll('.home-chart-empty');
+  var canvases = container.querySelectorAll('canvas');
+  emptyEls.forEach(function (el) { el.style.display = 'flex'; });
+  canvases.forEach(function (el) { el.style.display = 'none'; });
+}
+
+function hideChartEmpty() {
+  var container = document.getElementById('homeHistoryCharts');
+  if (!container) return;
+  var emptyEls = container.querySelectorAll('.home-chart-empty');
+  var canvases = container.querySelectorAll('canvas');
+  emptyEls.forEach(function (el) { el.style.display = 'none'; });
+  canvases.forEach(function (el) { el.style.display = 'block'; });
+}
+
+function showChartError() {
+  var errorEl = document.getElementById('homeChartsError');
+  if (errorEl) errorEl.style.display = 'flex';
 }
 
 function renderHistoryCharts(data) {
   var container = document.getElementById('homeHistoryCharts');
-  if (!data.length) { container.innerHTML = ''; return; }
+  if (!data.length) { showChartEmpty(); return; }
+  hideChartEmpty();
 
   var labels = data.map(function(d) { return new Date(d.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }); });
-  var common = { type: 'line', options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } },
+  var common = { type: 'line', options: {
+    responsive: true, maintainAspectRatio: false,
+    animation: { duration: 400, easing: 'easeOutQuart' },
+    transitions: { show: { animations: { x: { from: 0 }, y: { from: 0 } } } },
+    plugins: { legend: { display: false } },
     scales: { x: { display: false }, y: { display: false, min: 0 } },
-    elements: { point: { radius: 0 }, line: { borderWidth: 2, tension: 0.3 } } } };
+    elements: { point: { radius: 0 }, line: { borderWidth: 2, tension: 0.3 } }
+  } };
 
   Object.values(historyCharts).forEach(function(c) { try { c.destroy(); } catch {} });
   historyCharts = {};
   var charts = [
-    { id: 'chartCpu', label: 'CPU %', data: data.map(d => d.cpu), color: '#06b6d4', bg: 'rgba(6,182,212,0.1)' },
-    { id: 'chartMem', label: 'Memory GB', data: data.map(d => d.memUsed / 1024 / 1024), color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
-    { id: 'chartDisk', label: 'Disk GB', data: data.map(d => d.diskUsed / 1024 / 1024), color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
+    { id: 'chartCpu', label: 'CPU %', data: data.map(function(d) { return d.cpu; }), color: '#06b6d4', bg: 'rgba(6,182,212,0.1)' },
+    { id: 'chartMem', label: 'Memory GB', data: data.map(function(d) { return d.memUsed / 1024 / 1024; }), color: '#10b981', bg: 'rgba(16,185,129,0.1)' },
+    { id: 'chartDisk', label: 'Disk GB', data: data.map(function(d) { return d.diskUsed / 1024 / 1024; }), color: '#8b5cf6', bg: 'rgba(139,92,246,0.1)' },
     { id: 'chartNet', label: 'Network MB', data: [], color: '#f59e0b', bg: 'rgba(245,158,11,0.1)' },
   ];
 

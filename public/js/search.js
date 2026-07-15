@@ -14,14 +14,31 @@ document.addEventListener('DOMContentLoaded', function () {
   document.addEventListener('click', function (e) {
     if (!e.target.closest('#globalSearchWrap')) hideResults();
   });
+  document.addEventListener('keydown', function (e) {
+    if ((e.key === '/' || (e.ctrlKey && e.key === 'k')) && document.activeElement !== input) {
+      e.preventDefault();
+      input.focus();
+      input.select();
+    }
+    if (e.key === 'Escape' && document.activeElement === input) {
+      input.blur();
+      hideResults();
+    }
+  });
 });
 
 function onSearchInput() {
   clearTimeout(gsTimer);
-  searchSelIdx = -1;
+  gsSelIdx = -1;
   var q = this.value.trim();
-  if (q.length < 2) { hideResults(); return; }
+  if (q.length < 2) { if (!q) hideResults(); showLoadingHint(); return; }
   gsTimer = setTimeout(function () { doSearch(q); }, 250);
+}
+
+function showLoadingHint() {
+  var el = document.getElementById('globalSearchResults');
+  if (!el) return;
+  el.innerHTML = '<div class="gsr-loading">Type at least 2 characters to search…</div>';
 }
 
 async function doSearch(q) {
@@ -105,8 +122,9 @@ function searchNavigate(idx) {
   if (!r) return;
   hideResults();
   document.getElementById('globalSearchInput').value = '';
+  gsResults = [];
+  gsSelIdx = -1;
   if (r.path && r.type === 'file') {
-    // For files, set file manager path
     sessionStorage.setItem('fm_navigate', r.path);
   }
   navigateTo(r.view);

@@ -39,7 +39,7 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: 0, etag: false, lastModified: false }));
+app.use(express.static(path.join(__dirname, 'public'), { maxAge: '365d', etag: true, lastModified: true }));
 
 const authRoutes = require('./src/routes/auth');
 const dashboardRoutes = require('./src/routes/dashboard');

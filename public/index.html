@@ -5,40 +5,40 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NexusPanel — VPS Control Center</title>
   <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('nx-theme') || 'dark');</script>
-  <link rel="stylesheet" href="/css/style.css?v=1.0.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.1.0">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" crossorigin="anonymous">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-language_tools.js"></script>
-  <script defer src="/js/theme.js?v=1.0.0"></script>
-  <script defer src="/js/api.js?v=1.0.0"></script>
-  <script defer src="/js/auth.js?v=1.0.0"></script>
-  <script defer src="/js/dashboard.js?v=1.0.0"></script>
-  <script defer src="/js/profile.js?v=1.0.0"></script>
-  <script defer src="/js/filemanager.js?v=1.0.0"></script>
-  <script defer src="/js/databases.js?v=1.0.0"></script>
-  <script defer src="/js/emails.js?v=1.0.0"></script>
-  <script defer src="/js/docker.js?v=1.0.0"></script>
-  <script defer src="/js/terminal.js?v=1.0.0"></script>
-  <script defer src="/js/users.js?v=1.0.0"></script>
-  <script defer src="/js/ftp.js?v=1.0.0"></script>
-  <script defer src="/js/domains.js?v=1.0.0"></script>
-  <script defer src="/js/backups.js?v=1.0.0"></script>
-  <script defer src="/js/virusscanner.js?v=1.0.0"></script>
-  <script defer src="/js/mimetypes.js?v=1.0.0"></script>
-  <script defer src="/js/audit.js?v=1.0.0"></script>
-  <script defer src="/js/services.js?v=1.0.0"></script>
-  <script defer src="/js/processes.js?v=1.0.0"></script>
-  <script defer src="/js/logs.js?v=1.0.0"></script>
-  <script defer src="/js/cron.js?v=1.0.0"></script>
-  <script defer src="/js/firewall.js?v=1.0.0"></script>
-  <script defer src="/js/ssl.js?v=1.0.0"></script>
-  <script defer src="/js/phpfpm.js?v=1.0.0"></script>
-  <script defer src="/js/updates.js?v=1.0.0"></script>
-  <script defer src="/js/settings.js?v=1.0.0"></script>
-  <script defer src="/js/search.js?v=1.0.0"></script>
-  <script defer src="/js/notifications.js?v=1.0.0"></script>
-  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm@5.3.0/css/xterm.min.css" crossorigin="anonymous">
+  <script defer src="/js/theme.js?v=1.1.0"></script>
+  <script defer src="/js/api.js?v=1.1.0"></script>
+  <script defer src="/js/auth.js?v=1.1.0"></script>
+  <script defer src="/js/dashboard.js?v=1.1.0"></script>
+  <script defer src="/js/profile.js?v=1.1.0"></script>
+  <script defer src="/js/filemanager.js?v=1.1.0"></script>
+  <script defer src="/js/databases.js?v=1.1.0"></script>
+  <script defer src="/js/emails.js?v=1.1.0"></script>
+  <script defer src="/js/docker.js?v=1.1.0"></script>
+  <script defer src="/js/terminal.js?v=1.1.0"></script>
+  <script defer src="/js/users.js?v=1.1.0"></script>
+  <script defer src="/js/ftp.js?v=1.1.0"></script>
+  <script defer src="/js/domains.js?v=1.1.0"></script>
+  <script defer src="/js/backups.js?v=1.1.0"></script>
+  <script defer src="/js/virusscanner.js?v=1.1.0"></script>
+  <script defer src="/js/mimetypes.js?v=1.1.0"></script>
+  <script defer src="/js/audit.js?v=1.1.0"></script>
+  <script defer src="/js/services.js?v=1.1.0"></script>
+  <script defer src="/js/processes.js?v=1.1.0"></script>
+  <script defer src="/js/logs.js?v=1.1.0"></script>
+  <script defer src="/js/cron.js?v=1.1.0"></script>
+  <script defer src="/js/firewall.js?v=1.1.0"></script>
+  <script defer src="/js/ssl.js?v=1.1.0"></script>
+  <script defer src="/js/phpfpm.js?v=1.1.0"></script>
+  <script defer src="/js/updates.js?v=1.1.0"></script>
+  <script defer src="/js/settings.js?v=1.1.0"></script>
+  <script defer src="/js/search.js?v=1.1.0"></script>
+  <script defer src="/js/notifications.js?v=1.1.0"></script>
   <script defer src="https://cdn.jsdelivr.net/npm/xterm@5.3.0/lib/xterm.min.js" crossorigin="anonymous"></script>
 </head>
 <body>
@@ -109,128 +109,128 @@
   </div>
 
   <!-- Side Navigation -->
-  <nav class="side-nav" id="sideNav">
+  <nav class="side-nav" id="sideNav" role="navigation" aria-label="Main navigation">
     <div class="side-nav-glow"></div>
     <div class="side-nav-inner">
       <div class="side-nav-header">
-        <div class="side-nav-logo">⚡</div>
+        <div class="side-nav-logo" aria-hidden="true">⚡</div>
         <div class="side-nav-title">NexusPanel</div>
         <div class="side-nav-subtitle">Control Center</div>
       </div>
       <div class="side-nav-divider"></div>
-      <div class="side-nav-items">
-        <button class="side-nav-item active" data-view="dashboard">
-          <span class="sni-icon">🏠</span>
+      <div class="side-nav-items" role="menubar" aria-label="Panel views">
+        <button class="side-nav-item active" data-view="dashboard" role="menuitem" aria-current="page">
+          <span class="sni-icon" aria-hidden="true">🏠</span>
           <span class="sni-label">Home</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="files">
-          <span class="sni-icon">📁</span>
+        <button class="side-nav-item" data-view="files" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">📁</span>
           <span class="sni-label">File Manager</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="databases">
-          <span class="sni-icon">🗄️</span>
+        <button class="side-nav-item" data-view="databases" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">🗄️</span>
           <span class="sni-label">Databases</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="emails">
-          <span class="sni-icon">✉️</span>
+        <button class="side-nav-item" data-view="emails" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">✉️</span>
           <span class="sni-label">Emails</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="docker">
-          <span class="sni-icon">🐳</span>
+        <button class="side-nav-item" data-view="docker" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">🐳</span>
           <span class="sni-label">Docker</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="ftp">
-          <span class="sni-icon">📡</span>
+        <button class="side-nav-item" data-view="ftp" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">📡</span>
           <span class="sni-label">FTP</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="terminal">
-          <span class="sni-icon">&#x1F4BB;</span>
+        <button class="side-nav-item" data-view="terminal" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">&#x1F4BB;</span>
           <span class="sni-label">Terminal</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="users">
-          <span class="sni-icon">👥</span>
+        <button class="side-nav-item" data-view="users" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">👥</span>
           <span class="sni-label">Users</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="domains">
-          <span class="sni-icon">🌐</span>
+        <button class="side-nav-item" data-view="domains" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">🌐</span>
           <span class="sni-label">Domains</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="backups">
-          <span class="sni-icon">💾</span>
+        <button class="side-nav-item" data-view="backups" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">💾</span>
           <span class="sni-label">Backups</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="virusscanner">
-          <span class="sni-icon">🛡️</span>
+        <button class="side-nav-item" data-view="virusscanner" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">🛡️</span>
           <span class="sni-label">Scanner</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="mimetypes">
-          <span class="sni-icon">📋</span>
+        <button class="side-nav-item" data-view="mimetypes" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">📋</span>
           <span class="sni-label">MIME Types</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="audit">
-          <span class="sni-icon">📜</span>
+        <button class="side-nav-item" data-view="audit" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">📜</span>
           <span class="sni-label">Audit Trail</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="services">
-          <span class="sni-icon">⚙️</span>
+        <button class="side-nav-item" data-view="services" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">⚙️</span>
           <span class="sni-label">Services</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="processes">
-          <span class="sni-icon">📊</span>
+        <button class="side-nav-item" data-view="processes" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">📊</span>
           <span class="sni-label">Processes</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="logs">
-          <span class="sni-icon">📝</span>
+        <button class="side-nav-item" data-view="logs" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">📝</span>
           <span class="sni-label">Log Viewer</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="cron">
-          <span class="sni-icon">⏰</span>
+        <button class="side-nav-item" data-view="cron" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">⏰</span>
           <span class="sni-label">Cron Jobs</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="firewall">
-          <span class="sni-icon">🛡️</span>
+        <button class="side-nav-item" data-view="firewall" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">🛡️</span>
           <span class="sni-label">Firewall</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="ssl">
-          <span class="sni-icon">🔒</span>
+        <button class="side-nav-item" data-view="ssl" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">🔒</span>
           <span class="sni-label">SSL Certs</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="phpfpm">
-          <span class="sni-icon">🐘</span>
+        <button class="side-nav-item" data-view="phpfpm" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">🐘</span>
           <span class="sni-label">PHP-FPM</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="updates">
-          <span class="sni-icon">🔄</span>
+        <button class="side-nav-item" data-view="updates" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">🔄</span>
           <span class="sni-label">Updates</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="settings">
-          <span class="sni-icon">⚙️</span>
+        <button class="side-nav-item" data-view="settings" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">⚙️</span>
           <span class="sni-label">Settings</span>
           <span class="sni-indicator"></span>
         </button>
-        <button class="side-nav-item" data-view="profile">
-          <span class="sni-icon">👤</span>
+        <button class="side-nav-item" data-view="profile" role="menuitem">
+          <span class="sni-icon" aria-hidden="true">👤</span>
           <span class="sni-label">Profile</span>
           <span class="sni-indicator"></span>
         </button>
@@ -239,19 +239,19 @@
       <div class="side-nav-divider"></div>
       <div class="side-nav-footer">
         <div class="side-nav-user">
-          <span class="snu-avatar">A</span>
+          <span class="snu-avatar" aria-hidden="true">A</span>
           <div class="snu-info">
             <span class="snu-name">admin</span>
             <span class="snu-role">Administrator</span>
           </div>
           <span class="snu-status"></span>
         </div>
-        <button class="side-nav-logout" id="themeToggle" onclick="toggleTheme()">
-          <span class="snl-icon" id="themeToggleIcon">🌙</span>
+        <button class="side-nav-logout" id="themeToggle" onclick="toggleTheme()" aria-label="Toggle theme">
+          <span class="snl-icon" id="themeToggleIcon" aria-hidden="true">🌙</span>
           <span class="snl-label" id="themeToggleLabel">Dark Mode</span>
         </button>
-        <button class="side-nav-logout" id="logoutBtn">
-          <span class="snl-icon">🚪</span>
+        <button class="side-nav-logout" id="logoutBtn" aria-label="Sign out">
+          <span class="snl-icon" aria-hidden="true">🚪</span>
           <span class="snl-label">Sign Out</span>
         </button>
       </div>
@@ -290,7 +290,7 @@
             <div id="notifList" class="notif-list"></div>
           </div>
         </div>
-        <span class="header-time" id="headerTime"></span>
+        <span class="header-time" id="headerTime" aria-live="polite" aria-atomic="true"></span>
       </div>
     </header>
 
@@ -300,28 +300,28 @@
       <div class="home-hero">
         <div class="home-hero-bg"></div>
         <div class="home-hero-content">
-          <div class="home-hero-icon">⚡</div>
+          <div class="home-hero-icon" aria-hidden="true">⚡</div>
           <h1 class="home-hero-title">Welcome to NexusPanel</h1>
           <p class="home-hero-subtitle" id="homeHeroSubtitle">VPS Control Center</p>
           <div class="home-hero-stats" id="homeHeroStats">
             <div class="home-hero-stat">
-              <span class="home-hero-stat-icon">🖥</span>
-              <span class="home-hero-stat-value" id="homeStatCores">—</span>
+              <span class="home-hero-stat-icon" aria-hidden="true">🖥</span>
+              <span class="home-hero-stat-value" id="homeStatCores"><span class="skeleton skeleton-text skeleton-inline"></span></span>
               <span class="home-hero-stat-label">Cores</span>
             </div>
             <div class="home-hero-stat">
-              <span class="home-hero-stat-icon">💾</span>
-              <span class="home-hero-stat-value" id="homeStatRam">—</span>
+              <span class="home-hero-stat-icon" aria-hidden="true">💾</span>
+              <span class="home-hero-stat-value" id="homeStatRam"><span class="skeleton skeleton-text skeleton-inline"></span></span>
               <span class="home-hero-stat-label">RAM</span>
             </div>
             <div class="home-hero-stat">
-              <span class="home-hero-stat-icon">⏱</span>
-              <span class="home-hero-stat-value" id="homeStatUptime">—</span>
+              <span class="home-hero-stat-icon" aria-hidden="true">⏱</span>
+              <span class="home-hero-stat-value" id="homeStatUptime"><span class="skeleton skeleton-text skeleton-inline"></span></span>
               <span class="home-hero-stat-label">Uptime</span>
             </div>
             <div class="home-hero-stat">
-              <span class="home-hero-stat-icon">🌐</span>
-              <span class="home-hero-stat-value" id="homeStatOS">—</span>
+              <span class="home-hero-stat-icon" aria-hidden="true">🌐</span>
+              <span class="home-hero-stat-value" id="homeStatOS"><span class="skeleton skeleton-text skeleton-inline"></span></span>
               <span class="home-hero-stat-label">OS</span>
             </div>
           </div>
@@ -333,7 +333,7 @@
 
       <!-- Resource History Charts -->
       <div class="home-charts-header">
-        <span class="home-charts-title">📊 Resource History</span>
+        <span class="home-charts-title"><span aria-hidden="true">📊</span> Resource History</span>
         <div class="home-charts-periods">
           <button class="home-period-btn active" onclick="switchHistoryPeriod('24h',this)">24h</button>
           <button class="home-period-btn" onclick="switchHistoryPeriod('7d',this)">7d</button>
@@ -341,65 +341,70 @@
         </div>
       </div>
       <div id="homeHistoryCharts" class="home-charts-grid">
-        <div class="home-chart-card"><span class="home-chart-label">CPU</span><canvas id="chartCpu" height="80"></canvas></div>
-        <div class="home-chart-card"><span class="home-chart-label">Memory</span><canvas id="chartMem" height="80"></canvas></div>
-        <div class="home-chart-card"><span class="home-chart-label">Disk</span><canvas id="chartDisk" height="80"></canvas></div>
-        <div class="home-chart-card"><span class="home-chart-label">Network</span><canvas id="chartNet" height="80"></canvas></div>
+        <div class="home-chart-card"><span class="home-chart-label">CPU</span><canvas id="chartCpu" height="80"></canvas><div class="home-chart-empty" id="chartCpuEmpty" style="display:none"><span class="home-chart-empty-icon">📊</span><span class="home-chart-empty-text">No data yet</span></div></div>
+        <div class="home-chart-card"><span class="home-chart-label">Memory</span><canvas id="chartMem" height="80"></canvas><div class="home-chart-empty" id="chartMemEmpty" style="display:none"><span class="home-chart-empty-icon">📊</span><span class="home-chart-empty-text">No data yet</span></div></div>
+        <div class="home-chart-card"><span class="home-chart-label">Disk</span><canvas id="chartDisk" height="80"></canvas><div class="home-chart-empty" id="chartDiskEmpty" style="display:none"><span class="home-chart-empty-icon">📊</span><span class="home-chart-empty-text">No data yet</span></div></div>
+        <div class="home-chart-card"><span class="home-chart-label">Network</span><canvas id="chartNet" height="80"></canvas><div class="home-chart-empty" id="chartNetEmpty" style="display:none"><span class="home-chart-empty-icon">📊</span><span class="home-chart-empty-text">No data yet</span></div></div>
+      </div>
+      <div id="homeChartsError" class="home-charts-error" style="display:none">
+        <span class="home-charts-error-icon">⚠️</span>
+        <span class="home-charts-error-text">Unable to load metrics</span>
+        <button class="home-charts-retry" onclick="loadHistoryCharts()">Retry</button>
       </div>
 
       <!-- System Stats (compact) -->
       <div class="home-section-header" style="margin-top:32px;">
-        <span class="home-section-icon">📊</span>
+        <span class="home-section-icon" aria-hidden="true">📊</span>
         <span class="home-section-title">System Status</span>
         <span class="home-section-badge" id="homeStatusBadge"><span class="status-dot online"></span>Online</span>
       </div>
       <div class="home-sys-grid" id="homeSysGrid">
         <div class="home-sys-card">
-          <div class="home-sys-label"><span class="label-icon">💾</span> RAM</div>
+          <div class="home-sys-label"><span class="label-icon" aria-hidden="true">💾</span> RAM</div>
           <div class="progress-container">
             <div class="progress-header">
-              <span class="progress-text" id="homeRamText">Loading...</span>
-              <span class="progress-percent" id="homeRamPercent">0%</span>
+              <span class="progress-text" id="homeRamText"><span class="skeleton skeleton-text"></span></span>
+              <span class="progress-percent" id="homeRamPercent"><span class="skeleton skeleton-text skeleton-inline" style="width:40px"></span></span>
             </div>
             <div class="progress-bar">
-              <div class="progress-fill progress-fill-green" id="homeRamFill" style="width:0%"></div>
+              <div class="progress-fill progress-fill-green skeleton-progress" id="homeRamFill" style="width:10%"></div>
             </div>
           </div>
         </div>
         <div class="home-sys-card">
-          <div class="home-sys-label"><span class="label-icon">⚡</span> CPU</div>
+          <div class="home-sys-label"><span class="label-icon" aria-hidden="true">⚡</span> CPU</div>
           <div class="progress-container">
             <div class="progress-header">
               <span class="progress-text">Load Average</span>
-              <span class="progress-percent" id="homeCpuPercent">0%</span>
+              <span class="progress-percent" id="homeCpuPercent"><span class="skeleton skeleton-text skeleton-inline" style="width:40px"></span></span>
             </div>
             <div class="progress-bar">
-              <div class="progress-fill progress-fill-gold" id="homeCpuFill" style="width:0%"></div>
+              <div class="progress-fill progress-fill-gold skeleton-progress" id="homeCpuFill" style="width:10%"></div>
             </div>
           </div>
         </div>
         <div class="home-sys-card">
-          <div class="home-sys-label"><span class="label-icon">💽</span> Disk</div>
+          <div class="home-sys-label"><span class="label-icon" aria-hidden="true">💽</span> Disk</div>
           <div class="progress-container">
             <div class="progress-header">
-              <span class="progress-text" id="homeDiskText">Loading...</span>
-              <span class="progress-percent" id="homeDiskPercent">0%</span>
+              <span class="progress-text" id="homeDiskText"><span class="skeleton skeleton-text"></span></span>
+              <span class="progress-percent" id="homeDiskPercent"><span class="skeleton skeleton-text skeleton-inline" style="width:40px"></span></span>
             </div>
             <div class="progress-bar">
-              <div class="progress-fill progress-fill-cyan" id="homeDiskFill" style="width:0%"></div>
+              <div class="progress-fill progress-fill-cyan skeleton-progress" id="homeDiskFill" style="width:10%"></div>
             </div>
           </div>
         </div>
         <div class="home-sys-card">
-          <div class="home-sys-label"><span class="label-icon">📡</span> Bandwidth</div>
+          <div class="home-sys-label"><span class="label-icon" aria-hidden="true">📡</span> Bandwidth</div>
           <div class="home-sys-bandwidth">
             <div class="home-sys-bw-item">
               <span class="home-sys-bw-label">⬇ Down</span>
-              <span class="home-sys-bw-value" id="homeTrafficRx">0 B</span>
+              <span class="home-sys-bw-value" id="homeTrafficRx"><span class="skeleton skeleton-text skeleton-inline" style="width:60px"></span></span>
             </div>
             <div class="home-sys-bw-item">
               <span class="home-sys-bw-label">⬆ Up</span>
-              <span class="home-sys-bw-value" id="homeTrafficTx">0 B</span>
+              <span class="home-sys-bw-value" id="homeTrafficTx"><span class="skeleton skeleton-text skeleton-inline" style="width:60px"></span></span>
             </div>
           </div>
         </div>

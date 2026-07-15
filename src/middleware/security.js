@@ -29,10 +29,16 @@ const securityHeaders = helmet({
       connectSrc: ["'self'", "https://cdn.jsdelivr.net", "https://cdnjs.cloudflare.com"],
       frameAncestors: ["'none'"],
       formAction: ["'self'"],
+      baseUri: ["'self'"],
+      objectSrc: ["'none'"],
+      mediaSrc: ["'self'"],
+      frameSrc: ["'none'"],
       workerSrc: ["'self'", "blob:"],
+      manifestSrc: ["'self'"],
     },
   },
   crossOriginEmbedderPolicy: false,
+  referrerPolicy: { policy: 'strict-origin-when-cross-origin' },
 });
 
 module.exports = { loginLimiter, apiLimiter, securityHeaders };

@@ -39,6 +39,18 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (!show) closeSideNav();
   }
 
+  function updateAriaCurrent(view) {
+    navItems.forEach(i => {
+      const isActive = i.dataset.view === view;
+      i.classList.toggle('active', isActive);
+      if (isActive) {
+        i.setAttribute('aria-current', 'page');
+      } else {
+        i.removeAttribute('aria-current');
+      }
+    });
+  }
+
   function switchView(view) {
     document.getElementById('viewDashboard').style.display = view === 'dashboard' ? 'block' : 'none';
     document.getElementById('viewProfile').style.display = view === 'profile' ? 'block' : 'none';
@@ -63,10 +75,16 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('viewPhpFPM').style.display = view === 'phpfpm' ? 'block' : 'none';
     document.getElementById('viewUpdates').style.display = view === 'updates' ? 'block' : 'none';
     document.getElementById('viewSettings').style.display = view === 'settings' ? 'block' : 'none';
-    navItems.forEach(i => i.classList.toggle('active', i.dataset.view === view));
+    updateAriaCurrent(view);
     closeSideNav();
-    if (view === 'dashboard' && window.initDashboard) window.initDashboard();
-    if (view === 'dashboard' && window.initNotifications) window.initNotifications();
+
+    if (view === 'dashboard') {
+      if (window.initDashboard) window.initDashboard();
+      if (window.initNotifications) window.initNotifications();
+    } else {
+      if (window.stopDashboardPolling) window.stopDashboardPolling();
+    }
+
     if (view === 'profile' && window.initProfile) window.initProfile();
     if (view === 'files' && window.initFileManager) window.initFileManager();
     if (view === 'databases' && window.initDatabases) window.initDatabases();
@@ -89,10 +107,17 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (view === 'phpfpm' && window.initPhpFPM) window.initPhpFPM();
     if (view === 'updates' && window.initUpdates) window.initUpdates();
     if (view === 'settings' && window.initSettings) window.initSettings();
+
+    history.pushState({ view: view }, '', '#' + view);
   }
 
   navItems.forEach(item => {
     item.addEventListener('click', () => switchView(item.dataset.view));
+  });
+
+  window.addEventListener('popstate', function (e) {
+    const view = (e.state && e.state.view) || 'dashboard';
+    switchView(view);
   });
 
   function setNavUser(username, role) {
@@ -112,6 +137,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('loginPassword').value = '';
     document.getElementById('twoFactorCode').value = '';
     tempToken = null;
+    history.replaceState(null, '', '/');
   });
 
   try {
@@ -120,8 +146,8 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (window.initNotifications) window.initNotifications();
       setNavUser(user.username, user.role);
       showPage('dashboard');
-      switchView('dashboard');
-      if (window.initDashboard) window.initDashboard();
+      const initialView = location.hash ? location.hash.slice(1) : 'dashboard';
+      switchView(initialView);
       return;
     }
   } catch {
@@ -147,8 +173,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       setNavUser(username, 'admin');
       showPage('dashboard');
       switchView('dashboard');
-      if (window.initDashboard) window.initDashboard();
-      if (window.initNotifications) window.initNotifications();
     } catch (err) {
       loginError.textContent = err.message || 'Invalid credentials';
       loginError.classList.add('show');
@@ -171,7 +195,6 @@ document.addEventListener('DOMContentLoaded', async () => {
       setNavUser(res.username || 'admin', 'admin');
       showPage('dashboard');
       switchView('dashboard');
-      if (window.initDashboard) window.initDashboard();
     } catch (err) {
       twoFactorError.textContent = err.message || 'Invalid code';
       twoFactorError.classList.add('show');
