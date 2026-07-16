@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.9] - 2026-07-16
+### Changed
+- Terminal screen fully redesigned for mobile and tablet responsiveness
+- Tablet (≤1024px): adjusted terminal wrapper height and narrowed preset panel to 260px
+- Mobile (≤768px): command preset panel now opens as a fixed bottom sheet with rounded top corners and slide-up animation; uses `100dvh` for accurate viewport height; nano-bar touch targets enlarged to 34px minimum
+- Small mobile (≤480px): xterm font size increased to 15px, preset command/delete buttons raised to 36px minimum touch targets, tighter borders and padding throughout
+
 ## [1.2.8] - 2026-07-16
 ### Fixed
 - Global search `/` keyboard shortcut no longer steals focus from File Manager path input and other form fields — now checks `activeElement.tagName` before focusing the search bar
