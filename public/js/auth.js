@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('viewSettings').style.display = view === 'settings' ? 'block' : 'none';
     updateAriaCurrent(view);
     closeSideNav();
-    window.scrollTo({ top: 0, behavior: 'instant' });
+    requestAnimationFrame(() => window.scroll(0, 0));
 
     if (view === 'dashboard') {
       if (window.initDashboard) window.initDashboard();
