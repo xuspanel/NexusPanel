@@ -1,14 +1,25 @@
 # Changelog
 
-## [1.2.3] - 2026-07-16
+## [1.2.4] - 2026-07-16
 ### Changed
+- Reduced `.dashboard-content` padding-top from 32px to 20px to eliminate large empty gap at top of each view
 - `scrollTo` deferred to `requestAnimationFrame` to run after browser layout when switching views
 - Removed `scroll-behavior: smooth` from `<html>` CSS to prevent smooth-scroll interference with programmatic scroll
 
 ### Fixed
-- Screen content no longer appears at bottom of viewport after switching views (scroll now reliably fires after layout reflow)
+- Screen content no longer appears pushed down (excessive top padding was compounding empty space above content)
+- Screen content no longer appears at bottom after switching views (scroll now reliably fires after layout reflow)
 
 ## [1.2.2] - 2026-07-16
+### Changed
+- URL routing switched from hash frags (`/#dashboard`) to clean paths (`/dashboard`) using `history.pushState`
+- Server catch-all route serves `index.html` for all unrecognized GET paths (supports deep-linking page refresh)
+- `window.scrollTo({ top: 0 })` on every view switch to prevent content rendering below viewport
+- Initial view detection reads `location.pathname` first, falls back to `location.hash` for legacy bookmarks
+
+### Fixed
+- Most screen content no longer appears at bottom of viewport after switching views
+- Browser URL bar now shows clean paths instead of hash frags
 
 ## [1.2.1] - 2026-07-16
 ### Changed
