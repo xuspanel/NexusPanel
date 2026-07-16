@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.5] - 2026-07-16
+### Fixed
+- Three orphaned `</div>` tags in `index.html` (lines 1383–1385) prematurely closed `#dashboardPage`, ejecting 10 views (Audit, Services, Processes, Logs, Cron, Firewall, SSL, PHP-FPM, Updates, Settings) outside the `.dashboard` container — causing them to render a full viewport-height below the top of the page
+
+### Changed
+- Removed stale smooth-scroll CSS reference from `<html>` element (full cleanup from v1.2.3)
+
 ## [1.2.4] - 2026-07-16
 ### Changed
 - Reduced `.dashboard-content` padding-top from 32px to 20px to eliminate large empty gap at top of each view
