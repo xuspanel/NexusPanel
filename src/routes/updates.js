@@ -9,8 +9,8 @@ router.post('/apply/:name', (req, res) => {
   try { res.json(updates.applySingle(req.params.name)); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
-router.get('/panel-check', (req, res) => {
-  try { res.json(updates.checkPanelVersion(req.query.force === 'true')); }
+router.get('/panel-check', async (req, res) => {
+  try { res.json(await updates.checkPanelVersion(req.query.force === 'true')); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 router.post('/panel-apply', (req, res) => {

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.7] - 2026-07-16
+### Fixed
+- NexusPanel update check no longer gets stuck on "Checking for panel updates..." — `GET /panel-check` route handler was missing `async`/`await`, causing `checkPanelVersion`'s Promise to serialize as `{}`, leaving `panelState.changelog` as an empty array; `renderPanelUpdate()` only set `el.innerHTML` inside `if (changelog.length)`, so the loading state was never replaced
+
+### Changed
+- `renderPanelUpdate()` now always renders the version card, with changelog as an optional section below it
+
 ## [1.2.6] - 2026-07-16
 ### Added
 - `POST /apply/:name` route handler for single-package updates (was returning HTML 404, breaking the "Update" button on each package row)

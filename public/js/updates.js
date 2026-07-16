@@ -36,33 +36,33 @@ function renderPanelUpdate() {
   else versionInfo += ' → <span style="color:var(--accent-green)">Up to date</span>';
 
   var changelogHtml = '';
-  if (panelState.changelog.length) {
+  if (panelState.changelog && panelState.changelog.length) {
     changelogHtml = panelState.changelog.map(function (e) {
       return '<div class="upd-cl-entry"><div class="upd-cl-version">[' + esc(e.version) + '] ' + esc(e.date) + '</div>' +
         (e.changes && e.changes.length ? '<ul class="upd-cl-list">' + e.changes.map(function (c) { return '<li>' + esc(c) + '</li>'; }).join('') + '</ul>' : '') +
         '</div>';
     }).join('');
-
-    var statusHtml = '';
-    if (panelState.updateAvailable) statusHtml = '<div class="upd-status upd-status-avail">A newer version of NexusPanel is available</div>';
-    else statusHtml = '<div class="upd-status upd-status-ok">NexusPanel is up to date</div>';
-
-    el.innerHTML =
-      '<div class="panel-update-card">' +
-      '<div class="panel-update-header">' +
-      '<span class="panel-update-icon">🔄</span>' +
-      '<div class="panel-update-info"><div class="panel-update-title">NexusPanel</div><div class="panel-update-version">' + versionInfo + '</div></div>' +
-      '<div class="panel-update-actions">' +
-      '<button class="db-btn" onclick="checkPanelUpdate(true)" title="Check for updates">↻ Check</button>' +
-      '<button class="db-btn db-btn-primary" id="panelApplyBtn" onclick="applyPanelUpdate()" ' + (!panelState.updateAvailable ? 'disabled' : '') + '>' +
-      (panelState.updateAvailable ? 'Apply Update' : 'Up to Date') +
-      '</button>' +
-      '</div>' +
-      '</div>' +
-      statusHtml +
-      (changelogHtml ? '<div class="upd-changelog">' + changelogHtml + '</div>' : '') +
-      '</div>';
   }
+
+  var statusHtml = '';
+  if (panelState.updateAvailable) statusHtml = '<div class="upd-status upd-status-avail">A newer version of NexusPanel is available</div>';
+  else statusHtml = '<div class="upd-status upd-status-ok">NexusPanel is up to date</div>';
+
+  el.innerHTML =
+    '<div class="panel-update-card">' +
+    '<div class="panel-update-header">' +
+    '<span class="panel-update-icon">🔄</span>' +
+    '<div class="panel-update-info"><div class="panel-update-title">NexusPanel</div><div class="panel-update-version">' + versionInfo + '</div></div>' +
+    '<div class="panel-update-actions">' +
+    '<button class="db-btn" onclick="checkPanelUpdate(true)" title="Check for updates">↻ Check</button>' +
+    '<button class="db-btn db-btn-primary" id="panelApplyBtn" onclick="applyPanelUpdate()" ' + (!panelState.updateAvailable ? 'disabled' : '') + '>' +
+    (panelState.updateAvailable ? 'Apply Update' : 'Up to Date') +
+    '</button>' +
+    '</div>' +
+    '</div>' +
+    statusHtml +
+    (changelogHtml ? '<div class="upd-changelog">' + changelogHtml + '</div>' : '') +
+    '</div>';
 }
 
 async function applyPanelUpdate() {
