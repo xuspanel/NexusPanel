@@ -2,12 +2,35 @@ const { execSync } = require('child_process');
 const https = require('https');
 const fs = require('fs');
 const path = require('path');
+const os = require('os');
 
-function check() {
+function detectPackageManager() {
   try {
-    const raw = execSync('dnf check-update 2>/dev/null', { encoding: 'utf8', timeout: 60000 });
-    const lines = raw.trim().split('\n');
-    const updates = [];
+    const osRelease = fs.readFileSync('/etc/os-release', 'utf8');
+    const id = (osRelease.match(/^ID=(.+)$/m) || [])[1]?.toLowerCase().replace(/["']/g, '') || '';
+    const idLike = (osRelease.match(/^ID_LIKE=(.+)$/m) || [])[1]?.toLowerCase().replace(/["']/g, '') || '';
+
+    if (id === 'ubuntu' || id === 'debian' || idLike.includes('debian')) {
+      return {
+        check: 'apt list --upgradable 2>/dev/null',
+        updateAll: 'DEBIAN_FRONTEND=noninteractive apt-get upgrade -y 2>&1',
+        updateSingle: (pkg) => `DEBIAN_FRONTEND=noninteractive apt-get install --only-upgrade -y ${pkg} 2>&1`,
+        format: 'apt'
+      };
+    }
+  } catch {}
+  return {
+    check: 'dnf check-update 2>/dev/null',
+    updateAll: 'dnf update -y 2>&1',
+    updateSingle: (pkg) => `dnf update -y ${pkg} 2>&1`,
+    format: 'dnf'
+  };
+}
+
+function parseUpdates(output, format) {
+  const lines = output.trim().split('\n');
+  const updates = [];
+  if (format === 'dnf') {
     let inList = false;
     for (const line of lines) {
       if (line === '' || line.includes('Last metadata')) continue;
@@ -17,18 +40,28 @@ function check() {
         updates.push({ name: parts[0], version: parts[1], repo: parts[2] });
       }
     }
+  } else {
+    for (const line of lines) {
+      if (!line.includes('upgradable') || line.startsWith('Listing')) continue;
+      const parts = line.split(/\s+/);
+      if (parts.length >= 2) {
+        const nameVer = parts[0].split('/');
+        updates.push({ name: nameVer[0], version: parts[1], repo: nameVer[1] || 'apt' });
+      }
+    }
+  }
+  return updates;
+}
+
+function check() {
+  const pm = detectPackageManager();
+  try {
+    const raw = execSync(pm.check, { encoding: 'utf8', timeout: 60000 });
+    const updates = parseUpdates(raw, pm.format);
     return { count: updates.length, updates };
   } catch (e) {
-    if (e.status === 100) {
-      const lines = (e.stdout || '').trim().split('\n');
-      const updates = [];
-      let inList = false;
-      for (const line of lines) {
-        if (line === '' || line.includes('Last metadata')) continue;
-        if (!inList) { inList = true; continue; }
-        const parts = line.split(/\s+/);
-        if (parts.length >= 3) updates.push({ name: parts[0], version: parts[1], repo: parts[2] });
-      }
+    if (pm.format === 'dnf' && e.status === 100) {
+      const updates = parseUpdates(e.stdout || '', pm.format);
       return { count: updates.length, updates };
     }
     return { count: 0, updates: [], error: e.message };
@@ -36,8 +69,9 @@ function check() {
 }
 
 function apply() {
+  const pm = detectPackageManager();
   try {
-    const raw = execSync('dnf update -y 2>&1', { encoding: 'utf8', timeout: 300000 });
+    const raw = execSync(pm.updateAll, { encoding: 'utf8', timeout: 300000 });
     return { ok: true, output: raw.substring(raw.length - 500) };
   } catch (e) {
     return { error: e.stderr || e.message };
@@ -48,8 +82,9 @@ function applySingle(name) {
   if (!name || typeof name !== 'string') return { error: 'Package name required' };
   const clean = name.replace(/[^a-zA-Z0-9._+\-]/g, '');
   if (!clean) return { error: 'Invalid package name' };
+  const pm = detectPackageManager();
   try {
-    const raw = execSync('dnf update -y ' + clean + ' 2>&1', { encoding: 'utf8', timeout: 300000 });
+    const raw = execSync(pm.updateSingle(clean), { encoding: 'utf8', timeout: 300000 });
     return { ok: true, output: raw.substring(raw.length - 500) };
   } catch (e) {
     return { error: e.stderr || e.message };
@@ -97,7 +132,7 @@ async function checkPanelVersion(force) {
 
 function fetchRemoteVersion() {
   return new Promise((resolve, reject) => {
-    https.get('https://raw.githubusercontent.com/xuspanel/NexusPanel/master/nxApp/VERSION', (res) => {
+    https.get('https://raw.githubusercontent.com/xuspanel/NexusPanel/main/VERSION', (res) => {
       let data = '';
       res.on('data', chunk => data += chunk);
       res.on('end', () => resolve(data.trim()));

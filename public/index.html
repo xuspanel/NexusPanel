@@ -1245,7 +1245,7 @@
           <div class="scanner-no-clam-icon">⚠</div>
           <div class="scanner-no-clam-title">ClamAV Not Installed</div>
           <div class="scanner-no-clam-text">Install ClamAV to enable virus scanning:</div>
-          <pre class="scanner-no-clam-code">dnf install -y clamav clamav-update && freshclam</pre>
+          <pre class="scanner-no-clam-code" id="clamInstallCmd">apt install -y clamav clamav-daemon && freshclam</pre>
         </div>
 
         <div id="scannerReady">
@@ -1425,7 +1425,7 @@
     </main>
     <!-- System Updates View -->
     <main class="dashboard-content" id="viewUpdates" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔄</span><div class="db-header-info"><div class="db-header-title">System Updates</div><div class="db-header-subtitle">dnf package manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="checkUpdates()" title="Refresh">↻</button></div></div>
+        <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔄</span><div class="db-header-info"><div class="db-header-title">System Updates</div><div class="db-header-subtitle">Package manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="checkUpdates()" title="Refresh">↻</button></div></div>
       <div id="panelUpdateInfo" style="margin-bottom:16px"></div>
       <div id="updList" class="upd-list"></div>
     </main>

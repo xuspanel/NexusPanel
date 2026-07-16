@@ -26,6 +26,7 @@ async function loadStatus() {
       el.innerHTML = '<span class="scanner-badge danger">ClamAV Not Installed</span>';
       document.getElementById('scannerNoClam').style.display = 'flex';
       document.getElementById('scannerReady').style.display = 'none';
+      setClamInstallCmd();
     } else {
       el.innerHTML = '<span class="scanner-badge ok">ClamAV ' + escHtml(status.version) + '</span> <span class="scanner-defs">Defs: ' + escHtml(status.defsDate || 'unknown') + '</span>';
       document.getElementById('scannerNoClam').style.display = 'none';
@@ -46,6 +47,17 @@ function escHtml(s) {
   return String(s).replace(/[&<>"']/g, function (c) {
     return '&#' + c.charCodeAt(0) + ';';
   });
+}
+
+async function setClamInstallCmd() {
+  try {
+    const sys = await API.getStats();
+    const os = (sys.os || '').toLowerCase();
+    const cmd = (os.includes('ubuntu') || os.includes('debian'))
+      ? 'apt-get install -y clamav clamav-daemon && freshclam'
+      : 'dnf install -y clamav clamav-update && freshclam';
+    document.getElementById('clamInstallCmd').textContent = cmd;
+  } catch {}
 }
 
 function selectTarget(target, el) {

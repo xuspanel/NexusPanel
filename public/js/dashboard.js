@@ -145,7 +145,7 @@ function renderHomeCards() {
       { view: 'processes', icon: '📊', title: 'Process Manager', desc: 'Live process monitoring & kill', gradient: 'linear-gradient(135deg, #f59e0b, #d97706)' },
       { view: 'logs', icon: '📝', title: 'Log Viewer', desc: 'System log browser & search', gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)' },
       { view: 'cron', icon: '⏰', title: 'Cron Jobs', desc: 'Crontab editor & scheduler', gradient: 'linear-gradient(135deg, #ec4899, #be185d)' },
-      { view: 'updates', icon: '🔄', title: 'System Updates', desc: 'dnf package check & apply', gradient: 'linear-gradient(135deg, #f97316, #ea580c)' },
+      { view: 'updates', icon: '🔄', title: 'System Updates', desc: 'Package check & apply', gradient: 'linear-gradient(135deg, #f97316, #ea580c)' },
     ]},
     { name: 'Web', icon: '🌐', cards: [
       { view: 'domains', icon: '🌐', title: 'Domains', desc: 'nginx virtual hosts & SSL', gradient: 'linear-gradient(135deg, #8b5cf6, #06b6d4)' },

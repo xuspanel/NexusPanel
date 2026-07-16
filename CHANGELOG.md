@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.2.1] - 2026-07-16
+### Changed
+- `src/services/updates.js`: auto-detect package manager via `/etc/os-release` (apt for Debian/Ubuntu, dnf for RHEL/Fedora) instead of hardcoded dnf
+
+### Fixed
+- `src/services/updates.js`: GitHub version-check URL now uses `main` branch instead of stale `master/nxApp/` prefix
+- Frontend "System Updates" card no longer references "dnf" specifically (now shows "Package check & apply" / "Package manager")
+- ClamAV install command in Virus Scanner dynamically shows `apt-get` or `dnf` based on detected OS
+
 ## [1.2.0] - 2026-07-15
 ### Added
 - OS abstraction layer: `detect_os()`, `pkg_*()`, `service_manage()`, `fw_*()`, `detect_mac()` in `install-common.sh`
