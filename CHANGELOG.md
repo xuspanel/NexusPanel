@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.2.2] - 2026-07-16
+### Changed
+- URL routing switched from hash frags (`/#dashboard`) to clean paths (`/dashboard`) using `history.pushState`
+- Server catch-all route serves `index.html` for all unrecognized GET paths (supports deep-linking page refresh)
+- `window.scrollTo({ top: 0 })` on every view switch to prevent content rendering below viewport
+- Initial view detection reads `location.pathname` first, falls back to `location.hash` for legacy bookmarks
+
+### Fixed
+- Most screen content no longer appears at bottom of viewport after switching views
+- Browser URL bar now shows clean paths instead of hash frags
+
 ## [1.2.1] - 2026-07-16
 ### Changed
 - `src/services/updates.js`: auto-detect package manager via `/etc/os-release` (apt for Debian/Ubuntu, dnf for RHEL/Fedora) instead of hardcoded dnf

@@ -77,6 +77,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('viewSettings').style.display = view === 'settings' ? 'block' : 'none';
     updateAriaCurrent(view);
     closeSideNav();
+    window.scrollTo({ top: 0, behavior: 'instant' });
 
     if (view === 'dashboard') {
       if (window.initDashboard) window.initDashboard();
@@ -108,7 +109,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (view === 'updates' && window.initUpdates) window.initUpdates();
     if (view === 'settings' && window.initSettings) window.initSettings();
 
-    history.pushState({ view: view }, '', '#' + view);
+    history.pushState({ view: view }, '', '/' + view);
   }
 
   navItems.forEach(item => {
@@ -146,7 +147,7 @@ document.addEventListener('DOMContentLoaded', async () => {
       if (window.initNotifications) window.initNotifications();
       setNavUser(user.username, user.role);
       showPage('dashboard');
-      const initialView = location.hash ? location.hash.slice(1) : 'dashboard';
+      const initialView = location.pathname.replace(/^\//, '') || location.hash.replace(/^#/, '') || 'dashboard';
       switchView(initialView);
       return;
     }
