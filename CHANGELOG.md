@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.2.6] - 2026-07-16
+### Added
+- `POST /apply/:name` route handler for single-package updates (was returning HTML 404, breaking the "Update" button on each package row)
+- `GET /panel-check` route handler for checking NexusPanel version updates
+- `POST /panel-apply` route handler for applying NexusPanel self-updates
+- API 404 catch-all middleware returns JSON `{"error":"Endpoint not found"}` instead of HTML for any unmatched `/api/*` request
+
+### Fixed
+- System Updates screen: clicking "Update" on a single package no longer fails with "Unexpected token '<', '<!DOCTYPE'... is not valid JSON" — backend now returns a proper JSON response instead of Express's default HTML 404 page
+
 ## [1.2.5] - 2026-07-16
 ### Fixed
 - Three orphaned `</div>` tags in `index.html` (lines 1383–1385) prematurely closed `#dashboardPage`, ejecting 10 views (Audit, Services, Processes, Logs, Cron, Firewall, SSL, PHP-FPM, Updates, Settings) outside the `.dashboard` container — causing them to render a full viewport-height below the top of the page

@@ -5,4 +5,16 @@ const router = express.Router();
 router.use(authMiddleware);
 router.get('/', (req, res) => { res.json(updates.check()); });
 router.post('/apply', (req, res) => { res.json(updates.apply()); });
+router.post('/apply/:name', (req, res) => {
+  try { res.json(updates.applySingle(req.params.name)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.get('/panel-check', (req, res) => {
+  try { res.json(updates.checkPanelVersion(req.query.force === 'true')); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+router.post('/panel-apply', (req, res) => {
+  try { res.json(updates.applyPanelUpdate()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
 module.exports = router;
