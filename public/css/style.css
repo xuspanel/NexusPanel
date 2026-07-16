@@ -5846,7 +5846,7 @@ body::before {
   display: flex;
   flex-direction: column;
   position: relative;
-  min-height: 0;
+  min-height: 240px;
   height: calc(100vh - 120px);
   gap: 8px;
 }
@@ -5864,6 +5864,10 @@ body::before {
 .term-container .xterm {
   height: 100%;
   padding: 4px;
+}
+
+.term-container .xterm-text {
+  font-size: inherit;
 }
 
 .term-container .xterm-viewport {
@@ -6084,22 +6088,85 @@ body::before {
   gap: 6px;
 }
 
+/* ── Tablet (≤1024px) ── */
+@media (max-width: 1024px) {
+  .term-wrapper {
+    height: calc(100vh - 150px);
+  }
+  .term-preset-panel {
+    width: 260px;
+  }
+}
+
+/* ── Mobile (≤768px) ── */
 @media (max-width: 768px) {
   .term-wrapper {
-    height: calc(100vh - 160px);
+    height: calc(100dvh - 180px);
+    min-height: 200px;
   }
   .term-nano-grid {
     gap: 4px;
   }
   .term-nano-btn {
-    font-size: 11px;
-    padding: 6px 8px;
+    font-size: 12px;
+    padding: 7px 10px;
+    min-height: 34px;
   }
   .term-preset-panel {
-    width: calc(100% - 20px);
-    right: 10px;
-    top: 10px;
-    max-height: calc(100% - 20px);
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    top: auto;
+    width: auto;
+    max-height: 55vh;
+    border-radius: 14px 14px 0 0;
+    border-bottom: none;
+    padding: 16px;
+    z-index: 100;
+  }
+  .term-preset-panel.open {
+    animation: termSlideUp 0.2s ease;
+  }
+  @keyframes termSlideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .term-preset-list {
+    max-height: 30vh;
+  }
+}
+
+/* ── Small Mobile (≤480px) ── */
+@media (max-width: 480px) {
+  .term-wrapper {
+    height: calc(100dvh - 200px);
+    min-height: 160px;
+  }
+  .term-container {
+    border-radius: 8px;
+  }
+  .term-container .xterm {
+    padding: 2px;
+    font-size: 15px !important;
+  }
+  .term-nano-bar {
+    padding: 6px 8px;
+    border-radius: 8px;
+  }
+  .term-nano-btn {
+    font-size: 11px;
+    padding: 6px 8px;
+    min-height: 32px;
+  }
+  .term-preset-panel {
+    padding: 12px;
+  }
+  .term-preset-btn,
+  .term-preset-del {
+    padding: 8px 10px;
+    min-height: 36px;
+    font-size: 13px;
   }
 }
 
