@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.2.8] - 2026-07-16
+### Fixed
+- Global search `/` keyboard shortcut no longer steals focus from File Manager path input and other form fields — now checks `activeElement.tagName` before focusing the search bar
+- Keyboard arrow navigation and active highlighting in search results now work correctly (fixed `searchSelIdx` → `gsSelIdx` variable name typo)
+
+### Changed
+- Global search results are now grouped by module with visual section headers (Users, Services, Docker, Domains, etc.) for easier scanning
+- Added animated spinner and "Searching…" indicator between debounce and API response
+- Enhanced empty state with icon and "Try a different search term" hint
+- Removed file/folder results from global search (file search is only available inside the File Manager's own search)
+- Removed redundant `.gsr-module` badge from individual result items (group headers provide module context)
+
 ## [1.2.7] - 2026-07-16
 ### Fixed
 - NexusPanel update check no longer gets stuck on "Checking for panel updates..." — `GET /panel-check` route handler was missing `async`/`await`, causing `checkPanelVersion`'s Promise to serialize as `{}`, leaving `panelState.changelog` as an empty array; `renderPanelUpdate()` only set `el.innerHTML` inside `if (changelog.length)`, so the loading state was never replaced

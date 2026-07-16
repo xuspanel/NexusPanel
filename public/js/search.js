@@ -2,6 +2,14 @@
 var gsTimer = null;
 var gsResults = [];
 var gsSelIdx = -1;
+var gsSearching = false;
+
+var MODULE_ORDER = ['Users', 'Services', 'Docker', 'Domains', 'Cron Jobs', 'Firewall', 'Databases'];
+
+var RESULT_ICONS = {
+  user: '👤', service: '⚙️', container: '🐳',
+  domain: '🌐', cron: '⏰', firewall: '🛡', database: '🗄️'
+};
 
 document.addEventListener('DOMContentLoaded', function () {
   var input = document.getElementById('globalSearchInput');
@@ -9,13 +17,16 @@ document.addEventListener('DOMContentLoaded', function () {
   input.addEventListener('input', onSearchInput);
   input.addEventListener('keydown', onSearchKey);
   input.addEventListener('focus', function () {
-    if (gsResults.length > 0) showResults();
+    if (gsResults.length > 0) renderResults();
   });
+
   document.addEventListener('click', function (e) {
     if (!e.target.closest('#globalSearchWrap')) hideResults();
   });
+
   document.addEventListener('keydown', function (e) {
-    if ((e.key === '/' || (e.ctrlKey && e.key === 'k')) && document.activeElement !== input) {
+    var tag = document.activeElement && document.activeElement.tagName;
+    if ((e.key === '/' || (e.ctrlKey && e.key === 'k')) && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
       e.preventDefault();
       input.focus();
       input.select();
@@ -31,19 +42,30 @@ function onSearchInput() {
   clearTimeout(gsTimer);
   gsSelIdx = -1;
   var q = this.value.trim();
-  if (q.length < 2) { if (!q) hideResults(); showLoadingHint(); return; }
+  if (q.length < 2) { if (!q) hideResults(); showHint(); return; }
+  showSearching();
   gsTimer = setTimeout(function () { doSearch(q); }, 250);
 }
 
-function showLoadingHint() {
+function showHint() {
   var el = document.getElementById('globalSearchResults');
   if (!el) return;
   el.innerHTML = '<div class="gsr-loading">Type at least 2 characters to search…</div>';
+  el.style.display = 'block';
+}
+
+function showSearching() {
+  gsSearching = true;
+  var el = document.getElementById('globalSearchResults');
+  if (!el) return;
+  el.innerHTML = '<div class="gsr-searching"><span class="gsr-spinner"></span> Searching…</div>';
+  el.style.display = 'block';
 }
 
 async function doSearch(q) {
   try {
     var data = await API.search(q);
+    gsSearching = false;
     gsResults = data.results || [];
     if (gsResults.length === 0) {
       showEmpty(q);
@@ -51,6 +73,7 @@ async function doSearch(q) {
       renderResults();
     }
   } catch (e) {
+    gsSearching = false;
     gsResults = [];
     hideResults();
   }
@@ -59,43 +82,61 @@ async function doSearch(q) {
 function renderResults() {
   var el = document.getElementById('globalSearchResults');
   if (!el) return;
-  var icons = {
-    file: '📄', folder: '📁', user: '👤', service: '⚙️', container: '🐳',
-    domain: '🌐', cron: '⏰', firewall: '🛡', database: '🗄️'
-  };
-  el.innerHTML = gsResults.map(function (r, i) {
-    var icon = icons[r.type] || '🔍';
-    return '<div class="gsr-item' + (i === searchSelIdx ? ' active' : '') + '" data-idx="' + i + '" onmousedown="searchNavigate(' + i + ')">' +
+
+  // Group results by module in canonical order
+  var groups = {};
+  gsResults.forEach(function (r) {
+    if (!groups[r.module]) groups[r.module] = [];
+    groups[r.module].push(r);
+  });
+
+  var reordered = [];
+  MODULE_ORDER.forEach(function (mod) {
+    if (groups[mod]) {
+      reordered = reordered.concat(groups[mod]);
+      delete groups[mod];
+    }
+  });
+  for (var mod in groups) {
+    reordered = reordered.concat(groups[mod]);
+  }
+  gsResults = reordered;
+
+  // Render with group headers
+  var html = '';
+  var currentModule = '';
+  gsResults.forEach(function (r, i) {
+    if (r.module !== currentModule) {
+      if (currentModule) html += '</div>';
+      html += '<div class="gsr-group"><div class="gsr-group-header">' + esc(r.module) + '</div>';
+      currentModule = r.module;
+    }
+    var icon = RESULT_ICONS[r.type] || '🔍';
+    html += '<div class="gsr-item' + (i === gsSelIdx ? ' active' : '') + '" data-idx="' + i + '" onmousedown="searchNavigate(' + i + ')">' +
       '<span class="gsr-icon">' + icon + '</span>' +
       '<div class="gsr-body">' +
       '<span class="gsr-title">' + esc(r.title) + '</span>' +
       '<span class="gsr-desc">' + esc(r.desc || '') + '</span>' +
       '</div>' +
-      '<span class="gsr-module">' + esc(r.module) + '</span>' +
       '</div>';
-  }).join('');
+  });
+  if (currentModule) html += '</div>';
+
+  el.innerHTML = html;
   el.style.display = 'block';
 }
 
 function showEmpty(q) {
   var el = document.getElementById('globalSearchResults');
   if (!el) return;
-  el.innerHTML = '<div class="gsr-empty">No results for "' + esc(q) + '"</div>';
+  el.innerHTML = '<div class="gsr-empty"><div class="gsr-empty-icon">🔍</div>No results for <strong>' + esc(q) + '</strong><div class="gsr-empty-hint">Try a different search term</div></div>';
   el.style.display = 'block';
-}
-
-function showResults() {
-  if (gsResults.length > 0) renderResults();
-  else {
-    var el = document.getElementById('globalSearchResults');
-    if (el) el.style.display = 'block';
-  }
 }
 
 function hideResults() {
   var el = document.getElementById('globalSearchResults');
   if (el) el.style.display = 'none';
-  searchSelIdx = -1;
+  gsSelIdx = -1;
 }
 
 function onSearchKey(e) {
@@ -107,13 +148,13 @@ function onSearchKey(e) {
 
 function moveSel(d) {
   if (!gsResults.length) return;
-  searchSelIdx = Math.max(0, Math.min(gsResults.length - 1, searchSelIdx + d));
+  gsSelIdx = Math.max(0, Math.min(gsResults.length - 1, gsSelIdx + d));
   renderResults();
 }
 
 function navigateSelected() {
-  if (searchSelIdx >= 0 && searchSelIdx < gsResults.length) {
-    searchNavigate(searchSelIdx);
+  if (gsSelIdx >= 0 && gsSelIdx < gsResults.length) {
+    searchNavigate(gsSelIdx);
   }
 }
 
@@ -124,9 +165,6 @@ function searchNavigate(idx) {
   document.getElementById('globalSearchInput').value = '';
   gsResults = [];
   gsSelIdx = -1;
-  if (r.path && r.type === 'file') {
-    sessionStorage.setItem('fm_navigate', r.path);
-  }
   navigateTo(r.view);
 }
 

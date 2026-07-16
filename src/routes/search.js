@@ -8,26 +8,6 @@ const MAX_RESULTS = 40;
 
 function top(items) { return items.slice(0, MAX_RESULTS); }
 
-function searchFiles(q) {
-  try {
-    const dirs = ['/root', '/etc/nginx/conf.d', '/var/www', '/home', '/etc', '/tmp'];
-    const results = [];
-    for (const dir of dirs) {
-      try {
-        const out = execSync('find ' + dir + ' -maxdepth 4 -name "*' + q.replace(/[^a-zA-Z0-9_.\-\/]/g, '') + '*" -not -path "*/node_modules/*" -not -path "*/.git/*" -not -path "*/Maildir/*" 2>/dev/null | head -10', { encoding: 'utf8', timeout: 3000 });
-        out.trim().split('\n').filter(Boolean).forEach(line => {
-          try {
-            const stat = fs.statSync(line);
-            results.push({ type: stat.isDirectory() ? 'folder' : 'file', module: 'Files', title: line.split('/').pop(), desc: line, path: line, view: 'files' });
-          } catch {}
-        });
-      } catch {}
-      if (results.length >= 10) break;
-    }
-    return results.slice(0, 10);
-  } catch { return []; }
-}
-
 function searchAccounts(q) {
   try {
     const out = execSync("getent passwd 2>/dev/null", { encoding: 'utf8', timeout: 2000 });
@@ -128,7 +108,6 @@ router.get('/', (req, res) => {
   if (!terms.length) return res.json({ query: q, results: [] });
 
   const all = [
-    ...searchFiles(terms[0]),
     ...searchAccounts(terms[0]),
     ...searchServices(terms[0]),
     ...searchDocker(terms[0]),
