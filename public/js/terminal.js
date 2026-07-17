@@ -3,6 +3,11 @@ let ws = null;
 let termInit = false;
 let termReady = false;
 let nanoMode = false;
+let currentVersion = 'classic';
+let proFontSize = 14;
+
+const VERSION_KEY = 'nexus-terminal-version';
+const PRO_FONT_KEY = 'nexus-terminal-pro-font';
 
 const NANO_ACTIONS = [
   { label: 'Save', keys: '^O', ctrl: 'o', desc: 'WriteOut' },
@@ -25,56 +30,222 @@ function escHtml(str) {
   return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
+function getSelectedVersion() {
+  return localStorage.getItem(VERSION_KEY);
+}
+
+function setSelectedVersion(version, persist) {
+  currentVersion = version;
+  if (persist !== false) {
+    localStorage.setItem(VERSION_KEY, version);
+  }
+  updateVersionToggle();
+}
+
+function updateVersionToggle() {
+  document.querySelectorAll('.term-version-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.version === currentVersion);
+  });
+}
+
+function showTermChooser() {
+  const modal = document.getElementById('termChooserModal');
+  if (!modal) return;
+  modal.style.display = 'flex';
+  const remember = document.getElementById('termChooserRemember');
+  if (remember) remember.checked = true;
+}
+
+function hideTermChooser() {
+  const modal = document.getElementById('termChooserModal');
+  if (modal) modal.style.display = 'none';
+}
+
+function chooseTerminalVersion(version) {
+  const remember = document.getElementById('termChooserRemember');
+  setSelectedVersion(version, remember ? remember.checked : true);
+  hideTermChooser();
+  applyTerminalVersion();
+}
+
+function initVersionToggle() {
+  const toggle = document.getElementById('termVersionToggle');
+  if (!toggle) return;
+  toggle.querySelectorAll('.term-version-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const version = btn.dataset.version;
+      if (version === currentVersion) return;
+      setSelectedVersion(version);
+      applyTerminalVersion();
+    });
+  });
+
+  document.querySelectorAll('.term-chooser-card').forEach(card => {
+    card.addEventListener('click', () => {
+      chooseTerminalVersion(card.dataset.version);
+    });
+  });
+}
+
 async function initTerminal() {
   if (!termInit) {
     termInit = true;
-    document.getElementById('termPresetToggle').addEventListener('click', () => {
+    proFontSize = parseInt(localStorage.getItem(PRO_FONT_KEY), 10) || 14;
+    initVersionToggle();
+    initClassicEvents();
+    initProEvents();
+  }
+
+  const saved = getSelectedVersion();
+  if (!saved) {
+    showTermChooser();
+    return;
+  }
+  setSelectedVersion(saved);
+  applyTerminalVersion();
+}
+
+function applyTerminalVersion() {
+  if (currentVersion === 'pro') {
+    showProShell();
+    connectTerminal();
+  } else {
+    showClassicShell();
+    connectTerminal();
+  }
+}
+
+function showClassicShell() {
+  const classic = document.getElementById('termContent');
+  const pro = document.getElementById('termProContent');
+  if (classic) classic.style.display = 'flex';
+  if (pro) pro.style.display = 'none';
+}
+
+function showProShell() {
+  const classic = document.getElementById('termContent');
+  const pro = document.getElementById('termProContent');
+  if (classic) classic.style.display = 'none';
+  if (pro) pro.style.display = 'flex';
+}
+
+function initClassicEvents() {
+  const presetToggle = document.getElementById('termPresetToggle');
+  if (presetToggle) {
+    presetToggle.addEventListener('click', () => {
       document.getElementById('termPresetPanel').classList.toggle('open');
     });
-    document.getElementById('termNanoToggle').addEventListener('click', () => {
+  }
+  const nanoToggle = document.getElementById('termNanoToggle');
+  if (nanoToggle) {
+    nanoToggle.addEventListener('click', () => {
       nanoMode = !nanoMode;
       document.getElementById('termNanoBar').classList.toggle('open', nanoMode);
       if (nanoMode) document.getElementById('termPresetPanel').classList.remove('open');
     });
-    document.getElementById('termReconnectBtn').addEventListener('click', connectTerminal);
-    document.getElementById('termReconnectBtn2').addEventListener('click', connectTerminal);
-    document.getElementById('termClearBtn').addEventListener('click', () => { if (term) term.clear(); });
-    document.getElementById('termAddPresetBtn').addEventListener('click', showAddPreset);
-    document.getElementById('termPresetCancel').addEventListener('click', hidePresetForm);
-    document.getElementById('termPresetSave').addEventListener('click', savePreset);
-    document.getElementById('termPresetSearch').addEventListener('input', filterPresets);
-    document.getElementById('termNanoClose').addEventListener('click', () => {
+  }
+  const reconnect = document.getElementById('termReconnectBtn');
+  if (reconnect) reconnect.addEventListener('click', connectTerminal);
+  const reconnect2 = document.getElementById('termReconnectBtn2');
+  if (reconnect2) reconnect2.addEventListener('click', connectTerminal);
+  const clearBtn = document.getElementById('termClearBtn');
+  if (clearBtn) clearBtn.addEventListener('click', () => { if (term) term.clear(); });
+  const addPreset = document.getElementById('termAddPresetBtn');
+  if (addPreset) addPreset.addEventListener('click', showAddPreset);
+  const cancelPreset = document.getElementById('termPresetCancel');
+  if (cancelPreset) cancelPreset.addEventListener('click', hidePresetForm);
+  const savePresetBtn = document.getElementById('termPresetSave');
+  if (savePresetBtn) savePresetBtn.addEventListener('click', savePreset);
+  const presetSearch = document.getElementById('termPresetSearch');
+  if (presetSearch) presetSearch.addEventListener('input', () => filterPresets(''));
+  const nanoClose = document.getElementById('termNanoClose');
+  if (nanoClose) {
+    nanoClose.addEventListener('click', () => {
       nanoMode = false;
       document.getElementById('termNanoBar').classList.remove('open');
     });
+  }
 
-    document.querySelectorAll('.term-nano-btn').forEach(btn => {
-      btn.addEventListener('click', () => {
-        if (!termReady) return;
-        const ctrl = btn.dataset.ctrl;
-        if (!ctrl) return;
-        const codes = { o: 15, x: 24, k: 11, u: 21, w: 23, c: 3, _: 31, t: 20, j: 10, r: 18, y: 25, v: 22, g: 7 };
-        const code = codes[ctrl];
-        if (code !== undefined && ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'input', data: btoa(String.fromCharCode(code)) }));
-          term.focus();
-        }
-      });
+  document.querySelectorAll('.term-nano-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (!termReady) return;
+      const ctrl = btn.dataset.ctrl;
+      if (!ctrl) return;
+      const codes = { o: 15, x: 24, k: 11, u: 21, w: 23, c: 3, _: 31, t: 20, j: 10, r: 18, y: 25, v: 22, g: 7 };
+      const code = codes[ctrl];
+      if (code !== undefined && ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'input', data: btoa(String.fromCharCode(code)) }));
+        term.focus();
+      }
+    });
+  });
+}
+
+function initProEvents() {
+  const clearBtn = document.getElementById('termProClear');
+  if (clearBtn) clearBtn.addEventListener('click', () => { if (term) term.clear(); });
+  const reconnect = document.getElementById('termProReconnect');
+  if (reconnect) reconnect.addEventListener('click', connectTerminal);
+  const presetToggle = document.getElementById('termProPresets');
+  if (presetToggle) {
+    presetToggle.addEventListener('click', () => {
+      document.getElementById('termProPresetPanel').classList.toggle('open');
     });
   }
-  await loadPresets();
-  connectTerminal();
+  const addPreset = document.getElementById('termProAddPresetBtn');
+  if (addPreset) addPreset.addEventListener('click', showAddPreset);
+  const cancelPreset = document.getElementById('termProPresetCancel');
+  if (cancelPreset) cancelPreset.addEventListener('click', hidePresetForm);
+  const savePresetBtn = document.getElementById('termProPresetSave');
+  if (savePresetBtn) savePresetBtn.addEventListener('click', savePreset);
+  const presetSearch = document.getElementById('termProPresetSearch');
+  if (presetSearch) presetSearch.addEventListener('input', () => filterPresets('pro'));
+
+  const fontInc = document.getElementById('termProFontInc');
+  if (fontInc) {
+    fontInc.addEventListener('click', () => adjustProFontSize(1));
+  }
+  const fontDec = document.getElementById('termProFontDec');
+  if (fontDec) {
+    fontDec.addEventListener('click', () => adjustProFontSize(-1));
+  }
+
+  const palette = document.getElementById('termProPalette');
+  if (palette) palette.addEventListener('click', () => alert('Command palette coming in Phase 2'));
+  const search = document.getElementById('termProSearch');
+  if (search) search.addEventListener('click', () => alert('In-terminal search coming in Phase 2'));
+  const theme = document.getElementById('termProTheme');
+  if (theme) theme.addEventListener('click', () => alert('Theme switcher coming in Phase 2'));
+
+  window.addEventListener('resize', () => {
+    if (currentVersion === 'pro' && term) {
+      try { term.fit(); } catch (_) {}
+    }
+  });
+}
+
+function adjustProFontSize(delta) {
+  proFontSize = Math.max(10, Math.min(24, proFontSize + delta));
+  localStorage.setItem(PRO_FONT_KEY, proFontSize);
+  if (term) {
+    term.options.fontSize = proFontSize;
+    try { term.fit(); } catch (_) {}
+  }
+  updateProStatusDims();
 }
 
 async function loadPresets() {
   try {
     const presets = await API.terminal.presets();
-    renderTermPresets(presets);
+    renderTermPresets(presets, '');
+    renderTermPresets(presets, 'pro');
   } catch (_) {}
 }
 
-function renderTermPresets(presets) {
-  const list = document.getElementById('termPresetList');
+function renderTermPresets(presets, suffix) {
+  const listId = suffix === 'pro' ? 'termProPresetList' : 'termPresetList';
+  const list = document.getElementById(listId);
+  if (!list) return;
   list.innerHTML = presets.map(p => `
     <div class="term-preset-item" data-id="${escHtml(p.id)}">
       <button class="term-preset-btn" data-cmd="${escHtml(p.cmd)}">${escHtml(p.label)}</button>
@@ -102,28 +273,40 @@ function renderTermPresets(presets) {
   });
 }
 
-function filterPresets() {
-  const q = document.getElementById('termPresetSearch').value.toLowerCase();
-  document.querySelectorAll('.term-preset-item').forEach(el => {
+function filterPresets(suffix) {
+  const searchId = suffix === 'pro' ? 'termProPresetSearch' : 'termPresetSearch';
+  const input = document.getElementById(searchId);
+  const q = input ? input.value.toLowerCase() : '';
+  const listId = suffix === 'pro' ? 'termProPresetList' : 'termPresetList';
+  document.querySelectorAll('#' + listId + ' .term-preset-item').forEach(el => {
     const btn = el.querySelector('.term-preset-btn');
     el.style.display = btn && btn.textContent.toLowerCase().includes(q) ? '' : 'none';
   });
 }
 
 function showAddPreset() {
-  document.getElementById('termPresetForm').classList.add('open');
-  document.getElementById('termPresetLabel').value = '';
-  document.getElementById('termPresetCmd').value = '';
-  document.getElementById('termPresetLabel').focus();
+  const suffix = currentVersion === 'pro' ? 'pro' : '';
+  const formId = suffix ? 'termProPresetForm' : 'termPresetForm';
+  const labelId = suffix ? 'termProPresetLabel' : 'termPresetLabel';
+  const cmdId = suffix ? 'termProPresetCmd' : 'termPresetCmd';
+  document.getElementById(formId).classList.add('open');
+  document.getElementById(labelId).value = '';
+  document.getElementById(cmdId).value = '';
+  document.getElementById(labelId).focus();
 }
 
 function hidePresetForm() {
-  document.getElementById('termPresetForm').classList.remove('open');
+  const suffix = currentVersion === 'pro' ? 'pro' : '';
+  const formId = suffix ? 'termProPresetForm' : 'termPresetForm';
+  document.getElementById(formId).classList.remove('open');
 }
 
 async function savePreset() {
-  const label = document.getElementById('termPresetLabel').value.trim();
-  const cmd = document.getElementById('termPresetCmd').value.trim();
+  const suffix = currentVersion === 'pro' ? 'pro' : '';
+  const labelId = suffix ? 'termProPresetLabel' : 'termPresetLabel';
+  const cmdId = suffix ? 'termProPresetCmd' : 'termPresetCmd';
+  const label = document.getElementById(labelId).value.trim();
+  const cmd = document.getElementById(cmdId).value.trim();
   if (!label || !cmd) { alert('Label and command are required.'); return; }
   try {
     await API.terminal.addPreset(label, cmd);
@@ -166,6 +349,7 @@ async function connectTerminal() {
         termReady = true;
         showTermContent();
         term.focus();
+        updateProStatusConn(true);
       } else if (msg.type === 'data') {
         if (term) {
           const decoded = atob(msg.data);
@@ -173,18 +357,22 @@ async function connectTerminal() {
         }
       } else if (msg.type === 'exit') {
         termReady = false;
+        updateProStatusConn(false);
       } else if (msg.type === 'error') {
         showTermError(msg.error);
+        updateProStatusConn(false);
       }
     } catch (_) {}
   };
 
   ws.onerror = () => {
     showTermError('WebSocket error. Check server connection.');
+    updateProStatusConn(false);
   };
 
   ws.onclose = (evt) => {
     termReady = false;
+    updateProStatusConn(false);
     if (evt.code !== 1000 && evt.code !== 4001) {
       showTermError('Connection lost (code ' + evt.code + '). Click Reconnect.');
     } else if (evt.code === 4001) {
@@ -195,11 +383,12 @@ async function connectTerminal() {
 
 function initXterm() {
   if (term) return;
-  const container = document.getElementById('termContainer');
+  const container = document.getElementById(currentVersion === 'pro' ? 'termProContainer' : 'termContainer');
+  if (!container) return;
   term = new Terminal({
     cursorBlink: true,
     cursorStyle: 'block',
-    fontSize: 14,
+    fontSize: currentVersion === 'pro' ? proFontSize : 14,
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace",
     theme: {
       background: '#0c0e17',
@@ -229,6 +418,7 @@ function initXterm() {
   });
 
   term.open(container);
+  try { term.fit(); } catch (_) {}
 
   term.onData((data) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
@@ -240,24 +430,40 @@ function initXterm() {
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'resize', cols, rows }));
     }
+    updateProStatusDims();
   });
+
+  updateProStatusDims();
+}
+
+function updateProStatusConn(connected) {
+  const el = document.getElementById('termProStatusConn');
+  if (!el) return;
+  if (connected) {
+    el.innerHTML = '<span class="term-pro-status-dot term-pro-status-ok"></span>connected';
+  } else {
+    el.innerHTML = '<span class="term-pro-status-dot term-pro-status-err"></span>disconnected';
+  }
+}
+
+function updateProStatusDims() {
+  const el = document.getElementById('termProStatusDims');
+  if (!el || !term) return;
+  el.textContent = term.cols + 'x' + term.rows;
 }
 
 function showTermLoading() {
   document.getElementById('termLoading').style.display = 'flex';
-  document.getElementById('termContent').style.display = 'none';
   document.getElementById('termError').style.display = 'none';
 }
 
 function showTermContent() {
   document.getElementById('termLoading').style.display = 'none';
-  document.getElementById('termContent').style.display = 'flex';
   document.getElementById('termError').style.display = 'none';
 }
 
 function showTermError(msg) {
   document.getElementById('termLoading').style.display = 'none';
-  document.getElementById('termContent').style.display = 'none';
   document.getElementById('termError').style.display = 'flex';
   document.getElementById('termErrorText').textContent = msg || 'Unknown error';
 }

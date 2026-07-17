@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.3.0] - 2026-07-17
+### Added
+- **Terminal Version Selector**: users can now choose between **Classic Terminal** and **PRO Terminal**
+- First-time Terminal chooser modal with **PRO Terminal** pre-selected as the recommended experience
+- Persistent terminal version preference stored in `localStorage` (`nexus-terminal-version`)
+- Settings page option to set the default Terminal version and reset the saved choice
+- **PRO Terminal** foundation: modern glassmorphism shell with tab bar, toolbar, and status bar placeholders
+- PRO Terminal toolbar buttons: Presets, Clear, Reconnect, font-size controls (A-/A+), and placeholders for Command Palette, Search, and Theme switcher
+- PRO Terminal status bar showing connection state and terminal dimensions
+
+### Changed
+- Refactored `public/js/terminal.js` into Classic/PRO-aware architecture while preserving all existing Classic functionality
+- `index.html` Terminal view now includes version toggle, chooser modal, and PRO terminal container
+- Updated cache-busting params to `v=1.3.0` for `style.css`, `terminal.js`, and `settings.js`
+
 ## [1.2.9] - 2026-07-16
 ### Changed
 - Terminal screen fully redesigned for mobile and tablet responsiveness

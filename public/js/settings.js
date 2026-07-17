@@ -58,6 +58,26 @@ function renderSettings() {
           '</div>' +
         '</div>' +
       '</div>' +
+      '<div class="settings-section">' +
+        '<div class="settings-section-title">Terminal</div>' +
+        '<div class="settings-row">' +
+          '<div class="settings-row-info">' +
+            '<div class="settings-row-label">Default Terminal Version</div>' +
+            '<div class="settings-row-desc">Choose which terminal experience opens by default</div>' +
+          '</div>' +
+          '<select id="settingsTerminalVersion" class="settings-select">' +
+            '<option value="classic" ' + (getDefaultTerminalVersion() === 'classic' ? 'selected' : '') + '>Classic Terminal</option>' +
+            '<option value="pro" ' + (getDefaultTerminalVersion() === 'pro' ? 'selected' : '') + '>PRO Terminal</option>' +
+          '</select>' +
+        '</div>' +
+        '<div class="settings-row">' +
+          '<div class="settings-row-info">' +
+            '<div class="settings-row-label">Reset Terminal Choice</div>' +
+            '<div class="settings-row-desc">Clear saved preference so the chooser appears again</div>' +
+          '</div>' +
+          '<button class="db-btn" id="settingsResetTerminal">Reset</button>' +
+        '</div>' +
+      '</div>' +
       '<div class="settings-actions">' +
         '<button class="db-btn db-btn-primary" id="settingsSaveBtn" onclick="saveSettings()">Save Settings</button>' +
         '<span id="settingsSaveMsg" class="settings-save-msg" style="display:none"></span>' +
@@ -74,6 +94,27 @@ function bindSettingsEvents() {
   if (chanSel) chanSel.addEventListener('change', function () {
     _settings.updateChannel = this.value;
   });
+  var termVerSel = document.getElementById('settingsTerminalVersion');
+  if (termVerSel) termVerSel.addEventListener('change', function () {
+    localStorage.setItem('nexus-terminal-version', this.value);
+  });
+  var resetTermBtn = document.getElementById('settingsResetTerminal');
+  if (resetTermBtn) resetTermBtn.addEventListener('click', function () {
+    localStorage.removeItem('nexus-terminal-version');
+    var sel = document.getElementById('settingsTerminalVersion');
+    if (sel) sel.value = 'pro';
+    var msg = document.getElementById('settingsSaveMsg');
+    if (msg) {
+      msg.textContent = '✓ Terminal choice reset. Chooser will appear next time.';
+      msg.style.display = 'inline';
+      msg.className = 'settings-save-msg settings-save-ok';
+      setTimeout(function () { msg.style.display = 'none'; }, 3000);
+    }
+  });
+}
+
+function getDefaultTerminalVersion() {
+  return localStorage.getItem('nexus-terminal-version') || 'pro';
 }
 
 async function saveSettings() {
