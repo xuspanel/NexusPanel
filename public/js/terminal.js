@@ -747,7 +747,9 @@ function createInitialTab() {
   showTermLoading();
   const panes = document.getElementById('termProPanes');
   if (!panes) return;
-  panes.innerHTML = '';
+  panes.querySelectorAll('.term-pro-tab-panes').forEach(el => el.remove());
+  const ph = document.getElementById('termProContainer');
+  if (ph && ph.parentNode === panes) ph.remove();
 
   const restored = restoreProTabs();
   if (restored.length) {
@@ -1398,8 +1400,8 @@ function initSearchBar() {
       <button class="term-search-btn" data-dir="prev">&#x25B2;</button>
       <button class="term-search-close" title="Close">&#x2715;</button>
     `;
-    const proPane = document.getElementById('termProContainer');
-    if (proPane) proPane.appendChild(el);
+    const proContainer = document.getElementById('termProPanes');
+    if (proContainer) proContainer.appendChild(el);
   }
   const input = el.querySelector('.term-search-input');
   input.addEventListener('input', doSearch);

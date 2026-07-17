@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NexusPanel — VPS Control Center</title>
   <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('nx-theme') || 'dark');</script>
-  <link rel="stylesheet" href="/css/style.css?v=1.6.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.6.1">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>">
-  <link rel="stylesheet" href="/libs/xterm.css?v=1.6.0">
+  <link rel="stylesheet" href="/libs/xterm.css?v=1.6.1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-language_tools.js"></script>
   <script defer src="/js/theme.js?v=1.1.0"></script>
-  <script defer src="/js/api.js?v=1.6.0"></script>
+  <script defer src="/js/api.js?v=1.6.1"></script>
   <script defer src="/js/auth.js?v=1.1.0"></script>
   <script defer src="/js/dashboard.js?v=1.1.0"></script>
   <script defer src="/js/profile.js?v=1.1.0"></script>
@@ -20,13 +20,13 @@
   <script defer src="/js/databases.js?v=1.1.0"></script>
   <script defer src="/js/emails.js?v=1.1.0"></script>
   <script defer src="/js/docker.js?v=1.1.0"></script>
-  <script defer src="/libs/xterm.js?v=1.6.0"></script>
-  <script defer src="/libs/xterm-addon-fit.js?v=1.6.0"></script>
-  <script defer src="/libs/xterm-addon-search.js?v=1.6.0"></script>
-  <script defer src="/libs/xterm-addon-web-links.js?v=1.6.0"></script>
-  <script defer src="/libs/xterm-addon-webgl.js?v=1.6.0"></script>
-  <script defer src="/libs/xterm-addon-unicode11.js?v=1.6.0"></script>
-  <script defer src="/js/terminal.js?v=1.6.0"></script>
+  <script defer src="/libs/xterm.js?v=1.6.1"></script>
+  <script defer src="/libs/xterm-addon-fit.js?v=1.6.1"></script>
+  <script defer src="/libs/xterm-addon-search.js?v=1.6.1"></script>
+  <script defer src="/libs/xterm-addon-web-links.js?v=1.6.1"></script>
+  <script defer src="/libs/xterm-addon-webgl.js?v=1.6.1"></script>
+  <script defer src="/libs/xterm-addon-unicode11.js?v=1.6.1"></script>
+  <script defer src="/js/terminal.js?v=1.6.1"></script>
   <script defer src="/js/users.js?v=1.1.0"></script>
   <script defer src="/js/ftp.js?v=1.1.0"></script>
   <script defer src="/js/domains.js?v=1.1.0"></script>
@@ -42,7 +42,7 @@
   <script defer src="/js/ssl.js?v=1.1.0"></script>
   <script defer src="/js/phpfpm.js?v=1.1.0"></script>
   <script defer src="/js/updates.js?v=1.1.0"></script>
-  <script defer src="/js/settings.js?v=1.6.0"></script>
+  <script defer src="/js/settings.js?v=1.6.1"></script>
   <script defer src="/js/search.js?v=1.1.0"></script>
   <script defer src="/js/notifications.js?v=1.1.0"></script>
 
@@ -1170,7 +1170,7 @@
 
       <div id="termProContent" class="term-pro-wrapper" style="display:none;">
         <div class="term-pro-shell">
-          <div class="term-pro-tabs">
+          <div class="term-pro-tabs" id="termProTabs">
             <div class="term-pro-tab active" id="termProTab1">
               <span class="term-pro-tab-dot"></span>
               <span class="term-pro-tab-name">Session 1</span>
@@ -1193,7 +1193,7 @@
             <button class="term-pro-tool" id="termProClear" title="Clear">&#x1F5D1;</button>
             <button class="term-pro-tool" id="termProReconnect" title="Reconnect">&#x21BB;</button>
           </div>
-          <div class="term-pro-panes">
+          <div class="term-pro-panes" id="termProPanes">
             <div id="termProContainer" class="term-pro-pane"></div>
           </div>
           <div class="term-pro-statusbar">

@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.6.1] - 2026-07-17
+### Fixed
+- **PRO Terminal not connecting**: HTML was missing `id="termProPanes"` and `id="termProTabs"` on the PRO terminal's panes and tabs containers. The JavaScript code uses `document.getElementById()` to look up these elements, so without the IDs the terminal never initialized panes, WebSocket sessions were never created, and the loading spinner hung indefinitely
+- **Search bar disappearing**: `initSearchBar()` appended the search bar to `#termProContainer` which was then destroyed when `createInitialTab()` cleared `#termProPanes` innerHTML. Changed parent to `#termProPanes` and replaced `innerHTML = ''` with selective `.term-pro-tab-panes` removal to preserve non-tab children
+
 ## [1.6.0] - 2026-07-17
 ### Added
 - **PRO Terminal Advanced (Phase 4)**:
