@@ -5,6 +5,7 @@ let currentVersion = 'classic';
 let proFontSize = 14;
 let activeThemeName = 'catppuccin';
 let tabCounter = 0;
+let paneCounter = 0;
 let tabs = [];
 let activeTabId = null;
 let searchOpen = false;
@@ -221,14 +222,17 @@ function showProShell() {
 }
 
 function cleanupTabs() {
-  tabs.forEach(t => {
-    try { t.term.dispose(); } catch (_) {}
-    if (t.element && t.element.parentNode) t.element.parentNode.removeChild(t.element);
+  tabs.forEach(tab => {
+    tab.panes.forEach(pane => {
+      try { pane.term.dispose(); } catch (_) {}
+    });
+    if (tab.element && tab.element.parentNode) tab.element.parentNode.removeChild(tab.element);
   });
   tabs = [];
   activeTabId = null;
   closeCommandPalette();
   closeSearchBar();
+  closeAutocomplete();
   updateProTabs();
 }
 
@@ -277,7 +281,8 @@ function initClassicEvents() {
       const codes = { o: 15, x: 24, k: 11, u: 21, w: 23, c: 3, _: 31, t: 20, j: 10, r: 18, y: 25, v: 22, g: 7 };
       const code = codes[ctrl];
       if (code !== undefined && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'input', tabId: activeTabId, data: btoa(String.fromCharCode(code)) }));
+        const pane = getActivePane();
+        ws.send(JSON.stringify({ type: 'input', paneId: pane ? pane.id : null, data: btoa(String.fromCharCode(code)) }));
         focusActiveTerminal();
       }
     });
@@ -291,6 +296,12 @@ function initProEvents() {
   if (reconnect) reconnect.addEventListener('click', reconnectTerminal);
   const downloadBtn = document.getElementById('termProDownload');
   if (downloadBtn) downloadBtn.addEventListener('click', downloadActiveBuffer);
+  const splitH = document.getElementById('termProSplitH');
+  if (splitH) splitH.addEventListener('click', () => splitActivePane('horizontal'));
+  const splitV = document.getElementById('termProSplitV');
+  if (splitV) splitV.addEventListener('click', () => splitActivePane('vertical'));
+  const closePane = document.getElementById('termProClosePane');
+  if (closePane) closePane.addEventListener('click', closeActivePane);
   const presetToggle = document.getElementById('termProPresets');
   if (presetToggle) {
     presetToggle.addEventListener('click', () => {
@@ -321,14 +332,23 @@ function initProEvents() {
   const addTab = document.getElementById('termProAddTab');
   if (addTab) addTab.addEventListener('click', () => createProTab());
 
+  const mobileMenu = document.getElementById('termProMobileMenu');
+  if (mobileMenu) {
+    mobileMenu.addEventListener('click', toggleMobileToolbar);
+  }
+
   window.addEventListener('resize', () => {
     if (currentVersion === 'pro') {
-      tabs.forEach(t => {
-        try { t.fitAddon && t.fitAddon.fit(); } catch (_) {}
+      tabs.forEach(tab => {
+        tab.panes.forEach(pane => {
+          try { pane.fitAddon && pane.fitAddon.fit(); } catch (_) {}
+        });
       });
     } else {
-      const t = tabs[0];
-      try { t && t.fitAddon && t.fitAddon.fit(); } catch (_) {}
+      const tab = tabs[0];
+      if (tab && tab.panes[0]) {
+        try { tab.panes[0].fitAddon && tab.panes[0].fitAddon.fit(); } catch (_) {}
+      }
     }
   });
 
@@ -346,6 +366,7 @@ function initProEvents() {
     if (e.key === 'Escape') {
       closeCommandPalette();
       closeSearchBar();
+      closeAutocomplete();
     }
   });
 
@@ -355,7 +376,17 @@ function initProEvents() {
     if (picker && picker.style.display === 'block' && !picker.contains(e.target) && e.target !== themeBtn) {
       picker.style.display = 'none';
     }
+    const mobileMenu = document.getElementById('termProMobileMenu');
+    const toolbar = document.querySelector('.term-pro-toolbar');
+    if (toolbar && !toolbar.contains(e.target) && e.target !== mobileMenu) {
+      toolbar.classList.remove('mobile-open');
+    }
   });
+}
+
+function toggleMobileToolbar() {
+  const toolbar = document.querySelector('.term-pro-toolbar');
+  if (toolbar) toolbar.classList.toggle('mobile-open');
 }
 
 function isTypingInInput() {
@@ -363,24 +394,34 @@ function isTypingInInput() {
   return el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
 }
 
+function getActiveTab() {
+  return tabs.find(t => t.id === activeTabId);
+}
+
+function getActivePane() {
+  const tab = getActiveTab();
+  if (!tab) return null;
+  return tab.panes.find(p => p.id === tab.activePaneId) || tab.panes[tab.panes.length - 1];
+}
+
 function termReady() {
-  const t = tabs.find(x => x.id === activeTabId);
-  return t && t.ready;
+  const pane = getActivePane();
+  return pane && pane.ready;
 }
 
 function getActiveTerm() {
-  const t = tabs.find(x => x.id === activeTabId);
-  return t ? t.term : null;
+  const pane = getActivePane();
+  return pane ? pane.term : null;
 }
 
 function focusActiveTerminal() {
-  const t = tabs.find(x => x.id === activeTabId);
-  if (t && t.term) t.term.focus();
+  const pane = getActivePane();
+  if (pane && pane.term) pane.term.focus();
 }
 
 function clearActiveTerminal() {
-  const t = tabs.find(x => x.id === activeTabId);
-  if (t && t.term) t.term.clear();
+  const pane = getActivePane();
+  if (pane && pane.term) pane.term.clear();
 }
 
 function reconnectTerminal() {
@@ -390,17 +431,19 @@ function reconnectTerminal() {
 function adjustProFontSize(delta) {
   proFontSize = Math.max(10, Math.min(24, proFontSize + delta));
   localStorage.setItem(PRO_FONT_KEY, proFontSize);
-  tabs.forEach(t => {
-    if (t.term) t.term.options.fontSize = proFontSize;
-    try { t.fitAddon && t.fitAddon.fit(); } catch (_) {}
+  tabs.forEach(tab => {
+    tab.panes.forEach(pane => {
+      if (pane.term) pane.term.options.fontSize = proFontSize;
+      try { pane.fitAddon && pane.fitAddon.fit(); } catch (_) {}
+    });
   });
   updateProStatusDims();
 }
 
 function downloadActiveBuffer() {
-  const t = tabs.find(x => x.id === activeTabId);
-  if (!t || !t.term) return;
-  const buffer = t.term.buffer.active;
+  const pane = getActivePane();
+  if (!pane || !pane.term) return;
+  const buffer = pane.term.buffer.active;
   const lines = [];
   for (let i = 0; i < buffer.length; i++) {
     lines.push(buffer.getLine(i).translateToString(true));
@@ -409,7 +452,8 @@ function downloadActiveBuffer() {
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;
-  a.download = `terminal-${t.name.replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.log`;
+  const tab = getActiveTab();
+  a.download = `terminal-${(tab ? tab.name : 'session').replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.log`;
   document.body.appendChild(a);
   a.click();
   setTimeout(() => {
@@ -458,7 +502,8 @@ function renderTermPresets(presets, suffix) {
     btn.addEventListener('click', () => {
       const cmd = btn.dataset.cmd;
       if (termReady() && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'input', tabId: activeTabId, data: btoa(cmd + '\n') }));
+        const pane = getActivePane();
+        ws.send(JSON.stringify({ type: 'input', paneId: pane ? pane.id : null, data: btoa(cmd + '\n') }));
         focusActiveTerminal();
       }
     });
@@ -627,16 +672,13 @@ function connectWebSocket() {
     try {
       const msg = JSON.parse(evt.data);
       if (msg.type === 'ready') {
-        if (currentVersion === 'pro') {
-          tabs.forEach(t => createPtyForTab(t));
-        } else {
-          const t = tabs[0];
-          if (t) createPtyForTab(t);
-        }
-      } else if (msg.type === 'created' || msg.type === 'tab-created') {
-        const t = tabs.find(x => x.id === msg.tabId);
-        if (t) {
-          t.ready = true;
+        tabs.forEach(tab => {
+          tab.panes.forEach(pane => createPtyForPane(pane));
+        });
+      } else if (msg.type === 'created' || msg.type === 'pane-created') {
+        const pane = findPaneById(msg.paneId);
+        if (pane) {
+          pane.ready = true;
           showTermContent();
           if (currentVersion === 'pro') {
             updateProStatusConn(true);
@@ -645,33 +687,23 @@ function connectWebSocket() {
           focusActiveTerminal();
         }
       } else if (msg.type === 'data') {
-        const t = tabs.find(x => x.id === msg.tabId);
-        if (t && t.term) {
+        const pane = findPaneById(msg.paneId);
+        if (pane && pane.term) {
           const decoded = atob(msg.data);
-          t.term.writeUtf8 ? t.term.writeUtf8(decoded) : t.term.write(decoded);
+          pane.term.writeUtf8 ? pane.term.writeUtf8(decoded) : pane.term.write(decoded);
         }
       } else if (msg.type === 'exit') {
-        const t = tabs.find(x => x.id === msg.tabId);
-        if (t) t.ready = false;
-        if (currentVersion === 'pro') updateProStatusConn(false);
+        const pane = findPaneById(msg.paneId);
+        if (pane) pane.ready = false;
+        if (currentVersion === 'pro') {
+          const active = getActivePane();
+          if (!active || !active.ready) updateProStatusConn(false);
+        }
       } else if (msg.type === 'error') {
         showTermError(msg.error);
         if (currentVersion === 'pro') updateProStatusConn(false);
-      } else if (msg.type === 'tab-switched') {
-        activeTabId = msg.tabId;
-        updateProTabs();
-        focusActiveTerminal();
-      } else if (msg.type === 'tab-closed') {
-        activeTabId = msg.activeTabId;
-        updateProTabs();
-        focusActiveTerminal();
-      } else if (msg.type === 'tab-renamed') {
-        const t = tabs.find(x => x.id === msg.tabId);
-        if (t) {
-          t.name = msg.name;
-          updateProTabs();
-          saveProTabs();
-        }
+      } else if (msg.type === 'pane-closed') {
+        // pane already closed locally
       }
     } catch (_) {}
   };
@@ -682,7 +714,7 @@ function connectWebSocket() {
   };
 
   ws.onclose = (evt) => {
-    tabs.forEach(t => t.ready = false);
+    tabs.forEach(tab => tab.panes.forEach(pane => pane.ready = false));
     updateProStatusConn(false);
     if (evt.code !== 1000 && evt.code !== 4001) {
       showTermError('Connection lost (code ' + evt.code + '). Click Reconnect.');
@@ -690,6 +722,14 @@ function connectWebSocket() {
       showTermError('Session expired. Please refresh the page.');
     }
   };
+}
+
+function findPaneById(paneId) {
+  for (const tab of tabs) {
+    const pane = tab.panes.find(p => p.id === paneId);
+    if (pane) return pane;
+  }
+  return null;
 }
 
 function createClassicTab() {
@@ -721,23 +761,43 @@ function createInitialTab() {
 function createProTab(name, isInitial, skipConnect) {
   const panes = document.getElementById('termProPanes');
   if (!panes) return null;
-  const container = document.createElement('div');
-  container.className = 'term-pro-pane';
-  panes.appendChild(container);
+  const tabEl = document.createElement('div');
+  tabEl.className = 'term-pro-tab-panes';
+  panes.appendChild(tabEl);
   const tabName = name || ('Session ' + (tabs.length + 1));
-  const tab = createTabObject('t' + (++tabCounter), tabName, container, true);
+  const tab = createTabObject('t' + (++tabCounter), tabName, tabEl, true);
   tabs.push(tab);
   activeTabId = tab.id;
   updateProTabs();
   saveProTabs();
 
   if (!skipConnect && ws && ws.readyState === WebSocket.OPEN) {
-    createPtyForTab(tab);
+    createPtyForPane(tab.panes[0]);
   }
   return tab;
 }
 
 function createTabObject(id, name, container, isPro) {
+  const tab = {
+    id, name, element: container,
+    panes: [], activePaneId: null,
+  };
+  const pane = createPaneObject(tab, container, isPro);
+  tab.panes.push(pane);
+  tab.activePaneId = pane.id;
+  return tab;
+}
+
+function createPaneObject(tab, container, isPro, direction) {
+  const paneWrapper = document.createElement('div');
+  paneWrapper.className = 'term-pro-pane' + (direction ? ' term-pro-pane-' + direction : '');
+  container.appendChild(paneWrapper);
+
+  const paneEl = document.createElement('div');
+  paneEl.className = 'term-pro-pane-inner';
+  paneWrapper.appendChild(paneEl);
+
+  const paneId = 'p' + (++paneCounter);
   const term = new Terminal({
     cursorBlink: true,
     cursorStyle: 'block',
@@ -750,7 +810,7 @@ function createTabObject(id, name, container, isPro) {
     scrollback: 10000,
   });
 
-  term.open(container);
+  term.open(paneEl);
 
   const fitAddon = typeof FitAddon !== 'undefined' ? new FitAddon.FitAddon() : null;
   const searchAddon = typeof SearchAddon !== 'undefined' ? new SearchAddon.SearchAddon() : null;
@@ -783,66 +843,299 @@ function createTabObject(id, name, container, isPro) {
     } catch (e) { console.warn('webgl addon failed', e); }
   }
 
+  const pane = {
+    id: paneId, tab, wrapper: paneWrapper, element: paneEl, term, fitAddon, searchAddon,
+    ready: false, inputBuffer: '', history: [],
+  };
+
   term.onData((data) => {
+    handlePaneInput(pane, data);
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'input', tabId: id, data: btoa(data) }));
+      ws.send(JSON.stringify({ type: 'input', paneId: pane.id, data: btoa(data) }));
     }
   });
 
   term.onResize(({ cols, rows }) => {
     if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'resize', tabId: id, cols, rows }));
+      ws.send(JSON.stringify({ type: 'resize', paneId: pane.id, cols, rows }));
     }
-    if (id === activeTabId) updateProStatusDims();
+    if (pane.id === tab.activePaneId && tab.id === activeTabId) updateProStatusDims();
   });
 
-  return {
-    id, name, container, term, fitAddon, searchAddon,
-    ready: false, cols: term.cols, rows: term.rows,
-  };
+  paneWrapper.addEventListener('click', () => {
+    switchPane(tab, pane.id);
+  });
+
+  return pane;
 }
 
-function createPtyForTab(tab) {
-  if (!tab || tab.ready || !ws) return;
-  const cols = tab.term.cols || 80;
-  const rows = tab.term.rows || 24;
-  ws.send(JSON.stringify({ type: 'create', tabId: tab.id, cols, rows }));
+function handlePaneInput(pane, data) {
+  if (data === '\t' && currentVersion === 'pro') {
+    const suggestion = getAutocompleteSuggestion(pane.inputBuffer);
+    if (suggestion) {
+      pane.term.input(suggestion.suffix, true);
+      pane.inputBuffer += suggestion.suffix;
+      closeAutocomplete();
+      return;
+    }
+  }
+
+  if (data === '\r' || data === '\n') {
+    if (pane.inputBuffer.trim()) {
+      pane.history.push(pane.inputBuffer.trim());
+      if (pane.history.length > 100) pane.history.shift();
+    }
+    pane.inputBuffer = '';
+    closeAutocomplete();
+  } else if (data === '\u007f' || data === '\b') {
+    pane.inputBuffer = pane.inputBuffer.slice(0, -1);
+  } else if (data === '\u0003' || data === '\u0004') {
+    pane.inputBuffer = '';
+    closeAutocomplete();
+  } else if (data.length === 1 && data.charCodeAt(0) >= 32 && data.charCodeAt(0) < 127) {
+    pane.inputBuffer += data;
+  }
+
+  if (currentVersion === 'pro') {
+    updateAutocomplete(pane);
+  }
+}
+
+function getAutocompleteSuggestion(buffer) {
+  if (!buffer.trim()) return null;
+  const q = buffer.trim().toLowerCase();
+  const candidates = [
+    ...presetsCache.map(p => p.cmd),
+    'ls', 'cd', 'pwd', 'cat', 'grep', 'find', 'docker', 'docker ps', 'docker compose',
+    'systemctl', 'journalctl', 'apt', 'dnf', 'yum', 'npm', 'node', 'python3', 'ssh', 'curl', 'wget'
+  ];
+  const match = candidates.find(c => c.toLowerCase().startsWith(q) && c.length > q.length);
+  if (match) return { full: match, suffix: match.slice(q.length) };
+  return null;
+}
+
+function updateAutocomplete(pane) {
+  if (!pane.inputBuffer.trim()) {
+    closeAutocomplete();
+    return;
+  }
+  const q = pane.inputBuffer.trim().toLowerCase();
+  const suggestions = [];
+
+  presetsCache.forEach(p => {
+    if (p.cmd.toLowerCase().startsWith(q) && p.cmd.length > q.length) {
+      suggestions.push({ type: 'preset', label: p.cmd, value: p.cmd, icon: PRESET_ICONS[p.category] || '&#x2726;' });
+    }
+  });
+
+  pane.history.slice().reverse().forEach(cmd => {
+    if (cmd.toLowerCase().startsWith(q) && cmd.length > q.length && !suggestions.some(s => s.value === cmd)) {
+      suggestions.push({ type: 'history', label: cmd, value: cmd, icon: '&#x25B6;' });
+    }
+  });
+
+  const common = ['ls', 'cd', 'pwd', 'cat', 'grep', 'find', 'docker', 'docker ps', 'docker compose', 'systemctl', 'journalctl', 'apt', 'dnf', 'npm', 'node', 'python3', 'ssh', 'curl', 'wget'];
+  common.forEach(cmd => {
+    if (cmd.toLowerCase().startsWith(q) && cmd.length > q.length && !suggestions.some(s => s.value === cmd)) {
+      suggestions.push({ type: 'builtin', label: cmd, value: cmd, icon: '&#x25A0;' });
+    }
+  });
+
+  if (!suggestions.length) {
+    closeAutocomplete();
+    return;
+  }
+
+  showAutocomplete(pane, suggestions.slice(0, 6));
+}
+
+let autocompletePane = null;
+function showAutocomplete(pane, suggestions) {
+  let overlay = document.getElementById('termAutocomplete');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'termAutocomplete';
+    overlay.className = 'term-autocomplete';
+    document.body.appendChild(overlay);
+  }
+  autocompletePane = pane;
+  overlay.innerHTML = suggestions.map((s, idx) => `
+    <div class="term-autocomplete-item${idx === 0 ? ' term-autocomplete-selected' : ''}" data-value="${escHtml(s.value)}">
+      <span class="term-autocomplete-icon">${s.icon}</span>
+      <span class="term-autocomplete-label">${escHtml(s.label)}</span>
+      <span class="term-autocomplete-type">${escHtml(s.type)}</span>
+    </div>
+  `).join('');
+
+  overlay.querySelectorAll('.term-autocomplete-item').forEach(item => {
+    item.addEventListener('click', () => {
+      applyAutocomplete(item.dataset.value);
+    });
+  });
+
+  positionAutocomplete(overlay, pane);
+  overlay.style.display = 'block';
+}
+
+function positionAutocomplete(overlay, pane) {
+  const rect = pane.wrapper.getBoundingClientRect();
+  overlay.style.left = rect.left + 12 + 'px';
+  overlay.style.top = rect.bottom - 120 + 'px';
+  overlay.style.maxWidth = rect.width - 24 + 'px';
+}
+
+function closeAutocomplete() {
+  const overlay = document.getElementById('termAutocomplete');
+  if (overlay) overlay.style.display = 'none';
+  autocompletePane = null;
+}
+
+function applyAutocomplete(value) {
+  if (!autocompletePane || !value) return;
+  const pane = autocompletePane;
+  const q = pane.inputBuffer.trim().toLowerCase();
+  if (value.toLowerCase().startsWith(q)) {
+    const suffix = value.slice(q.length);
+    pane.term.input(suffix, true);
+    pane.inputBuffer += suffix;
+  }
+  closeAutocomplete();
+}
+
+function createPtyForPane(pane) {
+  if (!pane || pane.ready || !ws) return;
+  const cols = pane.term.cols || 80;
+  const rows = pane.term.rows || 24;
+  ws.send(JSON.stringify({ type: 'create', paneId: pane.id, cols, rows }));
+}
+
+function splitActivePane(direction) {
+  const tab = getActiveTab();
+  if (!tab) return;
+  const activePane = getActivePane();
+  if (!activePane) return;
+
+  const parent = activePane.wrapper.parentElement;
+  if (tab.panes.length >= 4) {
+    alert('Maximum 4 panes per tab');
+    return;
+  }
+
+  parent.classList.add('term-pro-split-' + direction);
+  activePane.wrapper.classList.add('term-pro-pane-split');
+
+  const newPane = createPaneObject(tab, parent, true, direction);
+  tab.panes.push(newPane);
+  switchPane(tab, newPane.id);
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    createPtyForPane(newPane);
+  }
+
+  tab.panes.forEach(pane => {
+    try { pane.fitAddon && pane.fitAddon.fit(); } catch (_) {}
+  });
+}
+
+function closeActivePane() {
+  const tab = getActiveTab();
+  if (!tab) return;
+  const pane = getActivePane();
+  if (!pane) return;
+  closePane(tab, pane.id);
+}
+
+function closePane(tab, paneId) {
+  const idx = tab.panes.findIndex(p => p.id === paneId);
+  if (idx === -1) return;
+  const pane = tab.panes[idx];
+
+  try { pane.term.dispose(); } catch (_) {}
+  if (pane.wrapper && pane.wrapper.parentNode) {
+    pane.wrapper.parentNode.removeChild(pane.wrapper);
+  }
+  tab.panes.splice(idx, 1);
+
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify({ type: 'close-pane', paneId }));
+  }
+
+  if (tab.panes.length === 0) {
+    closeProTab(tab.id);
+    return;
+  }
+
+  if (tab.activePaneId === paneId) {
+    tab.activePaneId = tab.panes[Math.min(idx, tab.panes.length - 1)].id;
+  }
+
+  if (tab.panes.length === 1) {
+    tab.panes[0].wrapper.classList.remove('term-pro-pane-split');
+    const parent = tab.element;
+    parent.classList.remove('term-pro-split-horizontal', 'term-pro-split-vertical');
+  }
+
+  updatePaneVisuals(tab);
+  switchPane(tab, tab.activePaneId);
+  tab.panes.forEach(p => {
+    try { p.fitAddon && p.fitAddon.fit(); } catch (_) {}
+  });
+}
+
+function switchPane(tab, paneId) {
+  const pane = tab.panes.find(p => p.id === paneId);
+  if (!pane) return;
+  tab.activePaneId = paneId;
+  if (tab.id === activeTabId) {
+    updatePaneVisuals(tab);
+    updateProStatusConn(pane.ready);
+    updateProStatusDims();
+    pane.term.focus();
+  }
+}
+
+function updatePaneVisuals(tab) {
+  tab.panes.forEach(p => {
+    p.wrapper.classList.toggle('term-pro-pane-active', p.id === tab.activePaneId);
+  });
 }
 
 function switchProTab(tabId) {
   if (tabId === activeTabId) return;
-  const t = tabs.find(x => x.id === tabId);
-  if (!t) return;
+  const tab = tabs.find(x => x.id === tabId);
+  if (!tab) return;
   activeTabId = tabId;
-  tabs.forEach(x => {
-    x.container.style.display = x.id === tabId ? 'block' : 'none';
+  tabs.forEach(t => {
+    t.element.style.display = t.id === tabId ? 'flex' : 'none';
   });
   updateProTabs();
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'switch-tab', tabId }));
+  updatePaneVisuals(tab);
+  const pane = getActivePane();
+  if (pane) {
+    pane.term.focus();
+    updateProStatusConn(pane.ready);
+    updateProStatusDims();
+    requestAnimationFrame(() => {
+      try { pane.fitAddon && pane.fitAddon.fit(); } catch (_) {}
+    });
   }
-  focusActiveTerminal();
-  updateProStatusConn(t.ready);
-  updateProStatusDims();
-  requestAnimationFrame(() => {
-    try { t.fitAddon && t.fitAddon.fit(); } catch (_) {}
-  });
 }
 
 function closeProTab(tabId) {
   const idx = tabs.findIndex(x => x.id === tabId);
   if (idx === -1) return;
-  const t = tabs[idx];
-  try { t.term.dispose(); } catch (_) {}
-  if (t.container && t.container.parentNode) {
-    t.container.parentNode.removeChild(t.container);
+  const tab = tabs[idx];
+  tab.panes.forEach(pane => {
+    try { pane.term.dispose(); } catch (_) {}
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(JSON.stringify({ type: 'close-pane', paneId: pane.id }));
+    }
+  });
+  if (tab.element && tab.element.parentNode) {
+    tab.element.parentNode.removeChild(tab.element);
   }
   tabs.splice(idx, 1);
   if (activeTabId === tabId) {
     activeTabId = tabs.length ? tabs[Math.min(idx, tabs.length - 1)].id : null;
-  }
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'close-tab', tabId }));
   }
   updateProTabs();
   saveProTabs();
@@ -854,12 +1147,9 @@ function closeProTab(tabId) {
 }
 
 function renameProTab(tabId, newName) {
-  const t = tabs.find(x => x.id === tabId);
-  if (!t || !newName.trim()) return;
-  t.name = newName.trim();
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify({ type: 'rename-tab', tabId, name: t.name }));
-  }
+  const tab = tabs.find(x => x.id === tabId);
+  if (!tab || !newName.trim()) return;
+  tab.name = newName.trim();
   updateProTabs();
   saveProTabs();
 }
@@ -873,9 +1163,10 @@ function updateProTabs() {
     const tabEl = document.createElement('div');
     tabEl.className = 'term-pro-tab' + (t.id === activeTabId ? ' active' : '');
     tabEl.dataset.id = t.id;
+    const paneCount = t.panes.length > 1 ? ` <span class="term-pro-tab-panes-count">${t.panes.length}</span>` : '';
     tabEl.innerHTML = `
       <span class="term-pro-tab-dot"></span>
-      <span class="term-pro-tab-name">${escHtml(t.name)}</span>
+      <span class="term-pro-tab-name">${escHtml(t.name)}</span>${paneCount}
       <button class="term-pro-tab-close" title="Close tab">&#x2715;</button>
     `;
     tabEl.querySelector('.term-pro-tab-name').addEventListener('dblclick', (e) => {
@@ -893,7 +1184,7 @@ function updateProTabs() {
   if (addBtn) bar.appendChild(addBtn);
 
   tabs.forEach(t => {
-    t.container.style.display = t.id === activeTabId ? 'block' : 'none';
+    t.element.style.display = t.id === activeTabId ? 'flex' : 'none';
   });
 }
 
@@ -910,9 +1201,9 @@ function updateProStatusConn(connected) {
 function updateProStatusDims() {
   const el = document.getElementById('termProStatusDims');
   if (!el) return;
-  const t = tabs.find(x => x.id === activeTabId);
-  if (t && t.term) {
-    el.textContent = t.term.cols + 'x' + t.term.rows;
+  const pane = getActivePane();
+  if (pane && pane.term) {
+    el.textContent = pane.term.cols + 'x' + pane.term.rows;
   }
 }
 
@@ -994,6 +1285,9 @@ function getPaletteItems() {
   const items = [];
   items.push({ type: 'action', id: 'new-tab', icon: '+', title: 'New tab', subtitle: 'Open a new terminal session', action: () => createProTab() });
   items.push({ type: 'action', id: 'close-tab', icon: 'x', title: 'Close active tab', subtitle: 'Close ' + (tabs.find(t => t.id === activeTabId)?.name || 'current tab'), action: () => closeProTab(activeTabId) });
+  items.push({ type: 'action', id: 'split-h', icon: '&#x25E0;', title: 'Split horizontal', subtitle: 'Split active pane side by side', action: () => splitActivePane('horizontal') });
+  items.push({ type: 'action', id: 'split-v', icon: '&#x25E1;', title: 'Split vertical', subtitle: 'Split active pane stacked', action: () => splitActivePane('vertical') });
+  items.push({ type: 'action', id: 'close-pane', icon: '&#x2715;', title: 'Close active pane', subtitle: 'Close the focused pane in this tab', action: closeActivePane });
   items.push({ type: 'action', id: 'clear', icon: 'C', title: 'Clear terminal', subtitle: 'Clear active terminal screen', action: clearActiveTerminal });
   items.push({ type: 'action', id: 'reconnect', icon: 'R', title: 'Reconnect', subtitle: 'Restart terminal connection', action: reconnectTerminal });
   items.push({ type: 'action', id: 'download', icon: '&#x1F4BE;', title: 'Download buffer', subtitle: 'Save terminal output to file', action: downloadActiveBuffer });
@@ -1006,7 +1300,8 @@ function getPaletteItems() {
       catPresets.forEach(p => {
         items.push({ type: 'preset', id: 'preset-' + p.id, icon: '&#x25B8;', title: p.label, subtitle: p.cmd, indent: true, action: () => {
           if (termReady() && ws && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: 'input', tabId: activeTabId, data: btoa(p.cmd + '\n') }));
+            const pane = getActivePane();
+            ws.send(JSON.stringify({ type: 'input', paneId: pane ? pane.id : null, data: btoa(p.cmd + '\n') }));
             focusActiveTerminal();
           }
         }});
@@ -1142,37 +1437,37 @@ function closeSearchBar() {
   const el = document.getElementById('termSearchBar');
   if (el) el.style.display = 'none';
   searchOpen = false;
-  const t = tabs.find(x => x.id === activeTabId);
-  if (t && t.searchAddon) t.searchAddon.clearDecorations();
+  const pane = getActivePane();
+  if (pane && pane.searchAddon) pane.searchAddon.clearDecorations();
 }
 
 function doSearch() {
   const el = document.getElementById('termSearchBar');
   if (!el) return;
   const q = el.querySelector('.term-search-input').value;
-  const t = tabs.find(x => x.id === activeTabId);
-  if (!t || !t.searchAddon) return;
+  const pane = getActivePane();
+  if (!pane || !pane.searchAddon) return;
   if (!q) {
-    t.searchAddon.clearDecorations();
+    pane.searchAddon.clearDecorations();
     return;
   }
-  t.searchAddon.findNext(q, { caseSensitive: false });
+  pane.searchAddon.findNext(q, { caseSensitive: false });
 }
 
 function findNext() {
   const el = document.getElementById('termSearchBar');
   if (!el) return;
   const q = el.querySelector('.term-search-input').value;
-  const t = tabs.find(x => x.id === activeTabId);
-  if (t && t.searchAddon && q) t.searchAddon.findNext(q, { caseSensitive: false });
+  const pane = getActivePane();
+  if (pane && pane.searchAddon && q) pane.searchAddon.findNext(q, { caseSensitive: false });
 }
 
 function findPrevious() {
   const el = document.getElementById('termSearchBar');
   if (!el) return;
   const q = el.querySelector('.term-search-input').value;
-  const t = tabs.find(x => x.id === activeTabId);
-  if (t && t.searchAddon && q) t.searchAddon.findPrevious(q, { caseSensitive: false });
+  const pane = getActivePane();
+  if (pane && pane.searchAddon && q) pane.searchAddon.findPrevious(q, { caseSensitive: false });
 }
 
 /* ─── Theme Picker ─── */
@@ -1201,8 +1496,10 @@ function applyTheme(name) {
   if (!TERM_THEMES[name]) return;
   activeThemeName = name;
   localStorage.setItem(PRO_THEME_KEY, name);
-  tabs.forEach(t => {
-    if (t.term) t.term.options.theme = TERM_THEMES[name];
+  tabs.forEach(tab => {
+    tab.panes.forEach(pane => {
+      if (pane.term) pane.term.options.theme = TERM_THEMES[name];
+    });
   });
   const picker = document.getElementById('termThemePicker');
   if (picker) picker.style.display = 'none';

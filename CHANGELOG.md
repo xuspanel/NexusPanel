@@ -1,5 +1,20 @@
 # Changelog
 
+## [1.6.0] - 2026-07-17
+### Added
+- **PRO Terminal Advanced (Phase 4)**:
+  - **Split panes**: split any tab horizontally or vertically; each pane runs its own independent `node-pty` session
+  - **Active pane focus**: click a pane to focus it; active pane gets highlighted border
+  - **Close active pane** button and automatic pane cleanup
+  - **Command auto-complete**: non-intrusive overlay suggesting presets, command history, and common shell commands as you type; press `Tab` or click to accept
+  - **Mobile PRO layout overhaul**: toolbar collapses into a hamburger menu, tab bar becomes a fixed bottom sheet, status bar floats above it for thumb-friendly control
+  - Tab indicator now shows pane count when a tab has multiple panes
+
+### Changed
+- Backend WebSocket terminal handler refactored from tab-centric to **pane-centric** model: every pane is an independent pty session
+- `public/js/terminal.js` fully rewritten around tab → pane hierarchy
+- Updated cache-busting to `v=1.6.0`
+
 ## [1.5.0] - 2026-07-17
 ### Added
 - **PRO Terminal Productivity (Phase 3)**:

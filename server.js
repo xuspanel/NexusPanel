@@ -122,12 +122,10 @@ app.use((err, req, res, next) => {
 });
 
 const wss = new WebSocketServer({ server, path: '/ws/terminal' });
-const sessions = new Map();
 let sessIdCounter = 0;
 
 wss.on('connection', (ws, req) => {
-  const tabs = new Map();
-  let activeTabId = null;
+  const panes = new Map();
 
   const token = parseCookies(req.headers.cookie || '').token;
   if (!token) {
@@ -143,32 +141,26 @@ wss.on('connection', (ws, req) => {
 
   ws.send(JSON.stringify({ type: 'ready' }));
 
-  function getActiveTab() {
-    return activeTabId ? tabs.get(activeTabId) : null;
-  }
-
-  function createTab(cols, rows, explicitTabId) {
-    const tabId = explicitTabId || ('t' + (++sessIdCounter));
+  function createPane(cols, rows, explicitPaneId) {
+    const paneId = explicitPaneId || ('p' + (++sessIdCounter));
     const pty = terminal.createTerminalSession(cols, rows, { USER: req.user?.username || 'admin' });
-    const tab = { pty, tabId };
-    tabs.set(tabId, tab);
+    const pane = { pty, paneId };
+    panes.set(paneId, pane);
 
     pty.onData((data) => {
       if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: 'data', tabId, data: Buffer.from(data).toString('base64') }));
+        ws.send(JSON.stringify({ type: 'data', paneId, data: Buffer.from(data).toString('base64') }));
       }
     });
 
     pty.on('exit', () => {
       if (ws.readyState === ws.OPEN) {
-        ws.send(JSON.stringify({ type: 'exit', tabId }));
+        ws.send(JSON.stringify({ type: 'exit', paneId }));
       }
-      tabs.delete(tabId);
-      if (activeTabId === tabId) activeTabId = null;
+      panes.delete(paneId);
     });
 
-    activeTabId = tabId;
-    return tab;
+    return pane;
   }
 
   ws.on('message', (raw) => {
@@ -178,65 +170,49 @@ wss.on('connection', (ws, req) => {
       if (msg.type === 'create') {
         const cols = msg.cols || 80;
         const rows = msg.rows || 24;
-        const tab = createTab(cols, rows, msg.tabId);
-        ws.send(JSON.stringify({ type: 'created', tabId: tab.tabId, activeTabId }));
+        const pane = createPane(cols, rows, msg.paneId);
+        ws.send(JSON.stringify({ type: 'created', paneId: pane.paneId }));
         return;
       }
 
-      if (msg.type === 'create-tab') {
+      if (msg.type === 'create-pane') {
         const cols = msg.cols || 80;
         const rows = msg.rows || 24;
-        const tab = createTab(cols, rows);
-        ws.send(JSON.stringify({ type: 'tab-created', tabId: tab.tabId, activeTabId }));
+        const pane = createPane(cols, rows);
+        ws.send(JSON.stringify({ type: 'pane-created', paneId: pane.paneId }));
         return;
       }
 
-      if (msg.type === 'switch-tab') {
-        if (tabs.has(msg.tabId)) {
-          activeTabId = msg.tabId;
-          ws.send(JSON.stringify({ type: 'tab-switched', tabId: msg.tabId }));
+      if (msg.type === 'close-pane') {
+        const pane = panes.get(msg.paneId);
+        if (pane) {
+          try { pane.pty.kill('SIGHUP'); } catch (_) {}
+          panes.delete(msg.paneId);
         }
-        return;
-      }
-
-      if (msg.type === 'close-tab') {
-        const tab = tabs.get(msg.tabId);
-        if (tab) {
-          try { tab.pty.kill('SIGHUP'); } catch (_) {}
-          tabs.delete(msg.tabId);
-        }
-        if (activeTabId === msg.tabId) {
-          activeTabId = tabs.size ? tabs.keys().next().value : null;
-        }
-        ws.send(JSON.stringify({ type: 'tab-closed', tabId: msg.tabId, activeTabId }));
-        return;
-      }
-
-      if (msg.type === 'rename-tab') {
-        ws.send(JSON.stringify({ type: 'tab-renamed', tabId: msg.tabId, name: msg.name }));
+        ws.send(JSON.stringify({ type: 'pane-closed', paneId: msg.paneId }));
         return;
       }
 
       if (msg.type === 'input') {
-        const tab = msg.tabId ? tabs.get(msg.tabId) : getActiveTab();
-        if (tab) {
-          tab.pty.write(Buffer.from(msg.data, 'base64').toString());
+        const pane = msg.paneId ? panes.get(msg.paneId) : null;
+        if (pane) {
+          pane.pty.write(Buffer.from(msg.data, 'base64').toString());
         }
         return;
       }
 
       if (msg.type === 'resize') {
-        const tab = msg.tabId ? tabs.get(msg.tabId) : getActiveTab();
-        if (tab) {
-          tab.pty.resize(msg.cols || 80, msg.rows || 24);
+        const pane = msg.paneId ? panes.get(msg.paneId) : null;
+        if (pane) {
+          pane.pty.resize(msg.cols || 80, msg.rows || 24);
         }
         return;
       }
 
       if (msg.type === 'kill') {
-        const tab = getActiveTab();
-        if (tab) {
-          tab.pty.kill('SIGHUP');
+        const pane = msg.paneId ? panes.get(msg.paneId) : null;
+        if (pane) {
+          pane.pty.kill('SIGHUP');
         }
         return;
       }
@@ -244,10 +220,10 @@ wss.on('connection', (ws, req) => {
   });
 
   ws.on('close', () => {
-    tabs.forEach(tab => {
-      try { tab.pty.kill('SIGHUP'); } catch (_) {}
+    panes.forEach(pane => {
+      try { pane.pty.kill('SIGHUP'); } catch (_) {}
     });
-    tabs.clear();
+    panes.clear();
   });
 });
 
