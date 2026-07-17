@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.4.0] - 2026-07-17
+### Added
+- **PRO Terminal Core (Phase 2)**:
+  - Vendored xterm.js and all addons locally in `public/libs/` for ultimate performance and offline use
+  - True multi-session support: each PRO tab runs a separate `node-pty` session on the backend
+  - Tab bar with add, close, switch, and double-click rename
+  - Per-tab xterm instances preserving independent scrollback and state
+  - Command Palette (`Ctrl+Shift+P`) for presets, tabs, and actions
+  - In-terminal search (`Ctrl+F`) using xterm-addon-search
+  - Theme switcher with 6 themes: Catppuccin, Dracula, Solarized Dark/Light, One Dark, Nord
+  - xterm-addon-fit for proper auto-resize, xterm-addon-web-links for clickable URLs, xterm-addon-unicode11 for wide-char support, and xterm-addon-webgl for GPU rendering (with graceful fallback)
+- Extended WebSocket protocol: `create-tab`, `switch-tab`, `close-tab`, `rename-tab` with tab-scoped input/resize
+
+### Changed
+- Backend WebSocket terminal handler now manages multiple pty sessions per connection in a `tabs` Map
+- `terminal.js` completely rewritten to support Classic and PRO modes with shared connection layer
+- Cache-busting updated to `v=1.4.0`
+
 ## [1.3.0] - 2026-07-17
 ### Added
 - **Terminal Version Selector**: users can now choose between **Classic Terminal** and **PRO Terminal**

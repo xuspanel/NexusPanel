@@ -6417,6 +6417,7 @@ body::before {
   flex-shrink: 0;
   overflow-x: auto;
   scrollbar-width: thin;
+  position: relative;
 }
 
 .term-pro-tool {
@@ -6508,6 +6509,227 @@ body::before {
   box-shadow: 0 0 6px rgba(243, 139, 168, 0.5);
 }
 
+/* ─── PRO Command Palette ─── */
+.term-palette-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(6px);
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 120px;
+  z-index: 600;
+}
+
+.term-palette {
+  width: 520px;
+  max-width: 92vw;
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: 14px;
+  box-shadow: var(--glass-shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.term-palette-input {
+  width: 100%;
+  padding: 16px 18px;
+  border: none;
+  border-bottom: 1px solid var(--glass-border);
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 15px;
+  outline: none;
+  box-sizing: border-box;
+  font-family: var(--font-sans, system-ui, sans-serif);
+}
+
+.term-palette-input::placeholder {
+  color: var(--text-muted);
+}
+
+.term-palette-list {
+  max-height: 360px;
+  overflow-y: auto;
+  padding: 6px;
+}
+
+.term-palette-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+}
+
+.term-palette-item:hover,
+.term-palette-item.term-palette-selected {
+  background: rgba(137, 180, 250, 0.12);
+}
+
+.term-palette-icon {
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 6px;
+  background: rgba(205, 214, 244, 0.08);
+  color: var(--accent-cyan);
+  font-size: 13px;
+  flex-shrink: 0;
+}
+
+.term-palette-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.term-palette-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.term-palette-subtitle {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.term-palette-empty {
+  padding: 24px;
+  text-align: center;
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.term-palette-hint {
+  padding: 10px 14px;
+  border-top: 1px solid var(--glass-border);
+  font-size: 11px;
+  color: var(--text-muted);
+  text-align: center;
+}
+
+.term-palette-hint kbd {
+  background: rgba(205, 214, 244, 0.08);
+  border: 1px solid var(--glass-border);
+  border-radius: 4px;
+  padding: 1px 5px;
+  font-family: var(--font-mono, 'JetBrains Mono', monospace);
+  font-size: 10px;
+}
+
+/* ─── PRO Search Bar ─── */
+.term-search-bar {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: rgba(12, 14, 23, 0.96);
+  border: 1px solid rgba(205, 214, 244, 0.12);
+  border-radius: 10px;
+  z-index: 20;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.term-search-input {
+  width: 180px;
+  padding: 6px 10px;
+  border-radius: 6px;
+  border: 1px solid rgba(205, 214, 244, 0.1);
+  background: rgba(205, 214, 244, 0.05);
+  color: #cdd6f4;
+  font-size: 12px;
+  outline: none;
+}
+
+.term-search-input:focus {
+  border-color: rgba(137, 180, 250, 0.4);
+}
+
+.term-search-btn,
+.term-search-close {
+  background: rgba(205, 214, 244, 0.06);
+  border: 1px solid rgba(205, 214, 244, 0.1);
+  color: rgba(205, 214, 244, 0.7);
+  padding: 5px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.term-search-btn:hover,
+.term-search-close:hover {
+  background: rgba(137, 180, 250, 0.15);
+  border-color: rgba(137, 180, 250, 0.3);
+  color: #89b4fa;
+}
+
+/* ─── PRO Theme Picker ─── */
+.term-theme-picker {
+  display: none;
+  position: absolute;
+  top: 36px;
+  right: 0;
+  width: 180px;
+  background: rgba(12, 14, 23, 0.98);
+  border: 1px solid rgba(205, 214, 244, 0.1);
+  border-radius: 10px;
+  padding: 6px;
+  z-index: 30;
+  backdrop-filter: blur(16px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+}
+
+.term-theme-option {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 7px 8px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  color: #cdd6f4;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.12s ease;
+  text-align: left;
+}
+
+.term-theme-option:hover,
+.term-theme-option.active {
+  background: rgba(137, 180, 250, 0.12);
+}
+
+.term-theme-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 4px;
+  border: 1px solid;
+  flex-shrink: 0;
+}
+
+.term-theme-name {
+  text-transform: capitalize;
+}
+
 /* PRO preset panel */
 .term-pro-wrapper .term-preset-panel {
   top: 50px;
@@ -6568,6 +6790,26 @@ body::before {
     width: auto;
     max-height: 55vh;
     border-radius: 14px 14px 0 0;
+  }
+  .term-palette-overlay {
+    padding-top: 80px;
+    align-items: flex-start;
+  }
+  .term-palette {
+    width: 96vw;
+    border-radius: 12px;
+  }
+  .term-palette-list {
+    max-height: 50vh;
+  }
+  .term-search-bar {
+    top: 6px;
+    right: 6px;
+    left: 6px;
+  }
+  .term-search-input {
+    width: auto;
+    flex: 1;
   }
 }
 
@@ -8907,4 +9149,95 @@ html[data-theme] * {
 /* ── css stats progress ── */
 .stats-progress {
   margin-top: 4px;
+}
+
+/* ── Light theme PRO terminal adjustments ─── */
+[data-theme="light"] .term-pro-shell {
+  background: rgba(255, 255, 255, 0.9);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .term-pro-tabs {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .term-pro-tab {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.65);
+}
+[data-theme="light"] .term-pro-tab.active {
+  background: rgba(137, 180, 250, 0.15);
+  color: #2563eb;
+  border-color: rgba(137, 180, 250, 0.3);
+}
+[data-theme="light"] .term-pro-toolbar {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.06);
+}
+[data-theme="light"] .term-pro-tool {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.08);
+  color: rgba(0, 0, 0, 0.65);
+}
+[data-theme="light"] .term-pro-tool:hover {
+  background: rgba(137, 180, 250, 0.12);
+  border-color: rgba(137, 180, 250, 0.25);
+  color: #2563eb;
+}
+[data-theme="light"] .term-pro-statusbar {
+  background: rgba(0, 0, 0, 0.05);
+  border-color: rgba(0, 0, 0, 0.06);
+  color: rgba(0, 0, 0, 0.55);
+}
+[data-theme="light"] .term-version-toggle {
+  background: rgba(0, 0, 0, 0.04);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .term-version-btn {
+  color: rgba(0, 0, 0, 0.55);
+}
+[data-theme="light"] .term-version-btn.active {
+  color: #2563eb;
+  border-color: rgba(37, 99, 235, 0.25);
+}
+[data-theme="light"] .term-chooser-card {
+  background: rgba(0, 0, 0, 0.02);
+  border-color: rgba(0, 0, 0, 0.08);
+}
+[data-theme="light"] .term-chooser-card:hover {
+  background: rgba(137, 180, 250, 0.1);
+  border-color: rgba(137, 180, 250, 0.3);
+}
+[data-theme="light"] .term-chooser-card.term-chooser-recommended {
+  background: linear-gradient(135deg, rgba(137, 180, 250, 0.1), rgba(6, 182, 212, 0.06));
+}
+[data-theme="light"] .term-chooser-name {
+  color: rgba(0, 0, 0, 0.85);
+}
+[data-theme="light"] .term-chooser-desc,
+[data-theme="light"] .term-chooser-remember {
+  color: rgba(0, 0, 0, 0.55);
+}
+[data-theme="light"] .term-palette-overlay {
+  background: rgba(255, 255, 255, 0.65);
+}
+[data-theme="light"] .term-search-bar {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(0, 0, 0, 0.12);
+}
+[data-theme="light"] .term-search-input {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: rgba(0, 0, 0, 0.1);
+  color: rgba(0, 0, 0, 0.85);
+}
+[data-theme="light"] .term-theme-picker {
+  background: rgba(255, 255, 255, 0.98);
+  border-color: rgba(0, 0, 0, 0.1);
+}
+[data-theme="light"] .term-theme-option {
+  color: rgba(0, 0, 0, 0.8);
+}
+[data-theme="light"] .term-theme-option:hover,
+[data-theme="light"] .term-theme-option.active {
+  background: rgba(137, 180, 250, 0.12);
 }
