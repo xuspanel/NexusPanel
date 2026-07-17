@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.5.0] - 2026-07-17
+### Added
+- **PRO Terminal Productivity (Phase 3)**:
+  - Categorized command presets: System, Docker, Files, Network, Database, Custom
+  - Preset edit support: click the pencil icon to modify label, command, and category
+  - PRO preset panel now groups presets by category with collapsible sections and search filtering
+  - Command palette groups presets under category headers with indented items
+  - PRO session restore: open tab names are saved to `localStorage` and restored on next visit (shell state is not persisted for security)
+  - Terminal buffer download: save active terminal output as a `.log` file
+- Backend preset service now supports a `category` field and auto-migrates existing presets to "Custom"
+- API support for preset category in `addPreset` and `updatePreset`
+
+### Changed
+- `public/js/terminal.js` updated with categorized presets, edit flow, session restore, and buffer download
+- `public/index.html` updated with category selects and download toolbar button
+- Cache-busting bumped to `v=1.5.0` for changed assets
+
 ## [1.4.0] - 2026-07-17
 ### Added
 - **PRO Terminal Core (Phase 2)**:

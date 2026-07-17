@@ -11,9 +11,9 @@ router.get('/presets', (req, res) => {
 
 router.post('/presets', (req, res) => {
   try {
-    const { label, cmd } = req.body;
+    const { label, cmd, category } = req.body;
     if (!label || !cmd) return res.status(400).json({ error: 'Label and cmd are required' });
-    const preset = terminal.addPreset(label, cmd);
+    const preset = terminal.addPreset(label, cmd, category);
     res.json(preset);
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -22,9 +22,9 @@ router.post('/presets', (req, res) => {
 
 router.put('/presets/:id', (req, res) => {
   try {
-    const { label, cmd } = req.body;
+    const { label, cmd, category } = req.body;
     if (!label || !cmd) return res.status(400).json({ error: 'Label and cmd are required' });
-    const preset = terminal.updatePreset(req.params.id, label, cmd);
+    const preset = terminal.updatePreset(req.params.id, label, cmd, category);
     res.json(preset);
   } catch (err) {
     res.status(500).json({ error: err.message });

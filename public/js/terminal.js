@@ -10,10 +10,22 @@ let activeTabId = null;
 let searchOpen = false;
 let commandPaletteOpen = false;
 let presetsCache = [];
+let editingPresetId = null;
 
 const VERSION_KEY = 'nexus-terminal-version';
 const PRO_FONT_KEY = 'nexus-terminal-pro-font';
 const PRO_THEME_KEY = 'nexus-terminal-pro-theme';
+const PRO_TABS_KEY = 'nexus-terminal-pro-tabs';
+
+const PRESET_CATEGORIES = ['System', 'Docker', 'Files', 'Network', 'Database', 'Custom'];
+const PRESET_ICONS = {
+  System: '&#x2699;',
+  Docker: '&#x1F433;',
+  Files: '&#x1F4C1;',
+  Network: '&#x1F310;',
+  Database: '&#x1F4BE;',
+  Custom: '&#x2726;',
+};
 
 const NANO_ACTIONS = [
   { label: 'Save', keys: '^O', ctrl: 'o', desc: 'WriteOut' },
@@ -277,6 +289,8 @@ function initProEvents() {
   if (clearBtn) clearBtn.addEventListener('click', clearActiveTerminal);
   const reconnect = document.getElementById('termProReconnect');
   if (reconnect) reconnect.addEventListener('click', reconnectTerminal);
+  const downloadBtn = document.getElementById('termProDownload');
+  if (downloadBtn) downloadBtn.addEventListener('click', downloadActiveBuffer);
   const presetToggle = document.getElementById('termProPresets');
   if (presetToggle) {
     presetToggle.addEventListener('click', () => {
@@ -334,6 +348,14 @@ function initProEvents() {
       closeSearchBar();
     }
   });
+
+  document.addEventListener('click', (e) => {
+    const picker = document.getElementById('termThemePicker');
+    const themeBtn = document.getElementById('termProTheme');
+    if (picker && picker.style.display === 'block' && !picker.contains(e.target) && e.target !== themeBtn) {
+      picker.style.display = 'none';
+    }
+  });
 }
 
 function isTypingInInput() {
@@ -375,6 +397,27 @@ function adjustProFontSize(delta) {
   updateProStatusDims();
 }
 
+function downloadActiveBuffer() {
+  const t = tabs.find(x => x.id === activeTabId);
+  if (!t || !t.term) return;
+  const buffer = t.term.buffer.active;
+  const lines = [];
+  for (let i = 0; i < buffer.length; i++) {
+    lines.push(buffer.getLine(i).translateToString(true));
+  }
+  const blob = new Blob([lines.join('\n')], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `terminal-${t.name.replace(/\s+/g, '_')}-${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.log`;
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(() => {
+    URL.revokeObjectURL(url);
+    a.remove();
+  }, 100);
+}
+
 async function loadPresets() {
   try {
     presetsCache = await API.terminal.presets();
@@ -389,12 +432,27 @@ function renderTermPresets(presets, suffix) {
   const listId = suffix === 'pro' ? 'termProPresetList' : 'termPresetList';
   const list = document.getElementById(listId);
   if (!list) return;
-  list.innerHTML = presets.map(p => `
-    <div class="term-preset-item" data-id="${escHtml(p.id)}">
-      <button class="term-preset-btn" data-cmd="${escHtml(p.cmd)}">${escHtml(p.label)}</button>
-      <button class="term-preset-del" data-id="${escHtml(p.id)}" title="Delete preset">&times;</button>
-    </div>
-  `).join('');
+
+  if (suffix === 'pro') {
+    list.innerHTML = PRESET_CATEGORIES.map(cat => {
+      const items = presets.filter(p => p.category === cat);
+      if (!items.length) return '';
+      return `
+        <div class="term-preset-group" data-category="${escHtml(cat)}">
+          <div class="term-preset-group-header">
+            <span class="term-preset-group-icon">${PRESET_ICONS[cat] || '&#x2726;'}</span>
+            <span class="term-preset-group-name">${escHtml(cat)}</span>
+            <span class="term-preset-group-count">${items.length}</span>
+          </div>
+          <div class="term-preset-group-items">
+            ${items.map(p => renderPresetItem(p)).join('')}
+          </div>
+        </div>
+      `;
+    }).join('');
+  } else {
+    list.innerHTML = presets.map(p => renderPresetItem(p)).join('');
+  }
 
   list.querySelectorAll('.term-preset-btn').forEach(btn => {
     btn.addEventListener('click', () => {
@@ -406,14 +464,39 @@ function renderTermPresets(presets, suffix) {
     });
   });
 
+  list.querySelectorAll('.term-preset-edit').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      editPreset(btn.dataset.id);
+    });
+  });
+
   list.querySelectorAll('.term-preset-del').forEach(btn => {
-    btn.addEventListener('click', async () => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
       if (confirm('Delete this preset?')) {
         await API.terminal.deletePreset(btn.dataset.id);
         await loadPresets();
       }
     });
   });
+
+  list.querySelectorAll('.term-preset-group-header').forEach(header => {
+    header.addEventListener('click', () => {
+      const group = header.parentElement;
+      group.classList.toggle('collapsed');
+    });
+  });
+}
+
+function renderPresetItem(p) {
+  return `
+    <div class="term-preset-item" data-id="${escHtml(p.id)}">
+      <button class="term-preset-btn" data-cmd="${escHtml(p.cmd)}" title="${escHtml(p.cmd)}">${escHtml(p.label)}</button>
+      <button class="term-preset-edit" data-id="${escHtml(p.id)}" title="Edit preset">&#x270E;</button>
+      <button class="term-preset-del" data-id="${escHtml(p.id)}" title="Delete preset">&times;</button>
+    </div>
+  `;
 }
 
 function filterPresets(suffix) {
@@ -421,19 +504,58 @@ function filterPresets(suffix) {
   const input = document.getElementById(searchId);
   const q = input ? input.value.toLowerCase() : '';
   const listId = suffix === 'pro' ? 'termProPresetList' : 'termPresetList';
-  document.querySelectorAll('#' + listId + ' .term-preset-item').forEach(el => {
-    const btn = el.querySelector('.term-preset-btn');
-    el.style.display = btn && btn.textContent.toLowerCase().includes(q) ? '' : 'none';
-  });
+  const list = document.getElementById(listId);
+  if (!list) return;
+
+  if (suffix === 'pro') {
+    list.querySelectorAll('.term-preset-group').forEach(group => {
+      let visible = 0;
+      group.querySelectorAll('.term-preset-item').forEach(el => {
+        const btn = el.querySelector('.term-preset-btn');
+        const match = !q || (btn && (btn.textContent.toLowerCase().includes(q) || btn.title.toLowerCase().includes(q)));
+        el.style.display = match ? '' : 'none';
+        if (match) visible++;
+      });
+      group.style.display = visible ? '' : 'none';
+    });
+  } else {
+    document.querySelectorAll('#' + listId + ' .term-preset-item').forEach(el => {
+      const btn = el.querySelector('.term-preset-btn');
+      el.style.display = btn && (btn.textContent.toLowerCase().includes(q) || btn.title.toLowerCase().includes(q)) ? '' : 'none';
+    });
+  }
 }
 
 function showAddPreset(suffix) {
+  editingPresetId = null;
   const formId = suffix === 'pro' ? 'termProPresetForm' : 'termPresetForm';
   const labelId = suffix === 'pro' ? 'termProPresetLabel' : 'termPresetLabel';
   const cmdId = suffix === 'pro' ? 'termProPresetCmd' : 'termPresetCmd';
+  const catId = suffix === 'pro' ? 'termProPresetCategory' : 'termPresetCategory';
+  const saveId = suffix === 'pro' ? 'termProPresetSave' : 'termPresetSave';
   document.getElementById(formId).classList.add('open');
   document.getElementById(labelId).value = '';
   document.getElementById(cmdId).value = '';
+  document.getElementById(catId).value = 'Custom';
+  document.getElementById(saveId).textContent = 'Save';
+  document.getElementById(labelId).focus();
+}
+
+function editPreset(id) {
+  const p = presetsCache.find(x => x.id === id);
+  if (!p) return;
+  editingPresetId = id;
+  const suffix = currentVersion === 'pro' ? 'pro' : '';
+  const formId = suffix ? 'termProPresetForm' : 'termPresetForm';
+  const labelId = suffix ? 'termProPresetLabel' : 'termPresetLabel';
+  const cmdId = suffix ? 'termProPresetCmd' : 'termPresetCmd';
+  const catId = suffix ? 'termProPresetCategory' : 'termPresetCategory';
+  const saveId = suffix ? 'termProPresetSave' : 'termPresetSave';
+  document.getElementById(formId).classList.add('open');
+  document.getElementById(labelId).value = p.label;
+  document.getElementById(cmdId).value = p.cmd;
+  document.getElementById(catId).value = p.category || 'Custom';
+  document.getElementById(saveId).textContent = 'Update';
   document.getElementById(labelId).focus();
 }
 
@@ -442,22 +564,46 @@ function hidePresetForm() {
   const formId = suffix ? 'termProPresetForm' : 'termPresetForm';
   const el = document.getElementById(formId);
   if (el) el.classList.remove('open');
+  editingPresetId = null;
 }
 
 async function savePreset() {
   const suffix = currentVersion === 'pro' ? 'pro' : '';
   const labelId = suffix ? 'termProPresetLabel' : 'termPresetLabel';
   const cmdId = suffix ? 'termProPresetCmd' : 'termPresetCmd';
+  const catId = suffix ? 'termProPresetCategory' : 'termPresetCategory';
   const label = document.getElementById(labelId).value.trim();
   const cmd = document.getElementById(cmdId).value.trim();
+  const category = document.getElementById(catId).value;
   if (!label || !cmd) { alert('Label and command are required.'); return; }
   try {
-    await API.terminal.addPreset(label, cmd);
+    if (editingPresetId) {
+      await API.terminal.updatePreset(editingPresetId, label, cmd, category);
+    } else {
+      await API.terminal.addPreset(label, cmd, category);
+    }
     hidePresetForm();
     await loadPresets();
   } catch (err) {
     alert('Failed to save preset: ' + err.message);
   }
+}
+
+function saveProTabs() {
+  if (currentVersion !== 'pro') return;
+  const data = tabs.map(t => ({ name: t.name }));
+  localStorage.setItem(PRO_TABS_KEY, JSON.stringify(data));
+}
+
+function restoreProTabs() {
+  if (currentVersion !== 'pro') return [];
+  try {
+    const raw = localStorage.getItem(PRO_TABS_KEY);
+    if (!raw) return [];
+    const data = JSON.parse(raw);
+    if (Array.isArray(data) && data.length) return data;
+  } catch (_) {}
+  return [];
 }
 
 function connectWebSocket() {
@@ -491,14 +637,12 @@ function connectWebSocket() {
         const t = tabs.find(x => x.id === msg.tabId);
         if (t) {
           t.ready = true;
+          showTermContent();
           if (currentVersion === 'pro') {
-            showTermContent();
             updateProStatusConn(true);
-            focusActiveTerminal();
-          } else {
-            showTermContent();
-            focusActiveTerminal();
+            updateProStatusDims();
           }
+          focusActiveTerminal();
         }
       } else if (msg.type === 'data') {
         const t = tabs.find(x => x.id === msg.tabId);
@@ -526,6 +670,7 @@ function connectWebSocket() {
         if (t) {
           t.name = msg.name;
           updateProTabs();
+          saveProTabs();
         }
       }
     } catch (_) {}
@@ -563,11 +708,17 @@ function createInitialTab() {
   const panes = document.getElementById('termProPanes');
   if (!panes) return;
   panes.innerHTML = '';
-  createProTab('Session 1', true);
+
+  const restored = restoreProTabs();
+  if (restored.length) {
+    restored.forEach((data, idx) => createProTab(data.name, idx === 0, true));
+  } else {
+    createProTab('Session 1', true, true);
+  }
   connectWebSocket();
 }
 
-function createProTab(name, isInitial) {
+function createProTab(name, isInitial, skipConnect) {
   const panes = document.getElementById('termProPanes');
   if (!panes) return null;
   const container = document.createElement('div');
@@ -578,8 +729,9 @@ function createProTab(name, isInitial) {
   tabs.push(tab);
   activeTabId = tab.id;
   updateProTabs();
+  saveProTabs();
 
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (!skipConnect && ws && ws.readyState === WebSocket.OPEN) {
     createPtyForTab(tab);
   }
   return tab;
@@ -693,6 +845,7 @@ function closeProTab(tabId) {
     ws.send(JSON.stringify({ type: 'close-tab', tabId }));
   }
   updateProTabs();
+  saveProTabs();
   if (activeTabId) {
     switchProTab(activeTabId);
   } else {
@@ -708,6 +861,7 @@ function renameProTab(tabId, newName) {
     ws.send(JSON.stringify({ type: 'rename-tab', tabId, name: t.name }));
   }
   updateProTabs();
+  saveProTabs();
 }
 
 function updateProTabs() {
@@ -826,6 +980,7 @@ function openCommandPalette() {
   const input = el.querySelector('.term-palette-input');
   input.value = '';
   input.focus();
+  paletteSelIdx = -1;
   renderCommandPalette();
 }
 
@@ -841,15 +996,22 @@ function getPaletteItems() {
   items.push({ type: 'action', id: 'close-tab', icon: 'x', title: 'Close active tab', subtitle: 'Close ' + (tabs.find(t => t.id === activeTabId)?.name || 'current tab'), action: () => closeProTab(activeTabId) });
   items.push({ type: 'action', id: 'clear', icon: 'C', title: 'Clear terminal', subtitle: 'Clear active terminal screen', action: clearActiveTerminal });
   items.push({ type: 'action', id: 'reconnect', icon: 'R', title: 'Reconnect', subtitle: 'Restart terminal connection', action: reconnectTerminal });
+  items.push({ type: 'action', id: 'download', icon: '&#x1F4BE;', title: 'Download buffer', subtitle: 'Save terminal output to file', action: downloadActiveBuffer });
   items.push({ type: 'action', id: 'toggle-search', icon: 'S', title: 'Search terminal', subtitle: 'Find text in terminal output', action: toggleSearchBar });
 
-  presetsCache.forEach(p => {
-    items.push({ type: 'preset', id: 'preset-' + p.id, icon: '&#x2699;', title: p.label, subtitle: p.cmd, action: () => {
-      if (termReady() && ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify({ type: 'input', tabId: activeTabId, data: btoa(p.cmd + '\n') }));
-        focusActiveTerminal();
-      }
-    }});
+  PRESET_CATEGORIES.forEach(cat => {
+    const catPresets = presetsCache.filter(p => p.category === cat);
+    if (catPresets.length) {
+      items.push({ type: 'category', id: 'cat-' + cat, icon: PRESET_ICONS[cat] || '&#x2726;', title: cat, subtitle: catPresets.length + ' preset' + (catPresets.length === 1 ? '' : 's'), action: null });
+      catPresets.forEach(p => {
+        items.push({ type: 'preset', id: 'preset-' + p.id, icon: '&#x25B8;', title: p.label, subtitle: p.cmd, indent: true, action: () => {
+          if (termReady() && ws && ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify({ type: 'input', tabId: activeTabId, data: btoa(p.cmd + '\n') }));
+            focusActiveTerminal();
+          }
+        }});
+      });
+    }
   });
 
   tabs.forEach(t => {
@@ -865,7 +1027,9 @@ function renderCommandPalette() {
   const input = el.querySelector('.term-palette-input');
   const list = el.querySelector('.term-palette-list');
   const q = input.value.toLowerCase().trim();
-  const items = getPaletteItems().filter(it => {
+  const allItems = getPaletteItems();
+  const items = allItems.filter(it => {
+    if (it.type === 'category') return false;
     return !q || it.title.toLowerCase().includes(q) || it.subtitle.toLowerCase().includes(q);
   });
 
@@ -875,7 +1039,7 @@ function renderCommandPalette() {
   }
 
   list.innerHTML = items.map((it, idx) => `
-    <div class="term-palette-item" data-idx="${idx}">
+    <div class="term-palette-item${it.indent ? ' term-palette-indent' : ''}" data-idx="${idx}">
       <span class="term-palette-icon">${it.icon}</span>
       <div class="term-palette-info">
         <div class="term-palette-title">${escHtml(it.title)}</div>
@@ -888,7 +1052,7 @@ function renderCommandPalette() {
     item.addEventListener('click', () => {
       const idx = parseInt(item.dataset.idx, 10);
       const selected = items[idx];
-      if (selected) {
+      if (selected && selected.action) {
         closeCommandPalette();
         selected.action();
       }

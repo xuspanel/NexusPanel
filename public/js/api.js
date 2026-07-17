@@ -99,8 +99,8 @@ const API = {
   },
   terminal: {
     presets: () => API.request('GET', '/terminal/presets'),
-    addPreset: (label, cmd) => API.request('POST', '/terminal/presets', { label, cmd }),
-    updatePreset: (id, label, cmd) => API.request('PUT', '/terminal/presets/' + encodeURIComponent(id), { label, cmd }),
+    addPreset: (label, cmd, category) => API.request('POST', '/terminal/presets', { label, cmd, category }),
+    updatePreset: (id, label, cmd, category) => API.request('PUT', '/terminal/presets/' + encodeURIComponent(id), { label, cmd, category }),
     deletePreset: (id) => API.request('DELETE', '/terminal/presets/' + encodeURIComponent(id)),
   },
   ftp: {

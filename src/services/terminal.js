@@ -8,7 +8,16 @@ const PRESETS_FILE = path.join(__dirname, '..', '..', 'data', 'terminal-presets.
 function loadPresets() {
   try {
     if (fs.existsSync(PRESETS_FILE)) {
-      return JSON.parse(fs.readFileSync(PRESETS_FILE, 'utf8'));
+      const presets = JSON.parse(fs.readFileSync(PRESETS_FILE, 'utf8'));
+      let changed = false;
+      presets.forEach(p => {
+        if (!p.category) {
+          p.category = 'Custom';
+          changed = true;
+        }
+      });
+      if (changed) savePresets(presets);
+      return presets;
     }
   } catch (_) {}
   return [];
@@ -22,19 +31,27 @@ function getPresets() {
   return loadPresets();
 }
 
-function addPreset(label, cmd) {
-  const presets = loadPresets();
-  const id = 'p' + Date.now();
-  presets.push({ id, label, cmd });
-  savePresets(presets);
-  return { id, label, cmd };
+const PRESET_CATEGORIES = ['System', 'Docker', 'Files', 'Network', 'Database', 'Custom'];
+
+function normalizeCategory(cat) {
+  const c = String(cat || 'Custom').trim();
+  const match = PRESET_CATEGORIES.find(x => x.toLowerCase() === c.toLowerCase());
+  return match || 'Custom';
 }
 
-function updatePreset(id, label, cmd) {
+function addPreset(label, cmd, category) {
+  const presets = loadPresets();
+  const id = 'p' + Date.now();
+  presets.push({ id, label, cmd, category: normalizeCategory(category) });
+  savePresets(presets);
+  return presets[presets.length - 1];
+}
+
+function updatePreset(id, label, cmd, category) {
   const presets = loadPresets();
   const idx = presets.findIndex(p => p.id === id);
   if (idx === -1) throw new Error('Preset not found');
-  presets[idx] = { ...presets[idx], label, cmd };
+  presets[idx] = { ...presets[idx], label, cmd, category: normalizeCategory(category) };
   savePresets(presets);
   return presets[idx];
 }

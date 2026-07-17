@@ -5,14 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NexusPanel — VPS Control Center</title>
   <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('nx-theme') || 'dark');</script>
-  <link rel="stylesheet" href="/css/style.css?v=1.4.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.5.0">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>">
   <link rel="stylesheet" href="/libs/xterm.css?v=1.4.0">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-language_tools.js"></script>
   <script defer src="/js/theme.js?v=1.1.0"></script>
-  <script defer src="/js/api.js?v=1.1.0"></script>
+  <script defer src="/js/api.js?v=1.5.0"></script>
   <script defer src="/js/auth.js?v=1.1.0"></script>
   <script defer src="/js/dashboard.js?v=1.1.0"></script>
   <script defer src="/js/profile.js?v=1.1.0"></script>
@@ -26,7 +26,7 @@
   <script defer src="/libs/xterm-addon-web-links.js?v=1.4.0"></script>
   <script defer src="/libs/xterm-addon-webgl.js?v=1.4.0"></script>
   <script defer src="/libs/xterm-addon-unicode11.js?v=1.4.0"></script>
-  <script defer src="/js/terminal.js?v=1.4.0"></script>
+  <script defer src="/js/terminal.js?v=1.5.0"></script>
   <script defer src="/js/users.js?v=1.1.0"></script>
   <script defer src="/js/ftp.js?v=1.1.0"></script>
   <script defer src="/js/domains.js?v=1.1.0"></script>
@@ -42,7 +42,7 @@
   <script defer src="/js/ssl.js?v=1.1.0"></script>
   <script defer src="/js/phpfpm.js?v=1.1.0"></script>
   <script defer src="/js/updates.js?v=1.1.0"></script>
-  <script defer src="/js/settings.js?v=1.4.0"></script>
+  <script defer src="/js/settings.js?v=1.5.0"></script>
   <script defer src="/js/search.js?v=1.1.0"></script>
   <script defer src="/js/notifications.js?v=1.1.0"></script>
 
@@ -1152,6 +1152,14 @@
           <div id="termPresetForm" class="term-preset-form">
             <input id="termPresetLabel" type="text" placeholder="Label (e.g. Docker PS)">
             <input id="termPresetCmd" type="text" placeholder="Command (e.g. docker ps -a)">
+            <select id="termPresetCategory" class="term-preset-category">
+              <option value="System">System</option>
+              <option value="Docker">Docker</option>
+              <option value="Files">Files</option>
+              <option value="Network">Network</option>
+              <option value="Database">Database</option>
+              <option value="Custom" selected>Custom</option>
+            </select>
             <div class="term-preset-form-actions">
               <button id="termPresetSave" class="fm-btn fm-btn-primary fm-btn-sm">Save</button>
               <button id="termPresetCancel" class="fm-btn fm-btn-sm">Cancel</button>
@@ -1177,6 +1185,7 @@
             <button class="term-pro-tool" id="termProTheme" title="Theme">&#x1F3A8;</button>
             <button class="term-pro-tool" id="termProFontDec" title="Decrease font size">A-</button>
             <button class="term-pro-tool" id="termProFontInc" title="Increase font size">A+</button>
+            <button class="term-pro-tool" id="termProDownload" title="Download buffer">&#x1F4BE;</button>
             <button class="term-pro-tool" id="termProClear" title="Clear">&#x1F5D1;</button>
             <button class="term-pro-tool" id="termProReconnect" title="Reconnect">&#x21BB;</button>
           </div>
@@ -1206,6 +1215,14 @@
           <div id="termProPresetForm" class="term-preset-form">
             <input id="termProPresetLabel" type="text" placeholder="Label (e.g. Docker PS)">
             <input id="termProPresetCmd" type="text" placeholder="Command (e.g. docker ps -a)">
+            <select id="termProPresetCategory" class="term-preset-category">
+              <option value="System">System</option>
+              <option value="Docker">Docker</option>
+              <option value="Files">Files</option>
+              <option value="Network">Network</option>
+              <option value="Database">Database</option>
+              <option value="Custom" selected>Custom</option>
+            </select>
             <div class="term-preset-form-actions">
               <button id="termProPresetSave" class="fm-btn fm-btn-primary fm-btn-sm">Save</button>
               <button id="termProPresetCancel" class="fm-btn fm-btn-sm">Cancel</button>
