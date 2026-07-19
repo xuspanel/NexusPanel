@@ -1,9 +1,13 @@
 # Changelog
 
+## [1.9.3] - 2026-07-19
+### Fixed
+- **SQL Query Terminal status message**: execution time (`<span class="db-meta">· 7ms</span>`) is now rendered as HTML instead of being displayed as literal text for non-SELECT results
+
 ## [1.9.2] - 2026-07-19
 ### Fixed
 - **Critical navigation loop bug**: `dbNavigate()` no longer calls `dbApplyRoute()`, preventing infinite pushState/apply loops that caused rapid-fire API requests and 429 rate-limit errors
-- **Nav rail links**: Home / Manage / Query / Search shortcuts now call the correct view functions directly
+- **Nav rail links**: Home / Manage / Query / Search shortcuts now call the view functions directly
 - **Connections auto-refresh timer**: cleared when the modal closes to avoid leaking background requests
 
 ## [1.9.1] - 2026-07-19

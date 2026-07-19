@@ -2056,8 +2056,8 @@ function renderQueryResults(container, result) {
     var cls = result.affectedRows !== undefined ? 'db-query-status db-query-status-mutate' : 'db-query-status db-query-status-success';
     var msg = result.message || result.command + ' completed';
     if (result.affectedRows !== undefined) msg = result.affectedRows + ' row' + (result.affectedRows !== 1 ? 's' : '') + ' affected';
-    if (result.executionTimeMs != null) msg += ' <span class="db-meta">· ' + result.executionTimeMs + 'ms</span>';
-    container.innerHTML = '<div class="' + cls + '"><span class="db-query-status-icon">' + icon + '</span> ' + esc(msg) + '</div>';
+    var timeStr = result.executionTimeMs != null ? ' <span class="db-meta">· ' + result.executionTimeMs + 'ms</span>' : '';
+    container.innerHTML = '<div class="' + cls + '"><span class="db-query-status-icon">' + icon + '</span> ' + esc(msg) + timeStr + '</div>';
   }
 }
 
