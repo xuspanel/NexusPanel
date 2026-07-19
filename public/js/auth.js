@@ -117,7 +117,12 @@ document.addEventListener('DOMContentLoaded', async () => {
   });
 
   window.addEventListener('popstate', function (e) {
-    const view = (e.state && e.state.view) || 'dashboard';
+    const state = e.state;
+    if (state && state.view === 'databases' && state.dbSub && window.dbRestoreState) {
+      window.dbRestoreState(state.dbSub);
+      return;
+    }
+    const view = (state && state.view) || 'dashboard';
     switchView(view);
   });
 

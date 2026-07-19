@@ -9125,8 +9125,11 @@ body::before {
 .db-data-th { cursor:pointer; user-select:none; }
 .db-data-th:hover { background:rgba(255,255,255,0.08); }
 .db-data-th-actions { width:60px; text-align:center; }
-.db-data-cell { cursor:pointer; }
+.db-data-cell { cursor:pointer; position:relative; padding-right:22px; }
 .db-data-cell:hover { background:rgba(255,255,255,0.03); }
+.db-data-cell:hover .db-cell-copy { opacity:0.6; }
+.db-cell-copy { position:absolute; right:4px; top:50%; transform:translateY(-50%); opacity:0; font-size:11px; cursor:pointer; padding:2px 4px; border-radius:3px; transition:opacity 0.15s; }
+.db-cell-copy:hover { opacity:1 !important; background:rgba(255,255,255,0.1); }
 .db-data-cell-actions { text-align:center; white-space:nowrap; }
 .db-data-toolbar { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:8px; flex-wrap:wrap; }
 .db-data-search { display:flex; align-items:center; gap:6px; flex:1; min-width:180px; }
@@ -9202,6 +9205,18 @@ body::before {
 .db-query-status-success { color:var(--accent-green); }
 .db-query-status-mutate { color:#f59e0b; }
 .db-query-status-icon { margin-right:6px; }
+.db-explain-tree { padding:12px; font-family:var(--font-mono); font-size:12px; }
+.db-explain-node { margin:2px 0; }
+.db-explain-header { display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:4px 6px; border-radius:4px; background:rgba(255,255,255,0.02); }
+.db-explain-toggle { cursor:pointer; user-select:none; font-size:10px; color:var(--text-tertiary); }
+.db-explain-type { font-weight:600; color:var(--text-primary); }
+.db-explain-metric { color:var(--text-secondary); font-size:11px; }
+.db-explain-pct { color:var(--text-tertiary); font-size:11px; }
+.db-explain-expensive > .db-explain-header { background:rgba(239,68,68,0.12); border-left:3px solid #ef4444; }
+.db-explain-expensive .db-explain-pct { color:#f87171; font-weight:700; }
+.db-explain-moderate > .db-explain-header { background:rgba(245,158,11,0.12); border-left:3px solid #f59e0b; }
+.db-explain-moderate .db-explain-pct { color:#fbbf24; font-weight:700; }
+.db-explain-node.collapsed .db-explain-children { display:none; }
 .db-query-history-item { padding:8px 12px; border-bottom:1px solid var(--glass-border); cursor:pointer; transition:all 0.15s; }
 .db-query-history-item:hover { background:rgba(255,255,255,0.04); }
 .db-query-history-item code { font-size:12px; color:var(--text-secondary); }

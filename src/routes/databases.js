@@ -37,6 +37,86 @@ router.get('/list', async (req, res) => {
   }
 });
 
+router.get('/query-presets', (req, res) => {
+  res.json([
+    { category: 'Explore', label: 'All rows (50 limit)', sql: 'SELECT * FROM <table> LIMIT 50' },
+    { category: 'Explore', label: 'Count rows', sql: 'SELECT COUNT(*) AS total FROM <table>' },
+    { category: 'Explore', label: 'List columns (INFORMATION_SCHEMA)', sql: "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '<table>' ORDER BY ordinal_position" },
+    { category: 'Explore', label: 'Distinct values in column', sql: 'SELECT DISTINCT <column> FROM <table> ORDER BY 1' },
+    { category: 'Explore', label: 'Browse schemas', sql: "SELECT nspname AS schema, pg_catalog.pg_get_userbyid(nspowner) AS owner FROM pg_catalog.pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema' ORDER BY nspname" },
+    { category: 'Analyze', label: 'Table sizes', sql: "SELECT schemaname, tablename, pg_total_relation_size(schemaname||'.'||tablename) AS total_bytes, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS pretty_size FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','pg_toast') ORDER BY total_bytes DESC" },
+    { category: 'Analyze', label: 'Row estimates per table', sql: "SELECT schemaname, tablename, n_live_tup AS estimated_rows FROM pg_stat_user_tables ORDER BY n_live_tup DESC" },
+    { category: 'Analyze', label: 'Active connections', sql: "SELECT pid, usename, application_name, client_addr, state, query_start, LEFT(query, 80) AS query_preview FROM pg_stat_activity WHERE state != 'idle' ORDER BY query_start DESC" },
+    { category: 'Analyze', label: 'Database size', sql: "SELECT pg_database_size(current_database()) AS bytes, pg_size_pretty(pg_database_size(current_database())) AS pretty" },
+    { category: 'Analyze', label: 'Slow queries (>1s)', sql: "SELECT pid, usename, query, state, NOW() - query_start AS duration FROM pg_stat_activity WHERE state = 'active' AND NOW() - query_start > interval '1 second' ORDER BY duration DESC" },
+    { category: 'Schema', label: 'List all tables', sql: "SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','pg_toast') ORDER BY schemaname, tablename" },
+    { category: 'Schema', label: 'List indexes', sql: "SELECT schemaname, tablename, indexname, indexdef FROM pg_catalog.pg_indexes WHERE schemaname NOT IN ('pg_catalog','information_schema','pg_toast') ORDER BY schemaname, tablename, indexname" },
+    { category: 'Schema', label: 'Create table', sql: 'CREATE TABLE <table> (\n  id SERIAL PRIMARY KEY,\n  name VARCHAR(255) NOT NULL,\n  created_at TIMESTAMPTZ DEFAULT NOW()\n);' },
+    { category: 'Schema', label: 'Add column', sql: 'ALTER TABLE <table> ADD COLUMN <column> <type>;' },
+    { category: 'Schema', label: 'Create index', sql: 'CREATE INDEX idx_<table>_<column> ON <table> (<column>);' },
+    { category: 'Schema', label: 'Drop table (CASCADE)', sql: 'DROP TABLE <table> CASCADE;' },
+    { category: 'System', label: 'PostgreSQL version', sql: 'SELECT version();' },
+    { category: 'System', label: 'Current time', sql: 'SELECT NOW();' },
+    { category: 'System', label: 'Active locks', sql: "SELECT l.locktype, l.database, l.relation, l.page, l.tuple, l.virtualtransaction, l.pid, l.mode, l.granted, a.query FROM pg_locks l LEFT JOIN pg_stat_activity a ON l.pid = a.pid WHERE NOT l.database IS NULL ORDER BY l.pid" },
+    { category: 'System', label: 'Vacuum info', sql: "SELECT schemaname, tablename, last_vacuum, last_autovacuum, last_analyze, last_autoanalyze, vacuum_count, autovacuum_count FROM pg_stat_user_tables ORDER BY last_autovacuum NULLS LAST" },
+  ]);
+});
+
+router.post('/create', async (req, res) => {
+  try {
+    const { name, owner, encoding, template, connLimit, comment } = req.body;
+    if (!name) return res.status(400).json({ error: 'Database name required' });
+    const result = await db.createDatabase(name, owner, encoding, template, connLimit);
+    if (comment) {
+      await db.exec('postgres', `COMMENT ON DATABASE ${db.quoteIdent(name)} IS ${db.quoteLiteral(comment)}`);
+    }
+    res.status(201).json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.post('/query-run', async (req, res) => {
+  try {
+    const { db: database, query } = req.body;
+    if (!database || !query) return res.status(400).json({ error: 'Database and query are required' });
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const start = Date.now();
+    const result = await db.runQuery(database, query);
+    const executionTimeMs = Date.now() - start;
+    const firstWord = query.trim().split(/\s+/)[0].toUpperCase();
+    if (result.rows !== undefined) {
+      res.json({ command: result.command || firstWord, columns: result.fields?.map(f => f.name) || [], rows: result.rows, rowCount: result.rowCount, executionTimeMs });
+    } else {
+      res.json({ command: result.command || firstWord, affectedRows: result.rowCount || 0, message: `${result.command || firstWord} ${result.rowCount || 0}`, executionTimeMs });
+    }
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.get('/bookmarks', async (req, res) => {
+  try {
+    const database = req.query.db || '';
+    const bookmarks = await db.listBookmarks(database);
+    res.json(bookmarks);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/bookmarks', async (req, res) => {
+  try {
+    const { database, label, sql } = req.body;
+    if (!label || !sql) return res.status(400).json({ error: 'Label and SQL required' });
+    const result = await db.createBookmark(database || 'postgres', label, sql);
+    res.status(201).json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/bookmarks/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+    const result = await db.deleteBookmark(id);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 router.get('/:db/tables', async (req, res) => {
   try {
     const { db: database } = req.params;
@@ -47,7 +127,7 @@ router.get('/:db/tables', async (req, res) => {
       tablename: r.table_name,
       column_count: r.column_count,
       row_count: r.approx_row_count || 0,
-      size_formatted: '—',
+      size_formatted: r.size_formatted || '—',
     }));
     res.json(result);
   } catch (err) {
@@ -240,6 +320,71 @@ router.post('/:db/table/:schema/:table/import', async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+/* ─── Triggers ─── */
+router.get('/:db/triggers', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const triggers = await db.listAllTriggers(database);
+    res.json(triggers);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/:db/triggers/:schema/:triggerName', async (req, res) => {
+  try {
+    const { db: database, schema, triggerName } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(triggerName)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const def = await db.getTriggerDefinition(database, schema, triggerName);
+    res.json(def);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/:db/triggers/:schema/:triggerName', async (req, res) => {
+  try {
+    const { db: database, schema, triggerName } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(triggerName)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const result = await db.dropTrigger(database, schema, null, triggerName);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.get('/:db/table/:schema/:table/triggers', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const triggers = await db.listTriggers(database, schema, table);
+    res.json(triggers);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:db/trigger', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const { sql } = req.body;
+    if (!sql) return res.status(400).json({ error: 'SQL is required' });
+    const result = await db.createTrigger(database, sql);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/:db/table/:schema/:table/trigger/:triggerName', async (req, res) => {
+  try {
+    const { db: database, schema, table, triggerName } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table) || !db.validateIdent(triggerName)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const result = await db.dropTrigger(database, schema, table, triggerName);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 /* ─── Foreign Keys ─── */
 router.get('/:db/table/:schema/:table/foreign-keys', async (req, res) => {
   try {
@@ -335,6 +480,69 @@ router.delete('/:db/view/:schema/:viewName', async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+/* ─── Materialized Views ─── */
+router.get('/:db/matviews', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const schema = req.query.schema || '';
+    const views = await db.listMatViews(database, schema);
+    res.json(views);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:db/matview', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const { schema, name, query, withData } = req.body;
+    if (!name || !query) return res.status(400).json({ error: 'Name and query required' });
+    const result = await db.createMatView(database, schema || 'public', name, query, withData);
+    res.status(201).json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/:db/matview/:schema/:name', async (req, res) => {
+  try {
+    const { db: database, schema, name } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(name)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const result = await db.dropMatView(database, schema, name);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.post('/:db/matview/:schema/:name/refresh', async (req, res) => {
+  try {
+    const { db: database, schema, name } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(name)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const result = await db.refreshMatView(database, schema, name);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+/* ─── Connection/Activity Monitor ─── */
+router.get('/:db/connections', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const connections = await db.getActiveConnections(database);
+    res.json(connections);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/:db/connections/:pid', async (req, res) => {
+  try {
+    const { db: database, pid } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const result = await db.killConnection(database, parseInt(pid));
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 /* ─── Query Result Export ─── */
 router.post('/:db/export-query', async (req, res) => {
   try {
@@ -374,31 +582,6 @@ router.get('/:db/extensions', async (req, res) => {
   }
 });
 
-router.get('/databases/query-presets', (req, res) => {
-  res.json([
-    { category: 'Explore', label: 'All rows (50 limit)', sql: 'SELECT * FROM <table> LIMIT 50' },
-    { category: 'Explore', label: 'Count rows', sql: 'SELECT COUNT(*) AS total FROM <table>' },
-    { category: 'Explore', label: 'List columns (INFORMATION_SCHEMA)', sql: "SELECT column_name, data_type, is_nullable, column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = '<table>' ORDER BY ordinal_position" },
-    { category: 'Explore', label: 'Distinct values in column', sql: 'SELECT DISTINCT <column> FROM <table> ORDER BY 1' },
-    { category: 'Explore', label: 'Browse schemas', sql: "SELECT nspname AS schema, pg_catalog.pg_get_userbyid(nspowner) AS owner FROM pg_catalog.pg_namespace WHERE nspname NOT LIKE 'pg_%' AND nspname <> 'information_schema' ORDER BY nspname" },
-    { category: 'Analyze', label: 'Table sizes', sql: "SELECT schemaname, tablename, pg_total_relation_size(schemaname||'.'||tablename) AS total_bytes, pg_size_pretty(pg_total_relation_size(schemaname||'.'||tablename)) AS pretty_size FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','pg_toast') ORDER BY total_bytes DESC" },
-    { category: 'Analyze', label: 'Row estimates per table', sql: "SELECT schemaname, tablename, n_live_tup AS estimated_rows FROM pg_stat_user_tables ORDER BY n_live_tup DESC" },
-    { category: 'Analyze', label: 'Active connections', sql: "SELECT pid, usename, application_name, client_addr, state, query_start, LEFT(query, 80) AS query_preview FROM pg_stat_activity WHERE state != 'idle' ORDER BY query_start DESC" },
-    { category: 'Analyze', label: 'Database size', sql: "SELECT pg_database_size(current_database()) AS bytes, pg_size_pretty(pg_database_size(current_database())) AS pretty" },
-    { category: 'Analyze', label: 'Slow queries (>1s)', sql: "SELECT pid, usename, query, state, NOW() - query_start AS duration FROM pg_stat_activity WHERE state = 'active' AND NOW() - query_start > interval '1 second' ORDER BY duration DESC" },
-    { category: 'Schema', label: 'List all tables', sql: "SELECT schemaname, tablename, tableowner FROM pg_catalog.pg_tables WHERE schemaname NOT IN ('pg_catalog','information_schema','pg_toast') ORDER BY schemaname, tablename" },
-    { category: 'Schema', label: 'List indexes', sql: "SELECT schemaname, tablename, indexname, indexdef FROM pg_catalog.pg_indexes WHERE schemaname NOT IN ('pg_catalog','information_schema','pg_toast') ORDER BY schemaname, tablename, indexname" },
-    { category: 'Schema', label: 'Create table', sql: 'CREATE TABLE <table> (\n  id SERIAL PRIMARY KEY,\n  name VARCHAR(255) NOT NULL,\n  created_at TIMESTAMPTZ DEFAULT NOW()\n);' },
-    { category: 'Schema', label: 'Add column', sql: 'ALTER TABLE <table> ADD COLUMN <column> <type>;' },
-    { category: 'Schema', label: 'Create index', sql: 'CREATE INDEX idx_<table>_<column> ON <table> (<column>);' },
-    { category: 'Schema', label: 'Drop table (CASCADE)', sql: 'DROP TABLE <table> CASCADE;' },
-    { category: 'System', label: 'PostgreSQL version', sql: 'SELECT version();' },
-    { category: 'System', label: 'Current time', sql: 'SELECT NOW();' },
-    { category: 'System', label: 'Active locks', sql: "SELECT l.locktype, l.database, l.relation, l.page, l.tuple, l.virtualtransaction, l.pid, l.mode, l.granted, a.query FROM pg_locks l LEFT JOIN pg_stat_activity a ON l.pid = a.pid WHERE NOT l.database IS NULL ORDER BY l.pid" },
-    { category: 'System', label: 'Vacuum info', sql: "SELECT schemaname, tablename, last_vacuum, last_autovacuum, last_analyze, last_autoanalyze, vacuum_count, autovacuum_count FROM pg_stat_user_tables ORDER BY last_autovacuum NULLS LAST" },
-  ]);
-});
-
 router.get('/:db/config', async (req, res) => {
   try {
     const { db: database } = req.params;
@@ -409,18 +592,6 @@ router.get('/:db/config', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
-
-router.post('/create', async (req, res) => {
-  try {
-    const { name, owner, encoding, template, connLimit, comment } = req.body;
-    if (!name) return res.status(400).json({ error: 'Database name required' });
-    const result = await db.createDatabase(name, owner, encoding, template, connLimit);
-    if (comment) {
-      await db.exec('postgres', `COMMENT ON DATABASE ${db.quoteIdent(name)} IS ${db.quoteLiteral(comment)}`);
-    }
-    res.status(201).json(result);
-  } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 router.put('/:db/config', async (req, res) => {
@@ -507,22 +678,6 @@ router.post('/:db/query', async (req, res) => {
       return res.status(400).json({ error: 'DDL queries not allowed via this endpoint. Use table editor instead.' });
     await db.exec(database, query);
     res.json({ ok: true });
-  } catch (err) { res.status(400).json({ error: err.message }); }
-});
-
-router.post('/query-run', async (req, res) => {
-  try {
-    const { db: database, query } = req.body;
-    if (!database || !query) return res.status(400).json({ error: 'Database and query are required' });
-    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
-    const result = await db.runQuery(database, query);
-    const upper = query.trim().toUpperCase();
-    const command = upper.split(/\s+/)[0];
-    if (command === 'SELECT' || command === 'WITH' || command === 'EXPLAIN') {
-      res.json({ command, columns: result.fields?.map(f => f.name) || [], rows: result.rows, rowCount: result.rowCount });
-    } else {
-      res.json({ command, affectedRows: result.rowCount, message: `${command} ${result.rowCount}` });
-    }
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
@@ -625,33 +780,6 @@ router.post('/:db/search-all', async (req, res) => {
     const results = await db.searchAllTables(database, searchTerm, schema || '');
     res.json(results);
   } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-/* ─── Tier 3: Bookmarkable Queries ─── */
-router.get('/bookmarks', async (req, res) => {
-  try {
-    const database = req.query.db || '';
-    const bookmarks = await db.listBookmarks(database);
-    res.json(bookmarks);
-  } catch (err) { res.status(500).json({ error: err.message }); }
-});
-
-router.post('/bookmarks', async (req, res) => {
-  try {
-    const { database, label, sql } = req.body;
-    if (!label || !sql) return res.status(400).json({ error: 'Label and SQL required' });
-    const result = await db.createBookmark(database || 'postgres', label, sql);
-    res.status(201).json(result);
-  } catch (err) { res.status(400).json({ error: err.message }); }
-});
-
-router.delete('/bookmarks/:id', async (req, res) => {
-  try {
-    const id = parseInt(req.params.id, 10);
-    if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
-    const result = await db.deleteBookmark(id);
-    res.json(result);
-  } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 module.exports = router;

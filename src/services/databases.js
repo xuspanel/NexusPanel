@@ -102,7 +102,8 @@ async function listTables(database, schema) {
   const schemaFilter = schema && validateIdent(schema) ? `AND table_schema = ${quoteLiteral(schema)}` : `AND table_schema NOT IN ('pg_catalog','information_schema','pg_toast')`;
   return await queryRows(database, `SELECT table_schema, table_name,
   (SELECT COUNT(*)::int FROM information_schema.columns c WHERE c.table_schema = t.table_schema AND c.table_name = t.table_name) AS column_count,
-  (SELECT reltuples::bigint FROM pg_class WHERE oid = (quote_ident(table_schema) || '.' || quote_ident(table_name))::regclass::oid) AS approx_row_count
+  (SELECT reltuples::bigint FROM pg_class WHERE oid = (quote_ident(table_schema) || '.' || quote_ident(table_name))::regclass::oid) AS approx_row_count,
+  pg_size_pretty(pg_total_relation_size(quote_ident(table_schema) || '.' || quote_ident(table_name))) AS size_formatted
 FROM information_schema.tables t
 WHERE table_type = 'BASE TABLE' ${schemaFilter}
 ORDER BY table_schema, table_name`);
@@ -420,8 +421,35 @@ async function exportTableData(database, schema, table, format) {
 
 async function runQuery(database, sql, params) {
   if (!validateIdent(database)) throw new Error('Invalid database name');
-  const result = await query(database, sql, params || []);
-  return { rows: result.rows, rowCount: result.rowCount, fields: result.fields?.map(f => ({ name: f.name, dataType: f.dataTypeID })) };
+  const statements = sql.split(';').map(s => s.trim()).filter(s => s.length > 0);
+  if (statements.length === 0) throw new Error('No SQL to execute');
+  if (statements.length === 1) {
+    const result = await query(database, statements[0], params || []);
+    return { rows: result.rows, rowCount: result.rowCount, fields: result.fields?.map(f => ({ name: f.name, dataType: f.dataTypeID })) };
+  }
+  let lastResult = null;
+  const pool = getPool(database);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    for (const stmt of statements) {
+      const upper = stmt.toUpperCase().trimStart();
+      if (upper.startsWith('SELECT') || upper.startsWith('WITH') || upper.startsWith('EXPLAIN') || upper.startsWith('SHOW')) {
+        const res = await client.query(stmt);
+        lastResult = { command: stmt.trim().split(/\s+/)[0], rows: res.rows, rowCount: res.rowCount, fields: res.fields?.map(f => ({ name: f.name, dataType: f.dataTypeID })), statementIndex: statements.indexOf(stmt) };
+      } else {
+        const res = await client.query(stmt);
+        lastResult = { command: stmt.trim().split(/\s+/)[0], affectedRows: res.rowCount || 0, rowCount: res.rowCount };
+      }
+    }
+    await client.query('COMMIT');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    client.release();
+    throw err;
+  }
+  client.release();
+  return lastResult || { command: 'MULTI', affectedRows: 0, message: 'Statements executed' };
 }
 
 /* ─── FK Relations (all tables in a database) ─── */
@@ -520,13 +548,42 @@ async function dumpDatabase(database, format) {
     WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog','information_schema','pg_toast')
     ORDER BY table_schema, table_name`);
 
-  let parts = [`-- Dump of database: ${database}\n-- Generated: ${new Date().toISOString()}\n\n`];
+  // Sequences
+  const sequences = await queryRows(database, `SELECT sequence_schema, sequence_name FROM information_schema.sequences
+    WHERE sequence_schema NOT IN ('pg_catalog','information_schema','pg_toast')
+    ORDER BY sequence_schema, sequence_name`);
 
+  const views = await queryRows(database, `SELECT table_schema, table_name, view_definition FROM information_schema.views
+    WHERE table_schema NOT IN ('pg_catalog','information_schema','pg_toast')
+    ORDER BY table_schema, table_name`);
+
+  const matViews = await queryRows(database, `SELECT n.nspname AS schema, c.relname AS name
+    FROM pg_catalog.pg_class c JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+    WHERE c.relkind = 'm' AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
+    ORDER BY n.nspname, c.relname`);
+
+  const functions = await queryRows(database, `SELECT n.nspname AS schema, p.proname AS name,
+    pg_catalog.pg_get_functiondef(p.oid) AS definition
+    FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+    WHERE p.prokind IN ('f','p') AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')
+    ORDER BY n.nspname, p.proname`);
+
+  let parts = [`-- Dump of database: ${database}\n-- Generated: ${new Date().toISOString()}\n\nSET statement_timeout = 0;\nSET lock_timeout = 0;\nSET client_encoding = 'UTF8';\nSET standard_conforming_strings = on;\n\n`];
+
+  // Sequences
+  if (format !== 'schema') {
+    for (const seq of sequences) {
+      const full = `${quoteIdent(seq.sequence_schema)}.${quoteIdent(seq.sequence_name)}`;
+      parts.push(`CREATE SEQUENCE IF NOT EXISTS ${full};\n`);
+    }
+    if (sequences.length) parts.push('\n');
+  }
+
+  // Tables
   for (const t of tables) {
     const full = `${quoteIdent(t.table_schema)}.${quoteIdent(t.table_name)}`;
 
-    // CREATE TABLE
-    const def = await queryOne(database, `SELECT pg_catalog.pg_get_viewdef(${full}::regclass, true) AS ddl`);
+    // CREATE TABLE with columns
     const createSql = await queryRows(database,
       `SELECT 'CREATE TABLE IF NOT EXISTS ' || ${quoteLiteral(full)} || ' (' || string_agg(
         quote_ident(column_name) || ' ' || data_type ||
@@ -540,6 +597,17 @@ async function dumpDatabase(database, format) {
     const comment = await queryOne(database,
       `SELECT pg_catalog.obj_description(${full}::regclass, 'pg_class') AS comment`);
     if (comment && comment.comment) parts.push(`COMMENT ON TABLE ${full} IS ${quoteLiteral(comment.comment)};\n`);
+
+    // Column comments
+    const colComments = await queryRows(database, `SELECT
+      a.attname AS column_name, pg_catalog.col_description(c.oid, a.attnum) AS comment
+      FROM pg_catalog.pg_class c JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+      WHERE c.relname = $1 AND c.relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = $2)
+        AND a.attnum > 0 AND NOT a.attisdropped AND pg_catalog.col_description(c.oid, a.attnum) IS NOT NULL`,
+      [t.table_name, t.table_schema]);
+    for (const cc of colComments) {
+      if (cc.comment) parts.push(`COMMENT ON COLUMN ${full}.${quoteIdent(cc.column_name)} IS ${quoteLiteral(cc.comment)};\n`);
+    }
 
     if (format === 'data' || format === 'full') {
       // SELECT data
@@ -562,13 +630,63 @@ async function dumpDatabase(database, format) {
     parts.push('\n');
   }
 
-  // Indexes
-  const indexes = await queryRows(database, `SELECT indexdef FROM pg_catalog.pg_indexes
+  // Indexes per table
+  const indexes = await queryRows(database, `SELECT schemaname, tablename, indexdef FROM pg_catalog.pg_indexes
     WHERE schemaname NOT IN ('pg_catalog','information_schema','pg_toast')
     ORDER BY schemaname, tablename, indexname`);
-  if (indexes.length) {
-    parts.push('-- Indexes\n');
-    indexes.forEach(idx => parts.push(idx.indexdef + ';\n'));
+  let lastSchema = '', lastTable = '';
+  for (const idx of indexes) {
+    if (idx.schemaname !== lastSchema || idx.tablename !== lastTable) {
+      parts.push(`-- Indexes for ${quoteIdent(idx.schemaname)}.${quoteIdent(idx.tablename)}\n`);
+      lastSchema = idx.schemaname; lastTable = idx.tablename;
+    }
+    parts.push(idx.indexdef + ';\n');
+  }
+  if (indexes.length) parts.push('\n');
+
+  // Foreign keys
+  const fks = await queryRows(database, `SELECT
+    tc.table_schema, tc.table_name, kcu.column_name,
+    ccu.table_schema AS foreign_schema, ccu.table_name AS foreign_table, ccu.column_name AS foreign_column,
+    tc.constraint_name, rc.update_rule, rc.delete_rule
+    FROM information_schema.table_constraints tc
+    JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+    JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema
+    JOIN information_schema.referential_constraints rc ON tc.constraint_name = rc.constraint_name AND tc.table_schema = rc.constraint_schema
+    WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema NOT IN ('pg_catalog','information_schema','pg_toast')
+    ORDER BY tc.table_schema, tc.table_name`);
+  if (fks.length) {
+    parts.push('-- Foreign Keys\n');
+    for (const fk of fks) {
+      parts.push(`ALTER TABLE ${quoteIdent(fk.table_schema)}.${quoteIdent(fk.table_name)}
+        ADD CONSTRAINT ${quoteIdent(fk.constraint_name)} FOREIGN KEY (${quoteIdent(fk.column_name)})
+        REFERENCES ${quoteIdent(fk.foreign_schema)}.${quoteIdent(fk.foreign_table)} (${quoteIdent(fk.foreign_column)})
+        ON UPDATE ${fk.update_rule} ON DELETE ${fk.delete_rule};\n`);
+    }
+    parts.push('\n');
+  }
+
+  // Views
+  if (format !== 'data') {
+    for (const v of views) {
+      if (v.view_definition) {
+        parts.push(`CREATE VIEW ${quoteIdent(v.table_schema)}.${quoteIdent(v.table_name)} AS\n${v.view_definition};\n\n`);
+      }
+    }
+    // Materialized Views
+    for (const mv of matViews) {
+      try {
+        const def = await queryOne(database,
+          `SELECT pg_catalog.pg_get_viewdef('${quoteIdent(mv.schema)}.${quoteIdent(mv.name)}'::regclass, true) AS ddl`);
+        if (def && def.ddl) {
+          parts.push(`CREATE MATERIALIZED VIEW ${quoteIdent(mv.schema)}.${quoteIdent(mv.name)} AS\n${def.ddl};\n\n`);
+        }
+      } catch(e) {}
+    }
+    // Functions
+    for (const fn of functions) {
+      parts.push(fn.definition + '\n\n');
+    }
   }
 
   return { content: parts.join(''), contentType: 'text/sql', ext: 'sql' };
@@ -665,38 +783,51 @@ async function importTableData(database, schema, table, format, content) {
   if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
   if (!content || !content.trim()) throw new Error('No content to import');
 
-  if (format === 'csv') {
-    const lines = content.trim().split('\n');
-    if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row');
-    const header = parseCSVLine(lines[0]);
-    const cols = header.map(c => {
-      if (!validateIdent(c)) throw new Error(`Invalid column name in CSV header: ${c}`);
-      return c;
-    });
-    let imported = 0;
-    for (let i = 1; i < lines.length; i++) {
-      const vals = parseCSVLine(lines[i]);
-      if (vals.length !== cols.length) continue;
-      const row = {};
-      cols.forEach((c, idx) => { row[c] = vals[idx]; });
-      await insertRow(database, schema, table, row);
-      imported++;
-    }
-    return { ok: true, rowsImported: imported };
-  }
+  const pool = getPool(database);
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
 
-  if (format === 'sql') {
-    // Execute each SQL statement separated by semicolons
-    const stmts = content.split(';').map(s => s.trim()).filter(s => s.length > 0);
-    let executed = 0;
-    for (const stmt of stmts) {
-      await exec(database, stmt);
-      executed++;
+    if (format === 'csv') {
+      const lines = content.trim().split('\n');
+      if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row');
+      const header = parseCSVLine(lines[0]);
+      const cols = header.map(c => {
+        if (!validateIdent(c)) throw new Error(`Invalid column name in CSV header: ${c}`);
+        return c;
+      });
+      const colList = cols.map(c => quoteIdent(c)).join(', ');
+      let imported = 0;
+      for (let i = 1; i < lines.length; i++) {
+        const vals = parseCSVLine(lines[i]);
+        if (vals.length !== cols.length) continue;
+        const placeholders = vals.map((_, idx) => `$${idx + 1}`).join(', ');
+        const params = vals.map(v => v === '' || v === 'NULL' || v === 'null' ? null : v);
+        await client.query(`INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} (${colList}) VALUES (${placeholders})`, params);
+        imported++;
+      }
+      await client.query('COMMIT');
+      return { ok: true, rowsImported: imported };
     }
-    return { ok: true, statementsExecuted: executed };
-  }
 
-  throw new Error('Unsupported import format (csv or sql)');
+    if (format === 'sql') {
+      const stmts = content.split(';').map(s => s.trim()).filter(s => s.length > 0);
+      let executed = 0;
+      for (const stmt of stmts) {
+        await client.query(stmt);
+        executed++;
+      }
+      await client.query('COMMIT');
+      return { ok: true, statementsExecuted: executed };
+    }
+
+    throw new Error('Unsupported import format (csv or sql)');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 function parseCSVLine(line) {
@@ -811,6 +942,143 @@ async function dropView(database, schema, viewName) {
   return { ok: true };
 }
 
+/* ─── Materialized Views ─── */
+
+async function listMatViews(database, schema) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  const schemaFilter = schema && validateIdent(schema) ? `AND n.nspname = ${quoteLiteral(schema)}` : `AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')`;
+  return await queryRows(database, `SELECT
+    n.nspname AS schema,
+    c.relname AS matview_name,
+    pg_catalog.pg_size_pretty(pg_catalog.pg_total_relation_size(c.oid)) AS size,
+    (SELECT COUNT(*)::int FROM pg_catalog.pg_index WHERE indrelid = c.oid) AS index_count,
+    (SELECT reltuples::bigint FROM pg_catalog.pg_class WHERE oid = c.oid) AS estimated_rows
+  FROM pg_catalog.pg_class c
+  JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
+  WHERE c.relkind = 'm'${schemaFilter}
+  ORDER BY n.nspname, c.relname`);
+}
+
+async function createMatView(database, schema, name, query, withData) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(name)) throw new Error('Invalid name');
+  if (!query || !query.trim()) throw new Error('View query required');
+  const data = withData !== false ? 'WITH DATA' : 'WITH NO DATA';
+  await exec(database, `CREATE MATERIALIZED VIEW ${quoteIdent(schema)}.${quoteIdent(name)} AS ${query} ${data}`);
+  return { ok: true };
+}
+
+async function dropMatView(database, schema, name) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(name)) throw new Error('Invalid name');
+  await exec(database, `DROP MATERIALIZED VIEW IF EXISTS ${quoteIdent(schema)}.${quoteIdent(name)}`);
+  return { ok: true };
+}
+
+async function refreshMatView(database, schema, name) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(name)) throw new Error('Invalid name');
+  await exec(database, `REFRESH MATERIALIZED VIEW ${quoteIdent(schema)}.${quoteIdent(name)}`);
+  return { ok: true };
+}
+
+/* ─── Triggers ─── */
+
+async function listTriggers(database, schema, table) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  return await queryRows(database, `SELECT
+    t.tgname AS trigger_name,
+    pg_catalog.pg_get_triggerdef(t.oid) AS trigger_def,
+    CASE WHEN t.tgenabled = 'O' THEN 'ENABLED' ELSE 'DISABLED' END AS status,
+    (SELECT relname FROM pg_catalog.pg_class WHERE oid = t.tgrelid) AS table_name,
+    n.nspname AS schema_name
+  FROM pg_catalog.pg_trigger t
+  JOIN pg_catalog.pg_class c ON t.tgrelid = c.oid
+  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  WHERE c.relname = $1 AND n.nspname = $2 AND t.tgisinternal = false
+  ORDER BY t.tgname`, [table, schema]);
+}
+
+async function listAllTriggers(database) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  return await queryRows(database, `SELECT
+    t.tgname AS trigger_name,
+    pg_catalog.pg_get_triggerdef(t.oid) AS trigger_def,
+    CASE WHEN t.tgenabled = 'O' THEN 'ENABLED' ELSE 'DISABLED' END AS status,
+    (SELECT relname FROM pg_catalog.pg_class WHERE oid = t.tgrelid) AS table_name,
+    n.nspname AS schema_name
+  FROM pg_catalog.pg_trigger t
+  JOIN pg_catalog.pg_class c ON t.tgrelid = c.oid
+  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  WHERE t.tgisinternal = false
+  ORDER BY n.nspname, t.tgname`);
+}
+
+async function getTriggerDefinition(database, schema, triggerName) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(triggerName)) throw new Error('Invalid name');
+  const row = await queryOne(database, `SELECT
+    pg_catalog.pg_get_triggerdef(t.oid) AS trigger_def,
+    t.tgname AS trigger_name,
+    n.nspname AS schema_name,
+    (SELECT relname FROM pg_catalog.pg_class WHERE oid = t.tgrelid) AS table_name
+  FROM pg_catalog.pg_trigger t
+  JOIN pg_catalog.pg_class c ON t.tgrelid = c.oid
+  JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+  WHERE t.tgname = $1 AND n.nspname = $2 AND t.tgisinternal = false`, [triggerName, schema]);
+  if (!row) throw new Error('Trigger not found');
+  return row;
+}
+
+async function createTrigger(database, sql) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  await exec(database, sql);
+  return { ok: true };
+}
+
+async function dropTrigger(database, schema, table, triggerName) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(triggerName)) throw new Error('Invalid name');
+  if (table) {
+    if (!validateIdent(table)) throw new Error('Invalid table name');
+    await exec(database, `DROP TRIGGER IF EXISTS ${quoteIdent(triggerName)} ON ${quoteIdent(schema)}.${quoteIdent(table)}`);
+  } else {
+    const row = await queryOne(database, `SELECT
+      (SELECT relname FROM pg_catalog.pg_class WHERE oid = t.tgrelid) AS table_name
+    FROM pg_catalog.pg_trigger t
+    JOIN pg_catalog.pg_class c ON t.tgrelid = c.oid
+    JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+    WHERE t.tgname = $1 AND n.nspname = $2 AND t.tgisinternal = false`, [triggerName, schema]);
+    if (!row || !row.table_name) throw new Error('Trigger not found');
+    await exec(database, `DROP TRIGGER IF EXISTS ${quoteIdent(triggerName)} ON ${quoteIdent(schema)}.${quoteIdent(row.table_name)}`);
+  }
+  return { ok: true };
+}
+
+/* ─── Connection/Activity Monitor ─── */
+
+async function getActiveConnections(database) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  return await queryRows(database, `SELECT
+    pid,
+    usename AS user,
+    application_name,
+    client_addr,
+    state,
+    query,
+    query_start,
+    NOW() - query_start AS duration,
+    wait_event_type,
+    wait_event,
+    pg_catalog.pg_blocking_pids(pid) AS blocking_pids
+  FROM pg_catalog.pg_stat_activity
+  WHERE datname = $1
+    AND pid <> pg_catalog.pg_backend_pid()
+  ORDER BY query_start DESC NULLS LAST`, [database]);
+}
+
+async function killConnection(database, pid) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  if (!pid || isNaN(pid)) throw new Error('Invalid PID');
+  await exec(database, `SELECT pg_catalog.pg_terminate_backend(${pid})`);
+  return { ok: true };
+}
+
 /* ─── Export Query Results ─── */
 
 async function exportQueryResult(rows, format) {
@@ -866,11 +1134,14 @@ module.exports = {
   listIndexes, createIndex, dropIndex,
   deleteRows,
   listViews, createView, dropView,
+  listMatViews, createMatView, dropMatView, refreshMatView,
+  getActiveConnections, killConnection,
   exportQueryResult,
   getDbConfig, updateDbConfig,
   createDatabase, dropDatabase, runQuery,
   insertRow, updateRow, deleteRow,
   checkConnection, validateIdent, quoteIdent, quoteLiteral,
+  listTriggers, listAllTriggers, getTriggerDefinition, createTrigger, dropTrigger,
   getAllForeignKeys,
   getPrivileges, grantPrivilege, revokePrivilege,
   listFunctions, getFunctionDefinition, dropFunction,

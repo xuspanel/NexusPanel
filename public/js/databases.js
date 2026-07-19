@@ -1,9 +1,48 @@
 var dbState = { databases: [], schemas: [], users: [], views: [], view: 'cards', selDb: null, selTable: null, tableEditor: { columns: [], original: [], changes: [] }, tableMode: 'data', dataPage: 1, dataPageSize: 25, dataSortBy: '', dataSortDir: '', dataSearch: '', pkColumns: [], selectedRows: [], foreignKeys: [], indexes: [] };
 var dbInit = false;
 
+/* URL-based routing: restore database sub-view from popstate */
+window.dbRestoreState = function(dbSub) {
+  if (!dbSub || dbSub === 'cards') { renderCards(); return; }
+  var parts = dbSub.split('/');
+  if (parts[0] === 'manage') { showManage(); return; }
+  if (parts[0] === 'query') { showQueryTerminal(); return; }
+  if (parts[0] === 'search') { showSearchAll(); return; }
+  if (parts[0] === 'functions' && parts[1]) {
+    dbState.selDb = dbState.databases.find(function(d) { return d.name === parts[1]; }) || null;
+    if (dbState.selDb) showFunctionsView();
+    return;
+  }
+  if (parts[0] === 'config' && parts[1]) {
+    dbState.selDb = dbState.databases.find(function(d) { return d.name === parts[1]; }) || null;
+    if (dbState.selDb) renderConfView();
+    return;
+  }
+  if (parts[0] === 'tables' && parts[1]) {
+    dbState.selDb = dbState.databases.find(function(d) { return d.name === parts[1]; }) || null;
+    if (dbState.selDb) {
+      if (parts[2] && parts[3]) {
+        openTableEditor(parts[2], parts[3]);
+      } else {
+        showTablesView();
+      }
+    }
+    return;
+  }
+};
+
+function dbSetURL(subPath) {
+  history.replaceState({ view: 'databases', dbSub: subPath }, '', '/databases/' + subPath);
+}
+
 window.initDatabases = async function () {
   if (!dbInit) { dbInit = true; document.getElementById('dbRefreshBtn')?.addEventListener('click', refreshDB); document.getElementById('dbRetryBtn')?.addEventListener('click', refreshDB); }
   await loadDatabases();
+  // Restore deep-link from URL if present
+  var dbPath = location.pathname.replace(/^\/databases\//, '');
+  if (dbPath && dbPath !== location.pathname && window.dbRestoreState) {
+    window.dbRestoreState(dbPath);
+  }
 };
 
 async function refreshDB() { await loadDatabases(); }
@@ -42,6 +81,7 @@ function renderCards() {
   var cnt = dbState.databases.length;
   document.getElementById('dbTitle').textContent = 'Database Manager';
   document.getElementById('dbBreadcrumb').innerHTML = cnt + ' database' + (cnt !== 1 ? 's' : '') + ' found';
+  dbSetURL('cards');
 }
 
 function showCreateForm() {
@@ -142,6 +182,7 @@ function showManage() {
   document.getElementById('dbTablesView').style.display = 'none';
   document.getElementById('dbEditorView').style.display = 'none';
   renderManageList();
+  dbSetURL('manage');
 }
 
 function renderManageList() {
@@ -190,12 +231,15 @@ function renderConfView() {
     + '<button class="db-btn" onclick="dumpDatabase()">🗄 Dump</button>'
     + '<button class="db-btn" onclick="showPrivilegeEditor()">🔐 Privileges</button>'
     + '<button class="db-btn" onclick="showFKRelationsModal()">🔗 Relations</button>'
+    + '<button class="db-btn" onclick="showTriggersModal()">⚡ Triggers</button>'
+    + '<button class="db-btn" onclick="showConnectionsMonitor()">📊 Connections</button>'
     + '<button class="db-btn db-btn-danger" onclick="dropDatabase()">🗑 Drop Database</button>'
     + '</div>'
     + '<div class="db-form-error" id="dbConfError"></div>'
     + '<div style="text-align:center;margin-top:8px"><a href="#" onclick="showManage()" style="color:var(--text3)">← Back to all databases</a></div>';
   document.getElementById('dbTitle').textContent = 'Database: ' + d.name;
   document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / ' + esc(d.name);
+  dbSetURL('config/' + encodeURIComponent(d.name));
 }
 
 async function saveDBConfig() {
@@ -227,12 +271,15 @@ async function showTablesView() {
   document.getElementById('dbTitle').textContent = 'Database: ' + dbState.selDb.name;
   document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / ' + esc(dbState.selDb.name) + ' <a href="#" onclick="renderConfView()" style="font-size:11px;color:var(--accent-cyan);margin-left:8px">⚙ Config</a>';
   document.getElementById('dbTablesContent').innerHTML = '<div class="db-loading">Loading tables...</div>';
+  dbSetURL('tables/' + encodeURIComponent(dbState.selDb.name));
   try {
-    var [tables, views] = await Promise.all([
+    var [tables, views, matviews] = await Promise.all([
       API.databases.tables(dbState.selDb.name),
       API.databases.views(dbState.selDb.name),
+      API.databases.listMatViews(dbState.selDb.name),
     ]);
     dbState.views = views || [];
+    dbState.matViews = matviews || [];
     renderTables(tables);
   } catch (e) { document.getElementById('dbTablesContent').innerHTML = '<div class="db-error">Failed to load tables: ' + esc(e.message) + ' <a href="#" onclick="showTablesView()">Retry</a></div>'; }
 }
@@ -247,6 +294,23 @@ function renderViewsSection() {
       + '<span class="db-manage-icon">👁</span>'
       + '<div class="db-manage-info"><span class="db-manage-name">' + esc(v.table_schema) + '.' + esc(v.view_name) + '</span>'
       + '<span class="db-manage-meta">VIEW</span></div>'
+      + '<span class="db-manage-arrow">→</span></div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function renderMatViewsSection() {
+  var matViews = dbState.matViews || [];
+  if (!matViews.length) return '';
+  var html = '<div class="db-views-section"><h4>📦 Materialized Views <button class="db-btn db-btn-xs" onclick="dbShowCreateMatView()" style="margin-left:8px">+ Create Mat View</button></h4>'
+    + '<div class="db-manage-grid">';
+  matViews.forEach(function(v) {
+    var sizeStr = v.size || '—';
+    html += '<div class="db-manage-card" onclick="dbOpenMatView(\'' + esc(v.schema) + '\',\'' + esc(v.matview_name) + '\')">'
+      + '<span class="db-manage-icon">📦</span>'
+      + '<div class="db-manage-info"><span class="db-manage-name">' + esc(v.schema) + '.' + esc(v.matview_name) + '</span>'
+      + '<span class="db-manage-meta">' + (v.estimated_rows||0) + ' rows · ' + sizeStr + '</span></div>'
       + '<span class="db-manage-arrow">→</span></div>';
   });
   html += '</div></div>';
@@ -283,6 +347,38 @@ async function dbOpenView(schema, viewName) {
   openTableEditor(schema, viewName);
 }
 
+function dbShowCreateMatView() {
+  var html = '<h3>Create Materialized View in ' + esc(dbState.selDb.name) + '</h3>'
+    + '<div class="n-form-group"><label>Schema</label><select id="cmvSchema" class="db-form-input">'
+    + dbState.schemas.map(function(s) { return '<option value="' + esc(s.name) + '" ' + (s.name==='public'?'selected':'') + '>' + esc(s.name) + '</option>'; }).join('')
+    + '</select></div>'
+    + '<div class="n-form-group"><label>View Name</label><input id="cmvName" class="db-form-input" placeholder="my_mat_view"></div>'
+    + '<div class="n-form-group"><label>SELECT Query</label><textarea id="cmvQuery" class="db-form-input" style="min-height:120px;font-family:var(--font-mono);font-size:12px" placeholder="SELECT ... FROM ..."></textarea></div>'
+    + '<div style="margin-bottom:12px"><label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary)"><input type="checkbox" id="cmvWithData" checked> Populate with data now</label></div>'
+    + '<div class="db-form-error" id="dbModalError"></div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doCreateMatView()">Create Materialized View</button></div>';
+  document.getElementById('dbModalContent').innerHTML = html;
+  document.getElementById('dbModal').style.display = 'flex';
+  window.doCreateMatView = async function() {
+    var schema = document.getElementById('cmvSchema').value;
+    var name = document.getElementById('cmvName').value.trim();
+    var query = document.getElementById('cmvQuery').value.trim();
+    var withData = document.getElementById('cmvWithData').checked;
+    if (!name) return dbModalError('View name required');
+    if (!query) return dbModalError('SELECT query required');
+    try {
+      await API.databases.createMatView(dbState.selDb.name, { schema, name, query, withData });
+      closeDBModal();
+      dbToast('Materialized view "' + name + '" created');
+      await showTablesView();
+    } catch (e) { dbModalError(e.message); }
+  };
+}
+
+async function dbOpenMatView(schema, name) {
+  openTableEditor(schema, name);
+}
+
 function renderTables(tables) {
   var el = document.getElementById('dbTablesContent');
   var html = '<div style="margin-bottom:12px"><button class="db-btn db-btn-primary" onclick="showCreateTable()">+ Create Table</button>'
@@ -301,6 +397,7 @@ function renderTables(tables) {
     html += '<div class="db-empty">No tables yet. <a href="#" onclick="showCreateTable()">Create your first table</a></div>';
   }
   html += renderViewsSection();
+  html += renderMatViewsSection();
   html += '<div style="text-align:center;margin-top:8px"><a href="#" onclick="showManage()" style="color:var(--text3)">← Back to databases</a></div>';
   el.innerHTML = html;
 }
@@ -390,6 +487,7 @@ async function openTableEditor(schema, table) {
     // Load metadata in background
     try { dbState.tableMetadata = await API.databases.tableMetadata(dbState.selDb.name, schema, table); } catch(e) {}
     renderTableEditor();
+    dbSetURL('tables/' + encodeURIComponent(dbState.selDb.name) + '/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table));
   } catch (e) { dbToast(e.message, 'error'); }
 }
 
@@ -432,13 +530,15 @@ function switchTableMode(mode) {
 
 async function loadTableConfigData() {
   try {
-    var [fks, idxs] = await Promise.all([
+    var [fks, idxs, trigs] = await Promise.all([
       API.databases.foreignKeys(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name),
       API.databases.listIndexes(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name),
+      API.databases.listTriggers(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name),
     ]);
     dbState.foreignKeys = fks || [];
     dbState.indexes = idxs || [];
-  } catch(e) { dbState.foreignKeys = []; dbState.indexes = []; }
+    dbState.triggers = trigs || [];
+  } catch(e) { dbState.foreignKeys = []; dbState.indexes = []; dbState.triggers = []; }
 }
 
 async function loadTableData() {
@@ -531,8 +631,12 @@ function renderTableData() {
       }
       data.columns.forEach(function(col) {
         var val = row[col];
+        var display = val === null || val === undefined ? '<span class="db-null">NULL</span>' : esc(String(val));
+        var copyVal = val === null || val === undefined ? 'NULL' : String(val);
         html += '<td class="db-data-cell" onclick="dbStartEdit(' + ri + ',\'' + esc(col) + '\',this)" title="Click to edit">'
-          + (val === null || val === undefined ? '<span class="db-null">NULL</span>' : esc(String(val))) + '</td>';
+          + '<span class="db-cell-value">' + display + '</span>'
+          + '<span class="db-cell-copy" onclick="dbCopyCellValue(event, \'' + esc(copyVal).replace(/'/g, "\\'") + '\')" title="Copy">📋</span>'
+          + '</td>';
       });
       // Actions column
       var pkVal = '';
@@ -573,18 +677,36 @@ function renderTableData() {
 
 /* ─── Inline Row CRUD ─── */
 
+function dbCopyCellValue(e, value) {
+  e.stopPropagation();
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(value).then(function() { dbToast('Copied to clipboard'); });
+  } else {
+    var ta = document.createElement('textarea');
+    ta.value = value;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+    dbToast('Copied to clipboard');
+  }
+}
+
 function dbStartEdit(rowIdx, colName, td) {
   if (td.querySelector('input')) return;
   var row = dbState.tableEditor.data.rows[rowIdx];
   if (!row) return;
   var val = row[colName];
   var isNull = val === null || val === undefined;
-  td.innerHTML = '<input class="db-inline-edit" type="text" value="' + esc(isNull ? '' : String(val)) + '" autocomplete="off">'
-    + '<button class="db-btn db-btn-xs db-inline-save" onclick="dbSaveEdit(' + rowIdx + ',\'' + esc(colName) + '\',this.parentElement)">✔</button>'
-    + '<button class="db-btn db-btn-xs db-inline-cancel" onclick="dbCancelEdit(' + rowIdx + ',\'' + esc(colName) + '\',this.parentElement)">✕</button>';
-  var input = td.querySelector('input');
+  var nullChecked = isNull ? ' checked' : '';
+  td.innerHTML = '<div style="display:flex;align-items:center;gap:4px"><input class="db-inline-edit" type="text" value="' + esc(isNull ? '' : String(val)) + '" autocomplete="off" style="flex:1;min-width:60px">'
+    + '<label class="db-inline-null-label" title="Set to NULL"><input type="checkbox" class="db-inline-null-cb"' + nullChecked + ' onchange="var inp=this.parentElement.parentElement.querySelector(\'input[type=text]\');inp.disabled=this.checked;if(this.checked)inp.value=\'\';else inp.focus()"> NULL</label>'
+    + '<button class="db-btn db-btn-xs db-inline-save" onclick="dbSaveEdit(' + rowIdx + ',\'' + esc(colName) + '\',this.parentElement.parentElement)">✔</button>'
+    + '<button class="db-btn db-btn-xs db-inline-cancel" onclick="dbCancelEdit(' + rowIdx + ',\'' + esc(colName) + '\',this.parentElement.parentElement)">✕</button></div>';
+  var input = td.querySelector('input[type=text]');
+  input.disabled = isNull;
   input.focus();
-  input.select();
+  if (!isNull) input.select();
   input.addEventListener('keydown', function(e) {
     if (e.key === 'Enter') dbSaveEdit(rowIdx, colName, td);
     if (e.key === 'Escape') dbCancelEdit(rowIdx, colName, td);
@@ -599,9 +721,10 @@ function dbCancelEdit(rowIdx, colName, td) {
 }
 
 async function dbSaveEdit(rowIdx, colName, td) {
-  var input = td.querySelector('input');
+  var input = td.querySelector('input[type=text]');
   if (!input) return;
-  var newVal = input.value;
+  var nullCb = td.querySelector('.db-inline-null-cb');
+  var newVal = (nullCb && nullCb.checked) ? null : input.value;
   var row = dbState.tableEditor.data.rows[rowIdx];
   if (!row) return;
   var pkCol = dbState.pkColumns[0];
@@ -614,7 +737,7 @@ async function dbSaveEdit(rowIdx, colName, td) {
   try {
     await API.databases.updateRow(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, pkCol, pkVal, { data: { [colName]: newVal } });
     row[colName] = newVal;
-    td.innerHTML = esc(String(newVal));
+    td.innerHTML = newVal === null ? '<span class="db-null">NULL</span>' : esc(String(newVal));
     dbToast('Cell updated', 'success');
   } catch (e) {
     dbToast('Failed to update: ' + e.message, 'error');
@@ -749,6 +872,22 @@ function renderTableConfig() {
   }
   html += '</div>';
 
+  // Triggers section
+  var trigs = dbState.triggers || [];
+  html += '<div class="db-config-section"><h4>⚡ Triggers <button class="db-btn db-btn-xs" onclick="dbShowCreateTrigger()" style="margin-left:8px">+ Add Trigger</button></h4>';
+  if (trigs.length) {
+    html += '<table class="db-fk-table"><thead><tr><th>Name</th><th>Status</th><th>Definition</th><th></th></tr></thead><tbody>';
+    trigs.forEach(function(t) {
+      html += '<tr><td>' + esc(t.trigger_name) + '</td><td>' + esc(t.status || 'ENABLED') + '</td>'
+        + '<td><code style="font-size:11px;color:var(--text-secondary)">' + esc(t.trigger_def) + '</code></td>'
+        + '<td><button class="db-btn db-btn-xs db-btn-danger" onclick="dbDropTrigger(\'' + esc(t.trigger_name) + '\')" title="Drop trigger">✕</button></td></tr>';
+    });
+    html += '</tbody></table>';
+  } else {
+    html += '<div class="db-meta">No triggers defined.</div>';
+  }
+  html += '</div>';
+
   return html;
 }
 
@@ -795,6 +934,172 @@ async function dbDropIndex(indexName) {
     } catch (e) { dbToast(e.message, 'error'); }
   });
 }
+
+/* ─── Trigger helpers ─── */
+function dbShowCreateTrigger() {
+  showDBModal('<h3>Create Trigger on ' + esc(dbState.selTable.name) + '</h3>'
+    + '<div class="n-form-group"><label>Trigger Name</label><input id="dbTrigName" class="db-form-input" placeholder="e.g. before_insert_check"></div>'
+    + '<div class="n-form-group"><label>Timing</label><select id="dbTrigTiming" class="db-form-input"><option value="BEFORE">BEFORE</option><option value="AFTER">AFTER</option><option value="INSTEAD OF">INSTEAD OF</option></select></div>'
+    + '<div class="n-form-group"><label>Event</label><select id="dbTrigEvent" class="db-form-input"><option value="INSERT">INSERT</option><option value="UPDATE">UPDATE</option><option value="DELETE">DELETE</option><option value="TRUNCATE">TRUNCATE</option></select></div>'
+    + '<div class="n-form-group"><label>For Each</label><select id="dbTrigForEach" class="db-form-input"><option value="ROW">ROW</option><option value="STATEMENT">STATEMENT</option></select></div>'
+    + '<div class="n-form-group"><label>Function / Procedure</label><input id="dbTrigFunction" class="db-form-input" placeholder="e.g. public.my_trigger_func()"></div>'
+    + '<div style="margin-bottom:12px"><label style="display:flex;align-items:center;gap:8px;font-size:12px;color:var(--text-secondary)"><input type="checkbox" id="dbTrigCondition"> Add WHEN condition</label></div>'
+    + '<div class="n-form-group" id="dbTrigConditionGroup" style="display:none"><label>WHEN clause (e.g. OLD.status <> NEW.status)</label><input id="dbTrigConditionVal" class="db-form-input" placeholder="condition"></div>'
+    + '<div class="db-form-error" id="dbModalError"></div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doCreateTrigger()">Create Trigger</button></div>');
+  document.getElementById('dbTrigCondition')?.addEventListener('change', function() {
+    document.getElementById('dbTrigConditionGroup').style.display = this.checked ? 'block' : 'none';
+  });
+  window.doCreateTrigger = async function() {
+    var name = document.getElementById('dbTrigName').value.trim();
+    var timing = document.getElementById('dbTrigTiming').value;
+    var event = document.getElementById('dbTrigEvent').value;
+    var forEach = document.getElementById('dbTrigForEach').value;
+    var func = document.getElementById('dbTrigFunction').value.trim();
+    var wc = document.getElementById('dbTrigCondition').checked ? document.getElementById('dbTrigConditionVal').value.trim() : '';
+    if (!name) return dbModalError('Trigger name required');
+    if (!func) return dbModalError('Function/procedure required');
+    var sql = 'CREATE TRIGGER ' + name + ' ' + timing + ' ' + event + ' ON ' + dbState.selTable.schema + '.' + dbState.selTable.name + ' FOR EACH ' + forEach;
+    if (wc) sql += ' WHEN (' + wc + ')';
+    sql += ' EXECUTE FUNCTION ' + func;
+    try {
+      await API.databases.createTrigger(dbState.selDb.name, sql);
+      closeDBModal();
+      dbToast('Trigger created');
+      await loadTableConfigData();
+      renderTableEditor();
+    } catch (e) { dbModalError(e.message); }
+  };
+}
+
+async function dbDropTrigger(triggerName) {
+  showConfirmModal('Drop trigger "' + triggerName + '"?', triggerName, async function() {
+    try {
+      await API.databases.dropTrigger(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, triggerName);
+      dbToast('Trigger dropped');
+      await loadTableConfigData();
+      renderTableEditor();
+    } catch (e) { dbToast(e.message, 'error'); }
+  });
+}
+
+/* ─── Activity Monitor ─── */
+async function showTriggersModal() {
+  var dbName = dbState.selDb ? dbState.selDb.name : '';
+  if (!dbName) return dbToast('No database selected', 'warning');
+  showDBModal('<h3>⚡ Triggers — ' + esc(dbName) + '</h3>'
+    + '<div id="triggersContent"><div class="db-loading">Loading triggers...</div></div>'
+    + '<div style="margin-top:8px;text-align:right"><button class="db-btn db-btn-sm" onclick="refreshTriggersModal()">🔄 Refresh</button></div>');
+  await refreshTriggersModal();
+}
+window.refreshTriggersModal = async function() {
+  var el = document.getElementById('triggersContent');
+  if (!el) return;
+  el.innerHTML = '<div class="db-loading">Refreshing...</div>';
+  try {
+    var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+    var triggers = await API.databases.listAllTriggers(dbName);
+    if (!triggers || !triggers.length) {
+      el.innerHTML = '<div class="db-meta">No triggers defined.</div>';
+      return;
+    }
+    var html = '<table class="db-fk-table" style="font-size:11px"><thead><tr>'
+      + '<th>Schema</th><th>Trigger</th><th>Table</th><th>Status</th><th></th></tr></thead><tbody>';
+    triggers.forEach(function(t) {
+      html += '<tr>'
+        + '<td>' + esc(t.schema_name || '') + '</td>'
+        + '<td>' + esc(t.trigger_name || '') + '</td>'
+        + '<td>' + esc(t.table_name || '') + '</td>'
+        + '<td>' + esc(t.status || 'ENABLED') + '</td>'
+        + '<td style="white-space:nowrap">'
+        + '<button class="db-btn db-btn-xs" onclick="showTriggerDefinition(\'' + esc(t.schema_name) + '\',\'' + esc(t.trigger_name) + '\')" title="Definition">📄</button>'
+        + '<button class="db-btn db-btn-xs db-btn-danger" onclick="dropTriggerGlobal(\'' + esc(t.schema_name) + '\',\'' + esc(t.trigger_name) + '\')" title="Drop" style="margin-left:4px">✕</button>'
+        + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch (e) { el.innerHTML = '<div class="db-error">' + esc(e.message) + '</div>'; }
+};
+window.showTriggerDefinition = async function(schema, triggerName) {
+  try {
+    var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+    var def = await API.databases.triggerDefinition(dbName, schema, triggerName);
+    var html = '<div style="margin-bottom:8px"><strong>' + esc(def.schema_name + '.' + def.trigger_name) + '</strong> on ' + esc(def.table_name) + '</div>'
+      + '<pre style="background:var(--bg3);padding:8px;border-radius:4px;overflow:auto;max-height:400px;font-size:11px">' + esc(def.trigger_def || '') + '</pre>';
+    showDBModal(html);
+  } catch (e) { dbToast(e.message, 'error'); }
+};
+window.dropTriggerGlobal = async function(schema, triggerName) {
+  showConfirmModal('Drop trigger "' + triggerName + '"?', triggerName, async function() {
+    try {
+      var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+      await API.databases.dropTriggerGlobal(dbName, schema, triggerName);
+      dbToast('Trigger "' + triggerName + '" dropped');
+      refreshTriggersModal();
+    } catch (e) { dbToast(e.message, 'error'); }
+  });
+};
+
+var connectionsRefreshTimer = null;
+async function showConnectionsMonitor() {
+  var dbName = dbState.selDb ? dbState.selDb.name : dbState.queryDb;
+  if (!dbName) return dbToast('No database selected', 'warning');
+  showDBModal('<h3>📊 Connections — ' + esc(dbName) + '</h3>'
+    + '<div id="connectionsContent"><div class="db-loading">Loading connections...</div></div>'
+    + '<div style="margin-top:8px;display:flex;justify-content:space-between;align-items:center">'
+    + '<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text-secondary)"><input type="checkbox" id="connectionsAutoRefresh" onchange="toggleConnectionsAutoRefresh()"> Auto-refresh every 5s</label>'
+    + '<button class="db-btn db-btn-sm" onclick="refreshConnectionsMonitor()">🔄 Refresh</button></div>');
+  await refreshConnectionsMonitor();
+}
+window.toggleConnectionsAutoRefresh = function() {
+  if (connectionsRefreshTimer) { clearInterval(connectionsRefreshTimer); connectionsRefreshTimer = null; }
+  var chk = document.getElementById('connectionsAutoRefresh');
+  if (chk && chk.checked) {
+    connectionsRefreshTimer = setInterval(refreshConnectionsMonitor, 5000);
+  }
+};
+window.refreshConnectionsMonitor = async function() {
+  var el = document.getElementById('connectionsContent');
+  if (!el) return;
+  el.innerHTML = '<div class="db-loading">Refreshing...</div>';
+  try {
+    var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+    var conns = await API.databases.connections(dbName);
+    if (!conns || !conns.length) {
+      el.innerHTML = '<div class="db-meta">No active connections.</div>';
+      return;
+    }
+    var html = '<table class="db-fk-table" style="font-size:11px"><thead><tr>'
+      + '<th>PID</th><th>User</th><th>State</th><th>Query</th><th>Duration</th><th></th></tr></thead><tbody>';
+    conns.forEach(function(c) {
+      var queryStr = (c.query || '').substring(0, 120);
+      var dur = c.duration || '—';
+      html += '<tr>'
+        + '<td>' + c.pid + '</td>'
+        + '<td>' + esc(c.user || '') + '</td>'
+        + '<td>' + esc(c.state || '') + '</td>'
+        + '<td><code style="font-size:10px;word-break:break-all">' + esc(queryStr) + (queryStr.length >= 120 ? '...' : '') + '</code></td>'
+        + '<td style="white-space:nowrap;font-size:10px">' + esc(typeof dur === 'object' ? JSON.stringify(dur) : dur) + '</td>'
+        + '<td style="white-space:nowrap">'
+        + '<button class="db-btn db-btn-xs db-btn-danger" onclick="killConnection(' + c.pid + ')" title="Kill connection">✕</button>'
+        + '</td>'
+        + '</tr>';
+    });
+    html += '</tbody></table>';
+    el.innerHTML = html;
+  } catch (e) { el.innerHTML = '<div class="db-error">' + esc(e.message) + '</div>'; }
+};
+window.killConnection = async function(pid) {
+  showConfirmModal('Kill connection PID ' + pid + '?', String(pid), async function() {
+    try {
+      var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+      await API.databases.killConnection(dbName, pid);
+      dbToast('Connection ' + pid + ' killed');
+      refreshConnectionsMonitor();
+    } catch(e) { dbToast(e.message, 'error'); }
+  });
+};
 
 function typeOptionsSelected(current) {
   var types = ['integer','bigint','smallint','serial','bigserial','varchar(255)','text','boolean','timestamptz','timestamp','date','numeric','real','jsonb','uuid'];
@@ -911,11 +1216,29 @@ async function dbAnalyze() {
 async function dbImportCSV() {
   var html = '<h3>Import Data into ' + esc(dbState.selTable.name) + '</h3>'
     + '<div class="n-form-group"><label>Format</label><select id="dbImportFormat" class="db-form-input"><option value="csv">CSV</option><option value="sql">SQL INSERT</option></select></div>'
+    + '<div class="n-form-group"><label>Upload File</label><input type="file" id="dbImportFile" class="db-form-input" accept=".csv,.sql" onchange="dbImportFileChanged(this)"></div>'
     + '<div class="n-form-group"><label>Content (paste CSV with header or SQL statements)</label><textarea id="dbImportContent" class="db-form-input" style="min-height:200px;font-family:var(--font-mono);font-size:12px" placeholder="Paste CSV or SQL here..."></textarea></div>'
     + '<div class="db-form-error" id="dbModalError"></div>'
     + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doImportCSV()">Import</button></div>';
   document.getElementById('dbModalContent').innerHTML = html;
   document.getElementById('dbModal').style.display = 'flex';
+  window.dbImportFileChanged = async function(input) {
+    var file = input.files[0];
+    if (!file) return;
+    var ta = document.getElementById('dbImportContent');
+    if (!ta) return;
+    ta.value = 'Loading ' + file.name + '...';
+    try {
+      var content = await file.text();
+      ta.value = content;
+      var fmt = document.getElementById('dbImportFormat');
+      if (fmt) {
+        var ext = file.name.toLowerCase().split('.').pop();
+        if (ext === 'csv') fmt.value = 'csv';
+        else if (ext === 'sql') fmt.value = 'sql';
+      }
+    } catch (e) { ta.value = 'Error reading file: ' + e.message; }
+  };
   window.doImportCSV = async function() {
     var format = document.getElementById('dbImportFormat').value;
     var content = document.getElementById('dbImportContent').value.trim();
@@ -963,7 +1286,25 @@ dbState.queryHistoryIdx = -1;
 dbState.queryPresets = [];
 dbState.queryDb = '';
 dbState.acIndex = -1;
+dbState.schemaCache = [];
 var queryRunTimer;
+
+async function loadSchemaCache(db) {
+  if (!db) return;
+  try {
+    var tables = await API.databases.tables(db);
+    var cache = [];
+    for (var i = 0; i < tables.length; i++) {
+      var t = tables[i];
+      cache.push(t.schemaname + '.' + t.tablename);
+      try {
+        var info = await API.databases.tableInfo(db, t.schemaname, t.tablename);
+        (info.columns || []).forEach(function(c) { cache.push(c.column_name); });
+      } catch(e) {}
+    }
+    dbState.schemaCache = cache;
+  } catch(e) { dbState.schemaCache = []; }
+}
 
 var SQL_KEYWORDS = [
   'SELECT','FROM','WHERE','INSERT','INTO','VALUES','UPDATE','SET','DELETE',
@@ -1003,6 +1344,7 @@ function showQueryTerminal() {
   document.getElementById('dbQueryView').style.display = 'block';
   document.getElementById('dbTitle').textContent = 'SQL Query Terminal';
   document.getElementById('dbBreadcrumb').innerHTML = 'Write & execute SQL queries';
+  dbSetURL('query');
   renderQueryTerminal();
 }
 
@@ -1019,8 +1361,8 @@ async function renderQueryTerminal() {
   }).join('');
 
   var html = '<div class="db-query-toolbar">'
-    + '<div class="db-query-db-select"><label>Database:</label><select id="queryDbSelect" class="db-form-input" onchange="dbState.queryDb=this.value">' + dbOpts + '</select></div>'
-    + '<div class="db-query-actions"><button class="db-btn db-btn-primary" id="queryRunBtn" onclick="executeQuery()">▶ Run</button><button class="db-btn" onclick="clearQuery()">Clear</button><button class="db-btn db-btn-icon" onclick="showQueryHistory()" title="History">📋</button><button class="db-btn db-btn-icon" onclick="saveBookmark()" title="Save as Bookmark">💾</button><button class="db-btn db-btn-icon" onclick="loadBookmarks()" title="Load Bookmarks">📑</button></div>'
+    + '<div class="db-query-db-select"><label>Database:</label><select id="queryDbSelect" class="db-form-input" onchange="dbState.queryDb=this.value;loadSchemaCache(this.value)">' + dbOpts + '</select></div>'
+    + '<div class="db-query-actions"><button class="db-btn db-btn-primary" id="queryRunBtn" onclick="executeQuery()">▶ Run</button><button class="db-btn" onclick="clearQuery()">Clear</button><button class="db-btn db-btn-icon" onclick="showQueryHistory()" title="History">📋</button><button class="db-btn db-btn-icon" onclick="saveBookmark()" title="Save as Bookmark">💾</button><button class="db-btn db-btn-icon" onclick="loadBookmarks()" title="Load Bookmarks">📑</button><button class="db-btn" onclick="showCSVImport()" title="Import CSV">📄 Import CSV</button><button class="db-btn" id="explainBtn" onclick="runExplainAnalyze()" title="EXPLAIN ANALYZE">🔍 Explain</button></div>'
     + '</div>'
     + '<div class="db-query-layout">'
     + '<div class="db-query-left-col">'
@@ -1123,6 +1465,182 @@ function clearQuery() {
   hideAutocomplete();
 }
 
+/* ── CSV Import ── */
+function showCSVImport() {
+  var input = document.getElementById('csvFileInput');
+  if (!input) {
+    input = document.createElement('input');
+    input.id = 'csvFileInput';
+    input.type = 'file';
+    input.accept = '.csv';
+    input.style.display = 'none';
+    input.addEventListener('change', handleCSVFile);
+    document.body.appendChild(input);
+  }
+  input.value = '';
+  input.click();
+}
+
+async function handleCSVFile(e) {
+  var file = e.target.files[0];
+  if (!file) return;
+  var content = await file.text();
+  if (!content.trim()) { dbToast('CSV file is empty', 'warning'); return; }
+  var tableName = file.name.replace(/\.csv$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
+  if (!tableName) tableName = 'imported_data';
+  var dbName = dbState.queryDb || (dbState.databases.length ? dbState.databases[0].name : '');
+  // Show dialog
+  var overlay = document.createElement('div');
+  overlay.className = 'db-modal-overlay active';
+  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
+  overlay.innerHTML =
+    '<div class="db-modal db-csv-modal" onclick="event.stopPropagation()" style="max-width:500px">'
+    + '<div class="db-modal-header" style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Import CSV</h3><span class="db-modal-close" onclick="this.closest(\'.db-modal-overlay\').remove()">✕</span></div>'
+    + '<div class="db-modal-body">'
+    + '<div class="n-form-group"><label>Database</label><select id="csvDbSelect" class="db-form-input">'
+    + dbState.databases.map(function(d) { return '<option value="' + esc(d.name) + '" ' + (d.name === dbName ? 'selected' : '') + '>' + esc(d.name) + '</option>'; }).join('')
+    + '</select></div>'
+    + '<div class="n-form-group"><label>Table Name</label><input id="csvTableName" class="db-form-input" value="' + esc(tableName) + '"></div>'
+    + '<div class="n-form-group"><label>Schema</label><input id="csvSchema" class="db-form-input" value="public"></div>'
+    + '<div class="n-form-group"><label>Rows detected: <strong>' + (content.trim().split('\n').length - 1) + '</strong></label></div>'
+    + '<div class="n-form-group"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="csvCreateTable" checked> Create table automatically (based on column types)</label></div>'
+    + '</div>'
+    + '<div class="db-modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--border)">'
+    + '<button class="db-btn" onclick="this.closest(\'.db-modal-overlay\').remove()">Cancel</button>'
+    + '<button class="db-btn db-btn-primary" onclick="runCSVImport()">Import</button>'
+    + '</div>'
+    + '<div id="csvImportError" class="db-form-error" style="margin:0 16px 12px"></div>'
+    + '<div id="csvImportProgress" style="margin:0 16px 12px;display:none"><div class="db-loading"></div></div>'
+    + '</div>';
+  document.body.appendChild(overlay);
+  overlay.dataset.csvContent = content;
+}
+
+async function runCSVImport() {
+  var overlay = document.querySelector('.db-csv-modal');
+  if (!overlay) return;
+  overlay = overlay.closest('.db-modal-overlay');
+  var dbName = document.getElementById('csvDbSelect').value;
+  var tableName = document.getElementById('csvTableName').value.trim();
+  var schema = document.getElementById('csvSchema').value.trim() || 'public';
+  var createTable = document.getElementById('csvCreateTable').checked;
+  var content = overlay.dataset.csvContent;
+  var errEl = document.getElementById('csvImportError');
+  var progEl = document.getElementById('csvImportProgress');
+
+  if (!tableName) { errEl.textContent = 'Table name is required'; errEl.style.display = 'block'; return; }
+  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName)) { errEl.textContent = 'Invalid table name'; errEl.style.display = 'block'; return; }
+
+  errEl.style.display = 'none';
+  progEl.style.display = 'block';
+  progEl.innerHTML = '<div class="db-loading">Importing...</div>';
+
+  try {
+    var lines = content.trim().split('\n');
+    if (lines.length < 2) throw new Error('CSV must have header and data rows');
+    var header = parseCSVLineLocal(lines[0]);
+    var dataLines = [];
+    for (var i = 1; i < lines.length; i++) {
+      var row = parseCSVLineLocal(lines[i]);
+      if (row.length === header.length && row.some(function(c) { return c.trim(); })) dataLines.push(row);
+    }
+    if (!dataLines.length) throw new Error('No data rows found');
+    if (createTable) {
+      // Detect column types
+      var colTypes = header.map(function(colName) {
+        var vals = dataLines.map(function(r) { return r[header.indexOf(colName)]; });
+        return detectCSVType(vals);
+      });
+      var colDefs = header.map(function(colName, i) { return quoteIdent(colName) + ' ' + colTypes[i]; });
+      var stmt = 'CREATE TABLE ' + quoteIdent(schema) + '.' + quoteIdent(tableName) + ' (\n  ' + colDefs.join(',\n  ') + '\n);';
+      await API.databases.runQuery(dbName, stmt);
+    }
+    // Insert data in batches
+    var batchSize = 50;
+    for (var b = 0; b < dataLines.length; b += batchSize) {
+      var batch = dataLines.slice(b, b + batchSize);
+      var valuesSQL = batch.map(function(row) {
+        return '(' + row.map(function(v) {
+          v = v.trim();
+          if (v === '' || v === 'NULL' || v === 'null') return 'NULL';
+          if (v === 'TRUE' || v === 'true' || v === 't') return 'true';
+          if (v === 'FALSE' || v === 'false' || v === 'f') return 'false';
+          if (!isNaN(v) && v !== '') return v;
+          return quoteLiteral(v);
+        }).join(',') + ')';
+      }).join(',\n');
+      var insertSQL = 'INSERT INTO ' + quoteIdent(schema) + '.' + quoteIdent(tableName) + ' (' + header.map(function(c) { return quoteIdent(c); }).join(',') + ') VALUES\n' + valuesSQL + ';';
+      await API.databases.runQuery(dbName, insertSQL);
+      progEl.innerHTML = '<div class="db-loading">Imported ' + Math.min(b + batchSize, dataLines.length) + ' / ' + dataLines.length + ' rows...</div>';
+    }
+    overlay.remove();
+    dbToast('CSV imported into ' + schema + '.' + tableName + ' (' + dataLines.length + ' rows)', 'success');
+    // Show the SQL in the editor
+    var ta = document.getElementById('queryInput');
+    if (ta) {
+      ta.value = 'SELECT * FROM ' + quoteIdent(schema) + '.' + quoteIdent(tableName) + ' LIMIT 100;';
+      ta.focus();
+    }
+  } catch (e) {
+    errEl.textContent = e.message;
+    errEl.style.display = 'block';
+    progEl.style.display = 'none';
+  }
+}
+
+function parseCSVLineLocal(line) {
+  var result = [];
+  var current = '';
+  var inQuotes = false;
+  for (var i = 0; i < line.length; i++) {
+    var ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') { current += '"'; i++; }
+        else { inQuotes = false; }
+      } else { current += ch; }
+    } else {
+      if (ch === '"') { inQuotes = true; }
+      else if (ch === ',') { result.push(current); current = ''; }
+      else { current += ch; }
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function detectCSVType(vals) {
+  var hasDecimal = false;
+  var allNumeric = true;
+  var allBool = true;
+  var maxLen = 0;
+  for (var i = 0; i < vals.length; i++) {
+    var v = vals[i].trim();
+    if (v === '' || v === 'NULL' || v === 'null') continue;
+    maxLen = Math.max(maxLen, v.length);
+    if (v === 'TRUE' || v === 'true' || v === 't' || v === 'FALSE' || v === 'false' || v === 'f') continue;
+    allBool = false;
+    if (isNaN(parseFloat(v)) || !isFinite(v)) { allNumeric = false; allInt = false; }
+    else if (v.indexOf('.') >= 0) hasDecimal = true;
+  }
+  if (!maxLen) return 'TEXT';
+  if (allBool) return 'BOOLEAN';
+  if (allNumeric && hasDecimal) return 'NUMERIC';
+  if (allNumeric && !hasDecimal) {
+    if (maxLen > 9) return 'BIGINT';
+    return 'INTEGER';
+  }
+  if (maxLen > 255) return 'TEXT';
+  return 'VARCHAR(255)';
+}
+
+/* ── SQL Helpers ── */
+function quoteIdent(id) { return '"' + String(id).replace(/"/g, '""') + '"'; }
+function quoteLiteral(val) {
+  if (val === null || val === undefined) return 'NULL';
+  return "'" + String(val).replace(/'/g, "''") + "'";
+}
+
 /* ── Autocomplete ── */
 var acMirror = null;
 
@@ -1145,14 +1663,18 @@ function queryAutocomplete(e) {
   var partial = match[1].toUpperCase();
   if (partial.length < 2) { hideAutocomplete(); return; }
 
-  var suggestions = SQL_KEYWORDS.filter(function(kw) { return kw.startsWith(partial) && kw !== partial; });
-  if (!suggestions.length) { hideAutocomplete(); return; }
+  var lowerPartial = partial.toLowerCase();
+  var kwSuggestions = SQL_KEYWORDS.filter(function(kw) { return kw.startsWith(lowerPartial.toUpperCase()) && kw !== lowerPartial.toUpperCase(); });
+  var scSuggestions = (dbState.schemaCache || []).filter(function(s) { return s.toLowerCase().indexOf(lowerPartial) === 0 && s.toLowerCase() !== lowerPartial; });
+  var suggestions = kwSuggestions.concat(scSuggestions);
+  var deduped = suggestions.filter(function(v, i, a) { return a.indexOf(v) === i; }).slice(0, 10);
+  if (!deduped.length) { hideAutocomplete(); return; }
 
   dbState.acIndex = -1;
   var drop = document.getElementById('acDropdown');
   if (!drop) return;
-  var html = suggestions.slice(0, 10).map(function(s, i) {
-    return '<div class="db-ac-item" data-idx="' + i + '" onmousedown="acSelect(\'' + s + '\')">' + s + '</div>';
+  var html = deduped.map(function(s, i) {
+    return '<div class="db-ac-item" data-idx="' + i + '" onmousedown="acSelect(\'' + s.replace(/'/g, '\\\'') + '\')">' + s + '</div>';
   }).join('');
   drop.innerHTML = html;
   drop.style.display = 'block';
@@ -1288,6 +1810,94 @@ function showQueryHistory() {
   document.getElementById('dbModal').style.display = 'flex';
 }
 
+async function runExplainAnalyze() {
+  var ta = document.getElementById('queryInput');
+  if (!ta) return;
+  var query = ta.value.trim();
+  if (!query) return;
+  var upper = query.toUpperCase().trimStart();
+  if (upper.startsWith('EXPLAIN')) {
+    dbToast('Query already starts with EXPLAIN', 'warning');
+    return;
+  }
+  var explainQuery = 'EXPLAIN (ANALYZE, COSTS, VERBOSE, BUFFERS, FORMAT JSON) ' + query;
+  var errorEl = document.getElementById('queryError');
+  if (errorEl) errorEl.style.display = 'none';
+  var ra = document.getElementById('queryResultsArea');
+  if (ra) ra.innerHTML = '<div class="db-query-loading">⏳ Explaining...</div>';
+  hideAutocomplete();
+  try {
+    var result = await API.databases.queryRun(dbState.queryDb, explainQuery);
+    if (ra) renderExplainPlan(ra, result);
+  } catch (e) {
+    if (ra) ra.innerHTML = '<div class="db-query-error"><span class="db-query-error-icon">✕</span>' + esc(e.message) + '</div>';
+    if (errorEl) { errorEl.textContent = e.message; errorEl.style.display = 'block'; }
+  }
+}
+
+function renderExplainPlan(container, result) {
+  if (!result.rows || !result.rows.length || !result.rows[0]['QUERY PLAN']) {
+    container.innerHTML = '<div class="db-query-error">No EXPLAIN plan returned</div>';
+    return;
+  }
+  var plan;
+  try {
+    plan = JSON.parse(result.rows[0]['QUERY PLAN']);
+  } catch (e) {
+    container.innerHTML = '<div class="db-query-error">Failed to parse plan JSON</div>';
+    return;
+  }
+  var root = Array.isArray(plan) ? plan[0].Plan : plan.Plan;
+  if (!root) { container.innerHTML = '<div class="db-query-error">No plan node found</div>'; return; }
+  var totalTime = root['Actual Total Time'] || root['Total Cost'] || 1;
+  var html = '<div class="db-query-status">EXPLAIN ANALYZE plan <span class="db-meta">· total time ' + (root['Actual Total Time'] || '—') + 'ms</span></div>';
+  html += '<div class="db-explain-tree">' + renderExplainNode(root, 0, totalTime) + '</div>';
+  container.innerHTML = html;
+  container.querySelectorAll('.db-explain-toggle').forEach(function(btn) {
+    btn.addEventListener('click', function(e) {
+      e.stopPropagation();
+      var node = this.closest('.db-explain-node');
+      node.classList.toggle('collapsed');
+      this.textContent = node.classList.contains('collapsed') ? '▶' : '▼';
+    });
+  });
+}
+
+function renderExplainNode(node, depth, totalTime) {
+  var nodeType = node['Node Type'] || 'Node';
+  var actualTime = node['Actual Total Time'];
+  var actualRows = node['Actual Rows'];
+  var estRows = node['Plan Rows'];
+  var cost = node['Total Cost'];
+  var pct = actualTime != null && totalTime ? (actualTime / totalTime * 100) : null;
+  var cls = 'db-explain-node';
+  if (pct != null) {
+    if (pct > 50) cls += ' db-explain-expensive';
+    else if (pct > 20) cls += ' db-explain-moderate';
+  }
+  var hasChildren = node.Plans && node.Plans.length;
+  var html = '<div class="' + cls + '" style="padding-left:' + (depth * 20) + 'px">';
+  html += '<div class="db-explain-header">';
+  if (hasChildren) html += '<span class="db-explain-toggle">▼</span>';
+  html += '<span class="db-explain-type">' + esc(nodeType) + '</span>';
+  if (actualTime != null) html += ' <span class="db-explain-metric">' + actualTime.toFixed(2) + 'ms</span>';
+  if (pct != null) html += ' <span class="db-explain-pct">' + pct.toFixed(1) + '%</span>';
+  if (actualRows != null) html += ' <span class="db-explain-metric">rows: ' + actualRows + '</span>';
+  if (estRows != null) html += ' <span class="db-explain-metric">est: ' + estRows + '</span>';
+  if (cost != null) html += ' <span class="db-explain-metric">cost: ' + cost.toFixed(2) + '</span>';
+  if (node['Index Name']) html += ' <span class="db-explain-metric">idx: ' + esc(node['Index Name']) + '</span>';
+  if (node['Relation Name']) html += ' <span class="db-explain-metric">on: ' + esc(node['Relation Name']) + '</span>';
+  if (node['Filter']) html += ' <span class="db-explain-metric">filter: ' + esc(node['Filter']) + '</span>';
+  html += '</div>';
+  if (hasChildren) {
+    html += '<div class="db-explain-children">';
+    node.Plans.forEach(function(child) { html += renderExplainNode(child, depth + 1, totalTime); });
+    html += '</div>';
+  }
+  html += '</div>';
+  return html;
+}
+
 async function executeQuery() {
   var ta = document.getElementById('queryInput');
   if (!ta) return;
@@ -1302,7 +1912,7 @@ async function executeQuery() {
   hideAutocomplete();
 
   // Add to history
-  dbState.queryHistory.unshift(query);
+  dbState.queryHistory.unshift(ta.value.trim());
   if (dbState.queryHistory.length > 50) dbState.queryHistory.pop();
   dbState.queryHistoryIdx = -1;
 
@@ -1320,7 +1930,8 @@ var dbLastQueryResult = null;
 function renderQueryResults(container, result) {
   if (result.columns && result.columns.length) {
     dbLastQueryResult = result;
-    var html = '<div class="db-query-status">' + result.rowCount + ' row' + (result.rowCount !== 1 ? 's' : '') + ' returned'
+    var timeStr = result.executionTimeMs != null ? ' <span class="db-meta">· ' + result.executionTimeMs + 'ms</span>' : '';
+    var html = '<div class="db-query-status">' + result.rowCount + ' row' + (result.rowCount !== 1 ? 's' : '') + ' returned' + timeStr
       + ' <span class="db-query-export-actions"><button class="db-btn db-btn-xs" onclick="dbExportQueryResult(\'csv\')">⬇ CSV</button>'
       + '<button class="db-btn db-btn-xs" onclick="dbExportQueryResult(\'json\')">⬇ JSON</button>'
       + '<button class="db-btn db-btn-xs" onclick="dbExportQueryResult(\'sql\')">⬇ SQL</button></span></div>'
@@ -1346,6 +1957,7 @@ function renderQueryResults(container, result) {
     var cls = result.affectedRows !== undefined ? 'db-query-status db-query-status-mutate' : 'db-query-status db-query-status-success';
     var msg = result.message || result.command + ' completed';
     if (result.affectedRows !== undefined) msg = result.affectedRows + ' row' + (result.affectedRows !== 1 ? 's' : '') + ' affected';
+    if (result.executionTimeMs != null) msg += ' <span class="db-meta">· ' + result.executionTimeMs + 'ms</span>';
     container.innerHTML = '<div class="' + cls + '"><span class="db-query-status-icon">' + icon + '</span> ' + esc(msg) + '</div>';
   }
 }
@@ -1527,6 +2139,7 @@ async function showFunctionsView() {
   document.getElementById('dbFunctionsView').style.display = 'block';
   document.getElementById('dbTitle').textContent = 'Functions — ' + dbState.selDb.name;
   document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / <a href="#" onclick="renderConfView()">' + esc(dbState.selDb.name) + '</a> / Functions';
+  dbSetURL('functions/' + encodeURIComponent(dbState.selDb.name));
   renderFunctionsView();
 }
 
@@ -1623,6 +2236,7 @@ async function showSearchAll() {
   document.getElementById('dbSearchView').style.display = 'block';
   document.getElementById('dbTitle').textContent = 'Search All Tables';
   document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="renderCards()">Home</a> / Search All Tables';
+  dbSetURL('search');
   renderSearchAll();
 }
 

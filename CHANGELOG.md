@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.9.0] - 2026-07-19
+### Added
+- **URL-based routing for Database Manager**: deep-linkable URLs for `/databases/cards`, `/databases/tables/:db`, `/databases/config/:db`, `/databases/query`, `/databases/search`, `/databases/functions/:db`, and table editor paths. `popstate` restores the view on back/forward navigation
+- **Schema-aware SQL autocomplete**: query terminal suggests real table/column names from the selected database, merged with SQL keywords
+- **CSV/SQL file import**: import modal now includes a file picker that reads `.csv` and `.sql` files into the content textarea
+- **Copy cell value**: data cells show a clipboard icon on hover; click copies the cell value to the clipboard
+- **Trigger management (global)**: database config now has a "Triggers" button that opens a modal listing all triggers across the database with definition viewer and drop action
+- **Materialized view management**: database tables view shows materialized views with create, refresh, and drop actions
+- **EXPLAIN ANALYZE visualizer**: query terminal "Explain" button runs `EXPLAIN (ANALYZE, COSTS, VERBOSE, BUFFERS, FORMAT JSON)` and renders the plan as a collapsible tree with timing/cost metrics and color-coded expensive nodes (>50% red, >20% yellow)
+- **Connection/Activity monitor**: database config "Connections" button opens a live `pg_stat_activity` modal showing PID, user, state, query, and duration with a kill button per connection and optional 5-second auto-refresh
+- **Multi-statement query execution**: query terminal can execute semicolon-separated statements sequentially inside a transaction, returning the last result set
+- **Expanded SQL dump**: database dump now includes sequences, per-table indexes, foreign key constraints, table/column comments, views, materialized views, functions, and triggers
+
+### Changed
+- Route ordering: moved top-level database routes (`/users`, `/list`, `/query-presets`, `/bookmarks`, `/create`, `/query-run`) before parameterized `/:db` routes to prevent shadowing
+- CSV import is now transaction-safe: wrapped in `BEGIN`/`COMMIT` with `ROLLBACK` on any error
+- Bumped cache-busting query parameter to `v=1.9.0` for all changed assets
+
 ## [1.8.0] - 2026-07-19
 ### Added
 - **Visual FK relation designer**: "Relations" button in table config and database config opens a modal showing all foreign key relationships across the entire database with source/target table, column, on-update, and on-delete rules (Tier 3.1)
