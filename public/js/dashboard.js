@@ -298,7 +298,7 @@ async function fetchStats() {
     const stats = await API.getStats();
     updateDashboard(stats);
   } catch (err) {
-    if (err.message === 'Unauthorized' || err.message === 'Session expired') {
+    if ((err.message === 'Unauthorized' || err.message === 'Session expired') && document.getElementById('loginPage') && document.getElementById('loginPage').style.display !== 'flex') {
       clearInterval(pollInterval);
       location.reload();
     }
@@ -355,7 +355,10 @@ document.addEventListener('visibilitychange', function () {
   } else {
     dashboardActive = true;
     if (window.pauseParticles) window.pauseParticles(false);
-    if (window.initDashboard) window.initDashboard();
+    // Only restart dashboard polling if dashboard is the active view
+    if (window.initDashboard && document.getElementById('viewDashboard') && document.getElementById('viewDashboard').style.display !== 'none') {
+      window.initDashboard();
+    }
   }
 });
 
