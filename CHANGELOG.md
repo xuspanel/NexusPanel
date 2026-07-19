@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.6.7] - 2026-07-19
+### Added
+- **Table metadata display**: header bar in the table editor shows owner, size, estimated rows, index/trigger counts, and table comment. Loaded in background from `GET /:db/table/:schema/:table/metadata`
+- **Export table data**: "Export" dropdown button in the Data toolbar with CSV, JSON, and SQL INSERT format options. Creates a direct download link via `GET /:db/table/:schema/:table/export?format=`
+- **Duplicate table**: "Duplicate" button in Config mode opens a prompt for the new table name (default `schema.table_copy`), creates a copy via `CREATE TABLE ... (LIKE ... INCLUDING ALL)`
+- **Rename table**: "Rename" button in Config mode prompts for a new table name and executes `ALTER TABLE ... RENAME TO`
+- **Truncate table**: "Empty" button with type-to-confirm modal, truncates all rows from the table
+- **VACUUM / ANALYZE**: one-click buttons in Config mode for table maintenance
+- **Table comment editor**: text input in Config mode with "Set Comment" button, persists via `COMMENT ON TABLE`
+- **Column comments**: comment input field in each config editor row. Comments are loaded from metadata and saved individually via `COMMENT ON COLUMN`
+
+### Changed
+- `public/js/databases.js`: `openTableEditor()` fetches table metadata in background; `renderTableEditor()` shows metadata bar; `renderTableData()` includes export dropdown; `renderTableConfig()` now has table comment input, action toolbar (duplicate/rename/empty/vacuum/analyze), and column comment inputs in grid; added `tedChangeColComment()`, `saveTableComment()`, `dbDuplicateTable()`, `dbRenameTable()`, `dbTruncateTable()`, `dbVacuum()`, `dbAnalyze()` functions
+- `public/js/api.js`: added `duplicateTable()`, `renameTable()`, `truncateTable()`, `vacuumTable()`, `analyzeTable()`, `tableMetadata()`, `setTableComment()`, `setColumnComment()`, `exportTable()` methods
+- `public/css/style.css`: updated `.db-editor-header` and `.db-editor-row` grid to 6-column layout with Comment column; added `.db-table-meta`, `.db-export-group`, `.db-export-dropdown`, `.db-export-option`, `.db-editor-table-actions`, `.db-editor-toolbar`, `.db-btn-warn`
+- `src/routes/databases.js`: added 9 new endpoints for duplicate/rename/truncate/vacuum/analyze/metadata/comment/export
+- `src/services/databases.js`: added `duplicateTable()`, `renameTable()`, `truncateTable()`, `vacuumTable()`, `analyzeTable()`, `getTableMetadata()`, `setTableComment()`, `getColumnComments()`, `setColumnComment()`, `exportTableData()`
+
 ## [1.6.6] - 2026-07-19
 ### Fixed
 - **CSS duplicate cleanup**: removed duplicate `.db-data-table-wrap` and `.db-data-table` definitions in the early database section (lines 2395-2444) that were silently overriding the later consolidated definitions. Merged unique properties (`max-height`, `overflow-y`, `font-family`, `position:sticky`) into the canonical `.db-data-table` section

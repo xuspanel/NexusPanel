@@ -132,6 +132,99 @@ router.delete('/:db/table/:schema/:table/row/:pkCol/:pkVal', async (req, res) =>
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+router.post('/:db/table/:schema/:table/duplicate', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    const { newName } = req.body;
+    if (!newName) return res.status(400).json({ error: 'New table name required' });
+    const result = await db.duplicateTable(database, schema, table, newName);
+    res.status(201).json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.put('/:db/table/:schema/:table/rename', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    const { newName } = req.body;
+    if (!newName) return res.status(400).json({ error: 'New table name required' });
+    if (!db.validateIdent(newName)) return res.status(400).json({ error: 'Invalid table name' });
+    const result = await db.renameTable(database, schema, table, newName);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/:db/table/:schema/:table/truncate', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    const result = await db.truncateTable(database, schema, table);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.post('/:db/table/:schema/:table/vacuum', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    const result = await db.vacuumTable(database, schema, table);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.post('/:db/table/:schema/:table/analyze', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    const result = await db.analyzeTable(database, schema, table);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.get('/:db/table/:schema/:table/metadata', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid database/schema/table name' });
+    }
+    const meta = await db.getTableMetadata(database, schema, table);
+    const comments = await db.getColumnComments(database, schema, table);
+    const commentMap = {};
+    comments.forEach(c => { commentMap[c.column_name] = c.comment; });
+    res.json({ ...meta, column_comments: commentMap });
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/:db/table/:schema/:table/comment', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    const { comment } = req.body;
+    const result = await db.setTableComment(database, schema, table, comment);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.put('/:db/table/:schema/:table/column/:column/comment', async (req, res) => {
+  try {
+    const { db: database, schema, table, column } = req.params;
+    if (!db.validateIdent(column)) return res.status(400).json({ error: 'Invalid column name' });
+    const { comment } = req.body;
+    const result = await db.setColumnComment(database, schema, table, column, comment);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.get('/:db/table/:schema/:table/export', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid database/schema/table name' });
+    }
+    const format = req.query.format || 'sql';
+    if (!['csv', 'json', 'sql'].includes(format)) return res.status(400).json({ error: 'Invalid format (csv/json/sql)' });
+    const result = await db.exportTableData(database, schema, table, format);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${schema}.${table}.${result.ext}"`);
+    res.send(result.content);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
 router.get('/:db/schemas', async (req, res) => {
   try {
     const { db: database } = req.params;

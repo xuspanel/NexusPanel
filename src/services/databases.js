@@ -287,6 +287,137 @@ async function dropDatabase(name) {
   return { ok: true };
 }
 
+async function duplicateTable(database, schema, table, newName) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  if (!validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid schema/table name');
+  let newSchema = schema, newTable = newName;
+  if (typeof newName === 'string' && newName.includes('.')) {
+    const parts = newName.split('.');
+    if (parts.length !== 2 || !parts[0] || !parts[1]) throw new Error('Invalid new name format (use "schema.table" or "tablename")');
+    if (!validateIdent(parts[0])) throw new Error('Invalid new schema name');
+    if (!validateIdent(parts[1])) throw new Error('Invalid new table name');
+    newSchema = parts[0];
+    newTable = parts[1];
+  } else {
+    if (!validateIdent(newName)) throw new Error('Invalid new table name');
+  }
+  await exec(database, `CREATE TABLE ${quoteIdent(newSchema)}.${quoteIdent(newTable)} AS SELECT * FROM ${quoteIdent(schema)}.${quoteIdent(table)}`);
+  return { ok: true, schema: newSchema, table: newTable };
+}
+
+async function renameTable(database, schema, table, newName) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  if (!validateIdent(schema) || !validateIdent(table) || !validateIdent(newName)) throw new Error('Invalid schema/table name');
+  await exec(database, `ALTER TABLE ${quoteIdent(schema)}.${quoteIdent(table)} RENAME TO ${quoteIdent(newName)}`);
+  return { ok: true, schema, table: newName };
+}
+
+async function truncateTable(database, schema, table) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  if (!validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid schema/table name');
+  await exec(database, `TRUNCATE TABLE ${quoteIdent(schema)}.${quoteIdent(table)}`);
+  return { ok: true };
+}
+
+async function vacuumTable(database, schema, table) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  if (!validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid schema/table name');
+  await exec(database, `VACUUM ANALYZE ${quoteIdent(schema)}.${quoteIdent(table)}`);
+  return { ok: true };
+}
+
+async function analyzeTable(database, schema, table) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  if (!validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid schema/table name');
+  await exec(database, `ANALYZE ${quoteIdent(schema)}.${quoteIdent(table)}`);
+  return { ok: true };
+}
+
+async function getTableMetadata(database, schema, table) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  const full = `${quoteIdent(schema)}.${quoteIdent(table)}`;
+  const sql = `SELECT
+    pg_catalog.pg_get_userbyid(c.relowner) AS owner,
+    pg_catalog.pg_size_pretty(pg_catalog.pg_total_relation_size(c.oid)) AS total_size,
+    pg_catalog.pg_size_pretty(pg_catalog.pg_table_size(c.oid)) AS table_size,
+    pg_catalog.pg_size_pretty(pg_catalog.pg_indexes_size(c.oid)) AS index_size,
+    c.reltuples::bigint AS estimated_rows,
+    pg_catalog.obj_description(c.oid, 'pg_class') AS table_comment,
+    (SELECT collname FROM pg_collation WHERE oid = c.relcollation) AS collation,
+    (SELECT COUNT(*)::int FROM pg_catalog.pg_index WHERE indrelid = c.oid) AS index_count,
+    (SELECT COUNT(*)::int FROM pg_catalog.pg_trigger WHERE tgrelid = c.oid AND tgisinternal = false) AS trigger_count
+  FROM pg_catalog.pg_class c
+  WHERE c.relname = $1 AND c.relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = $2)`;
+  const row = await queryOne(database, sql, [table, schema]);
+  if (!row) throw new Error('Table not found');
+  return row;
+}
+
+async function setTableComment(database, schema, table, comment) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  const val = (comment !== null && comment !== undefined && comment !== '') ? quoteLiteral(comment) : 'NULL';
+  await exec(database, `COMMENT ON TABLE ${quoteIdent(schema)}.${quoteIdent(table)} IS ${val}`);
+  return { ok: true };
+}
+
+async function getColumnComments(database, schema, table) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  const sql = `SELECT a.attname AS column_name,
+    pg_catalog.col_description(a.attrelid, a.attnum) AS comment
+  FROM pg_catalog.pg_attribute a
+  JOIN pg_catalog.pg_class c ON a.attrelid = c.oid
+  WHERE c.relname = $1
+    AND a.attnum > 0
+    AND NOT a.attisdropped
+    AND c.relnamespace = (SELECT oid FROM pg_catalog.pg_namespace WHERE nspname = $2)
+  ORDER BY a.attnum`;
+  return await queryRows(database, sql, [table, schema]);
+}
+
+async function setColumnComment(database, schema, table, column, comment) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table) || !validateIdent(column)) throw new Error('Invalid name');
+  const val = (comment !== null && comment !== undefined && comment !== '') ? quoteLiteral(comment) : 'NULL';
+  await exec(database, `COMMENT ON COLUMN ${quoteIdent(schema)}.${quoteIdent(table)}.${quoteIdent(column)} IS ${val}`);
+  return { ok: true };
+}
+
+async function exportTableData(database, schema, table, format) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  const full = `${quoteIdent(schema)}.${quoteIdent(table)}`;
+  const rows = await queryRows(database, `SELECT * FROM ${full} ORDER BY (SELECT NULL)`);
+  const cols = rows.length ? Object.keys(rows[0]) : [];
+
+  if (format === 'csv') {
+    const header = cols.map(c => `"${c.replace(/"/g, '""')}"`).join(',');
+    const data = rows.map(r => cols.map(c => {
+      const v = r[c];
+      if (v === null || v === undefined) return '';
+      const s = String(v);
+      return `"${s.replace(/"/g, '""')}"`;
+    }).join(','));
+    return { content: [header, ...data].join('\n'), contentType: 'text/csv', ext: 'csv' };
+  }
+
+  if (format === 'json') {
+    return { content: JSON.stringify(rows, null, 2), contentType: 'application/json', ext: 'json' };
+  }
+
+  // Default: SQL INSERT statements
+  const tableFull = `${quoteIdent(schema)}.${quoteIdent(table)}`;
+  const colList = cols.map(c => quoteIdent(c)).join(', ');
+  const lines = rows.map(r => {
+    const vals = cols.map(c => {
+      const v = r[c];
+      if (v === null || v === undefined) return 'NULL';
+      if (typeof v === 'number') return String(v);
+      return quoteLiteral(v);
+    }).join(', ');
+    return `INSERT INTO ${tableFull} (${colList}) VALUES (${vals});`;
+  });
+  const header_ = `-- Export of ${schema}.${table}\n-- ${new Date().toISOString()}\n\n`;
+  return { content: header_ + lines.join('\n'), contentType: 'text/sql', ext: 'sql' };
+}
+
 async function runQuery(database, sql, params) {
   if (!validateIdent(database)) throw new Error('Invalid database name');
   const result = await query(database, sql, params || []);
@@ -318,7 +449,9 @@ module.exports = {
   listDatabases, listRoles, createRole,
   listTables, listSchemas, listExtensions,
   getTableInfo, getTableData,
-  createTable, alterTable, dropTable,
+  createTable, alterTable, dropTable, duplicateTable, renameTable, truncateTable,
+  vacuumTable, analyzeTable, getTableMetadata, setTableComment,
+  getColumnComments, setColumnComment, exportTableData,
   getDbConfig, updateDbConfig,
   createDatabase, dropDatabase, runQuery,
   insertRow, updateRow, deleteRow,

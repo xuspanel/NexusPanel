@@ -317,6 +317,7 @@ async function openTableEditor(schema, table) {
   dbState.dataSortBy = '';
   dbState.dataSortDir = '';
   dbState.dataSearch = '';
+  dbState.tableMetadata = null;
   try {
     var [info, data] = await Promise.all([
       API.databases.tableInfo(dbState.selDb.name, schema, table),
@@ -324,10 +325,12 @@ async function openTableEditor(schema, table) {
     ]);
     dbState.pkColumns = (info.columns || []).filter(function(c) { return c.is_primary_key; }).map(function(c) { return c.column_name; });
     dbState.tableEditor.original = info.columns || [];
-    dbState.tableEditor.columns = (info.columns || []).map(function(c) { return { ...c, _action: null, _oldName: c.column_name }; });
+    dbState.tableEditor.columns = (info.columns || []).map(function(c) { return { ...c, _action: null, _oldName: c.column_name, _comment: '' }; });
     dbState.tableEditor.changes = [];
     dbState.tableEditor.rowCount = info.row_count || 0;
     dbState.tableEditor.data = data;
+    // Load metadata in background
+    try { dbState.tableMetadata = await API.databases.tableMetadata(dbState.selDb.name, schema, table); } catch(e) {}
     renderTableEditor();
   } catch (e) { dbToast(e.message, 'error'); }
 }
@@ -336,9 +339,22 @@ function renderTableEditor() {
   document.getElementById('dbTablesView').style.display = 'none';
   document.getElementById('dbEditorView').style.display = 'block';
   var mode = dbState.tableMode;
-  var html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">'
+  var meta = dbState.tableMetadata;
+  var metaHtml = '';
+  if (meta) {
+    var parts = [];
+    if (meta.owner) parts.push('Owner: ' + esc(meta.owner));
+    if (meta.total_size) parts.push('Size: ' + esc(meta.total_size));
+    if (meta.estimated_rows !== undefined && meta.estimated_rows !== null) parts.push('Rows: ~' + meta.estimated_rows);
+    if (meta.index_count !== undefined) parts.push('Indexes: ' + meta.index_count);
+    if (meta.trigger_count !== undefined) parts.push('Triggers: ' + meta.trigger_count);
+    if (meta.table_comment) parts.push('Comment: ' + esc(meta.table_comment));
+    if (parts.length) metaHtml = '<div class="db-table-meta">' + parts.join(' · ') + '</div>';
+  }
+  var html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:4px">'
     + '<h3 style="margin:0">' + esc(dbState.selDb.name) + '.' + esc(dbState.selTable.schema) + '.' + esc(dbState.selTable.name) + '</h3>'
     + '<div class="db-mode-tabs"><button class="db-mode-tab' + (mode==='data'?' active':'') + '" onclick="switchTableMode(\'data\')">📊 Data</button><button class="db-mode-tab' + (mode==='config'?' active':'') + '" onclick="switchTableMode(\'config\')">⚙ Config</button></div></div>';
+  html += metaHtml;
   html += '<div id="dbEditorBody">';
   html += mode === 'data' ? renderTableData() : renderTableConfig();
   html += '</div>';
@@ -406,9 +422,15 @@ function renderTableData() {
   var total = data.total;
   if (!data.columns.length) return '<div class="db-empty">No data found.</div><div style="margin-top:12px;text-align:center"><button class="db-btn" onclick="switchTableMode(\'config\')">⚙ Config Mode</button> <button class="db-btn" onclick="showTablesView()">← Back to tables</button></div>';
 
+  var exportUrl = API.databases.exportTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, 'sql');
   var html = '<div class="db-data-toolbar">'
     + '<div class="db-data-search"><span class="db-data-search-icon">🔍</span><input id="dbDataSearch" class="db-form-input db-data-search-input" placeholder="Search data..." value="' + esc(dbState.dataSearch) + '" oninput="dbSearchInput()"></div>'
-    + '<div class="db-data-toolbar-actions"><button class="db-btn db-btn-sm" onclick="dbAddRow()" title="Add Row">+ Row</button>'
+    + '<div class="db-data-toolbar-actions">'
+    + '<span class="db-export-group"><button class="db-btn db-btn-sm" onclick="this.parentElement.querySelector(\'.db-export-dropdown\').classList.toggle(\'open\')" title="Export">⬇ Export</button>'
+    + '<div class="db-export-dropdown"><a href="' + API.databases.exportTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, 'csv') + '" class="db-export-option">CSV</a>'
+    + '<a href="' + API.databases.exportTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, 'json') + '" class="db-export-option">JSON</a>'
+    + '<a href="' + API.databases.exportTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, 'sql') + '" class="db-export-option">SQL</a></div></span>'
+    + '<button class="db-btn db-btn-sm" onclick="dbAddRow()" title="Add Row">+ Row</button>'
     + '<button class="db-btn db-btn-sm" onclick="switchTableMode(\'config\')">⚙ Config</button>'
     + '<button class="db-btn" onclick="showTablesView()">← Tables</button></div></div>';
 
@@ -576,15 +598,32 @@ async function dbAddRow() {
 function renderTableConfig() {
   var cols = dbState.tableEditor.columns;
   var changes = dbState.tableEditor.changes;
-  var html = '<div class="db-editor-grid"><div class="db-editor-header"><span>Column</span><span>Type</span><span>Null</span><span>Default</span><span></span></div>';
+  var meta = dbState.tableMetadata;
+  var html = '';
+
+  // Table comment & table-level actions
+  html += '<div class="db-editor-table-actions">';
+  html += '<div class="n-form-group" style="flex:1;min-width:200px"><label>Table Comment</label><input id="dbTableCommentInput" class="db-form-input" value="' + esc((meta && meta.table_comment) || '') + '" placeholder="Optional description"></div>';
+  html += '<div class="db-editor-toolbar"><button class="db-btn db-btn-sm" onclick="saveTableComment()">💬 Set Comment</button>';
+  html += '<button class="db-btn db-btn-sm" onclick="dbDuplicateTable()" title="Create copy of this table">📋 Duplicate</button>';
+  html += '<button class="db-btn db-btn-sm" onclick="dbRenameTable()" title="Rename table">✏️ Rename</button>';
+  html += '<button class="db-btn db-btn-sm db-btn-warn" onclick="dbTruncateTable()" title="Remove all rows">🗑 Empty</button>';
+  html += '<button class="db-btn db-btn-sm" onclick="dbVacuum()" title="VACUUM ANALYZE">🧹 Vacuum</button>';
+  html += '<button class="db-btn db-btn-sm" onclick="dbAnalyze()" title="ANALYZE">📊 Analyze</button>';
+  html += '</div></div>';
+
+  // Column config grid
+  html += '<div class="db-editor-grid"><div class="db-editor-header"><span>Column</span><span>Type</span><span>Null</span><span>Default</span><span>Comment</span><span></span></div>';
   cols.forEach(function(c, i) {
     var isNew = c._action === 'add';
     var isDeleted = c._action === 'drop';
+    var colComment = c._comment || (meta && meta.column_comments && meta.column_comments[c.column_name]) || '';
     html += '<div class="db-editor-row' + (isNew ? ' db-editor-new' : '') + (isDeleted ? ' db-editor-deleted' : '') + '">'
       + '<input value="' + esc(c.column_name) + '" onchange="tedChangeCol(' + i + ',\'column_name\',this.value)" class="db-form-input">'
       + '<select class="db-form-input" onchange="tedChangeCol(' + i + ',\'data_type\',this.value)">' + typeOptionsSelected(c.data_type) + '</select>'
       + '<label><input type="checkbox" ' + (c.is_nullable === 'YES' ? 'checked' : '') + ' onchange="tedChangeCol(' + i + ',\'is_nullable\',this.checked ? \'YES\' : \'NO\')"> Null</label>'
-      + '<input value="' + esc(c.column_default||'') + '" onchange="tedChangeCol(' + i + ',\'column_default\',this.value)" class="db-form-input">'
+      + '<input value="' + esc(c.column_default||'') + '" onchange="tedChangeCol(' + i + ',\'column_default\',this.value)" class="db-form-input" placeholder="default">'
+      + '<input value="' + esc(colComment) + '" onchange="tedChangeColComment(' + i + ',this.value)" class="db-form-input" placeholder="column comment">'
       + '<button class="db-btn db-btn-sm ' + (isDeleted ? 'db-btn-danger' : '') + '" onclick="tedToggleDelete(' + i + ')">' + (isDeleted ? '↩' : '✕') + '</button>'
       + '</div>';
   });
@@ -652,6 +691,63 @@ async function dropTable() {
     try { await API.databases.dropTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, fullName); dbToast('Table "' + fullName + '" dropped'); await showTablesView(); }
     catch (e) { dbToast(e.message, 'error'); }
   });
+}
+
+/* ─── Table-Level Actions (Duplicate, Rename, Truncate, Vacuum, Analyze, Comment) ─── */
+
+function tedChangeColComment(i, val) {
+  dbState.tableEditor.columns[i]._comment = val;
+}
+
+async function saveTableComment() {
+  var input = document.getElementById('dbTableCommentInput');
+  if (!input) return;
+  try {
+    await API.databases.setTableComment(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, input.value);
+    dbToast('Table comment saved');
+  } catch (e) { dbToast(e.message, 'error'); }
+}
+
+async function dbDuplicateTable() {
+  var name = prompt('New table name (schema.table):', dbState.selTable.schema + '.' + dbState.selTable.name + '_copy');
+  if (!name || !name.trim()) return;
+  try {
+    await API.databases.duplicateTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, name.trim());
+    dbToast('Table duplicated as "' + name.trim() + '"');
+    await showTablesView();
+  } catch (e) { dbToast(e.message, 'error'); }
+}
+
+async function dbRenameTable() {
+  var name = prompt('New table name (without schema):', dbState.selTable.name + '_new');
+  if (!name || !name.trim()) return;
+  try {
+    await API.databases.renameTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, name.trim());
+    dbToast('Table renamed to "' + name.trim() + '"');
+    await showTablesView();
+  } catch (e) { dbToast(e.message, 'error'); }
+}
+
+async function dbTruncateTable() {
+  var fullName = dbState.selTable.schema + '.' + dbState.selTable.name;
+  showConfirmModal('Remove ALL rows from "' + fullName + '"? This cannot be undone.', fullName, async function() {
+    try { await API.databases.truncateTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name); dbToast('Table "' + fullName + '" truncated'); await showTablesView(); }
+    catch (e) { dbToast(e.message, 'error'); }
+  });
+}
+
+async function dbVacuum() {
+  try {
+    await API.databases.vacuumTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name);
+    dbToast('VACUUM completed');
+  } catch (e) { dbToast(e.message, 'error'); }
+}
+
+async function dbAnalyze() {
+  try {
+    await API.databases.analyzeTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name);
+    dbToast('ANALYZE completed');
+  } catch (e) { dbToast(e.message, 'error'); }
 }
 
 /* ─── SQL Query Terminal ─── */
@@ -1051,3 +1147,14 @@ function dbToast(msg, type) {
 }
 
 function formatBytes(b) { if(!b||b===0) return '0 B'; var k=1024,s=['B','KB','MB','GB','TB'],i=Math.floor(Math.log(b)/Math.log(k)); return parseFloat((b/Math.pow(k,i)).toFixed(2))+' '+s[i]; }
+
+/* Close export dropdown when clicking outside */
+document.addEventListener('click', function(e) {
+  var groups = document.querySelectorAll('.db-export-group');
+  for (var i = 0; i < groups.length; i++) {
+    if (!groups[i].contains(e.target)) {
+      var dd = groups[i].querySelector('.db-export-dropdown');
+      if (dd) dd.classList.remove('open');
+    }
+  }
+});
