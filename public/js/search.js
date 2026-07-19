@@ -26,7 +26,12 @@ document.addEventListener('DOMContentLoaded', function () {
 
   document.addEventListener('keydown', function (e) {
     var tag = document.activeElement && document.activeElement.tagName;
-    if ((e.key === '/' || (e.ctrlKey && e.key === 'k')) && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT') {
+    var inTerminalSearch = document.body.classList.contains('term-search-active');
+    var inTerminal = document.activeElement && document.activeElement.closest && document.activeElement.closest('#termProPanes');
+
+    if (inTerminalSearch) return;
+
+    if ((e.key === '/' || (e.ctrlKey && e.key === 'k')) && tag !== 'INPUT' && tag !== 'TEXTAREA' && tag !== 'SELECT' && !inTerminal) {
       e.preventDefault();
       input.focus();
       input.select();

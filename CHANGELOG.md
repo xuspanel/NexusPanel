@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.6.2] - 2026-07-19
+### Fixed
+- **PRO Terminal search conflict**: global search shortcut (`/` and `Ctrl+K`) no longer interferes with the terminal search. Added `term-search-active` body class when the terminal search bar is open, and global search now ignores shortcuts when the terminal is focused (`#termProPanes`) or terminal search is active
+- **PRO Terminal search keyboard handling**: terminal search input now stops event propagation, supports `Enter` and `Shift+Arrow` keys for next/previous match, closes on `Escape`, and restores focus to the active terminal after closing
+- **PRO Terminal theme picker UX**: redesigned the theme selector as a clean, minimal dropdown menu with a small arrow, larger touch targets, active checkmark, and a "Choose theme" header. Dropdown is appended to `#termProContent` instead of the toolbar (which had overflow/scrolling issues) and is positioned relative to the theme button. Closes on outside click or Escape, and highlights the active theme button
+
 ## [1.6.1] - 2026-07-17
 ### Fixed
 - **PRO Terminal not connecting**: HTML was missing `id="termProPanes"` and `id="termProTabs"` on the PRO terminal's panes and tabs containers. The JavaScript code uses `document.getElementById()` to look up these elements, so without the IDs the terminal never initialized panes, WebSocket sessions were never created, and the loading spinner hung indefinitely

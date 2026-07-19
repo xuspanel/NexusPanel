@@ -367,14 +367,21 @@ function initProEvents() {
       closeCommandPalette();
       closeSearchBar();
       closeAutocomplete();
+      const picker = document.getElementById('termThemePicker');
+      const themeBtn = document.getElementById('termProTheme');
+      if (picker && picker.style.display === 'block') {
+        picker.style.display = 'none';
+        if (themeBtn) themeBtn.classList.remove('term-pro-tool-active');
+      }
     }
   });
 
   document.addEventListener('click', (e) => {
     const picker = document.getElementById('termThemePicker');
     const themeBtn = document.getElementById('termProTheme');
-    if (picker && picker.style.display === 'block' && !picker.contains(e.target) && e.target !== themeBtn) {
+    if (picker && picker.style.display === 'block' && !picker.contains(e.target) && e.target !== themeBtn && !themeBtn.contains(e.target)) {
       picker.style.display = 'none';
+      if (themeBtn) themeBtn.classList.remove('term-pro-tool-active');
     }
     const mobileMenu = document.getElementById('termProMobileMenu');
     const toolbar = document.querySelector('.term-pro-toolbar');
@@ -1396,9 +1403,9 @@ function initSearchBar() {
     el.style.display = 'none';
     el.innerHTML = `
       <input type="text" class="term-search-input" placeholder="Find in terminal...">
-      <button class="term-search-btn" data-dir="next">&#x25BC;</button>
-      <button class="term-search-btn" data-dir="prev">&#x25B2;</button>
-      <button class="term-search-close" title="Close">&#x2715;</button>
+      <button class="term-search-btn" data-dir="next" title="Next match">&#x25BC;</button>
+      <button class="term-search-btn" data-dir="prev" title="Previous match">&#x25B2;</button>
+      <button class="term-search-close" title="Close (Esc)">&#x2715;</button>
     `;
     const proContainer = document.getElementById('termProPanes');
     if (proContainer) proContainer.appendChild(el);
@@ -1406,16 +1413,23 @@ function initSearchBar() {
   const input = el.querySelector('.term-search-input');
   input.addEventListener('input', doSearch);
   input.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape') closeSearchBar();
-    if (e.key === 'Enter') findNext();
+    e.stopPropagation();
+    if (e.key === 'Escape') { e.preventDefault(); closeSearchBar(); }
+    else if (e.key === 'Enter') { e.preventDefault(); findNext(); }
+    else if (e.key === 'ArrowDown' && e.shiftKey) { e.preventDefault(); findNext(); }
+    else if (e.key === 'ArrowUp' && e.shiftKey) { e.preventDefault(); findPrevious(); }
   });
   el.querySelectorAll('.term-search-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
       if (btn.dataset.dir === 'prev') findPrevious();
       else findNext();
     });
   });
-  el.querySelector('.term-search-close').addEventListener('click', closeSearchBar);
+  el.querySelector('.term-search-close').addEventListener('click', (e) => {
+    e.stopPropagation();
+    closeSearchBar();
+  });
 }
 
 function toggleSearchBar() {
@@ -1431,16 +1445,27 @@ function openSearchBar() {
   if (!el || currentVersion !== 'pro') return;
   searchOpen = true;
   el.style.display = 'flex';
-  el.querySelector('.term-search-input').focus();
+  el.classList.add('term-search-open');
+  const input = el.querySelector('.term-search-input');
+  input.focus();
+  input.select();
   doSearch();
+  document.body.classList.add('term-search-active');
 }
 
 function closeSearchBar() {
   const el = document.getElementById('termSearchBar');
-  if (el) el.style.display = 'none';
+  if (el) {
+    el.style.display = 'none';
+    el.classList.remove('term-search-open');
+  }
   searchOpen = false;
+  document.body.classList.remove('term-search-active');
   const pane = getActivePane();
   if (pane && pane.searchAddon) pane.searchAddon.clearDecorations();
+  const input = el && el.querySelector('.term-search-input');
+  if (input) input.value = '';
+  if (pane && pane.term) pane.term.focus();
 }
 
 function doSearch() {
@@ -1472,26 +1497,69 @@ function findPrevious() {
   if (pane && pane.searchAddon && q) pane.searchAddon.findPrevious(q, { caseSensitive: false });
 }
 
+function termSearchHasFocus() {
+  const el = document.getElementById('termSearchBar');
+  return el && el.style.display === 'flex' && document.activeElement === el.querySelector('.term-search-input');
+}
+
 /* ─── Theme Picker ─── */
 function toggleThemePicker() {
   let el = document.getElementById('termThemePicker');
+  const btn = document.getElementById('termProTheme');
   if (!el) {
     el = document.createElement('div');
     el.id = 'termThemePicker';
-    el.className = 'term-theme-picker';
-    el.innerHTML = Object.keys(TERM_THEMES).map(name => `
-      <button class="term-theme-option${name === activeThemeName ? ' active' : ''}" data-theme="${name}">
-        <span class="term-theme-swatch" style="background:${TERM_THEMES[name].background};border-color:${TERM_THEMES[name].foreground}"></span>
-        <span class="term-theme-name">${name.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())}</span>
-      </button>
-    `).join('');
-    const toolbar = document.querySelector('.term-pro-toolbar');
-    if (toolbar) toolbar.appendChild(el);
+    el.className = 'term-theme-dropdown';
+    el.innerHTML = `
+      <div class="term-theme-dropdown-header">Choose theme</div>
+      <div class="term-theme-dropdown-list">
+        ${Object.keys(TERM_THEMES).map(name => `
+          <button class="term-theme-option${name === activeThemeName ? ' active' : ''}" data-theme="${name}">
+            <span class="term-theme-swatch" style="background:${TERM_THEMES[name].background};border-color:${TERM_THEMES[name].foreground}"></span>
+            <span class="term-theme-name">${name.replace(/([A-Z])/g, ' $1').replace(/^./, c => c.toUpperCase())}</span>
+            ${name === activeThemeName ? '<span class="term-theme-check">&#x2713;</span>' : ''}
+          </button>
+        `).join('')}
+      </div>
+    `;
+    const proContent = document.getElementById('termProContent');
+    if (proContent) proContent.appendChild(el);
     el.querySelectorAll('.term-theme-option').forEach(btn => {
       btn.addEventListener('click', () => applyTheme(btn.dataset.theme));
     });
   }
-  el.style.display = el.style.display === 'block' ? 'none' : 'block';
+  if (el.style.display === 'block') {
+    el.style.display = 'none';
+    btn && btn.classList.remove('term-pro-tool-active');
+    return;
+  }
+  positionThemeDropdown(el, btn);
+  el.style.display = 'block';
+  if (btn) btn.classList.add('term-pro-tool-active');
+  // mark active option
+  el.querySelectorAll('.term-theme-option').forEach(opt => {
+    const isActive = opt.dataset.theme === activeThemeName;
+    opt.classList.toggle('active', isActive);
+    const existing = opt.querySelector('.term-theme-check');
+    if (isActive && !existing) {
+      const check = document.createElement('span');
+      check.className = 'term-theme-check';
+      check.innerHTML = '&#x2713;';
+      opt.appendChild(check);
+    } else if (!isActive && existing) {
+      existing.remove();
+    }
+  });
+}
+
+function positionThemeDropdown(el, btn) {
+  if (!el || !btn) return;
+  const wrapRect = el.parentElement.getBoundingClientRect();
+  const btnRect = btn.getBoundingClientRect();
+  const top = btnRect.bottom - wrapRect.top + 8;
+  const right = wrapRect.right - btnRect.right;
+  el.style.top = top + 'px';
+  el.style.right = right + 'px';
 }
 
 function applyTheme(name) {
@@ -1505,6 +1573,8 @@ function applyTheme(name) {
   });
   const picker = document.getElementById('termThemePicker');
   if (picker) picker.style.display = 'none';
+  const btn = document.getElementById('termProTheme');
+  if (btn) btn.classList.remove('term-pro-tool-active');
 }
 
 window.initTerminal = initTerminal;
