@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.5] - 2026-07-19
+### Fixed
+- **Auto-increment on existing tables**: adding a `serial`/`bigserial` column no longer includes an empty `DEFAULT ''` clause, fixing *“multiple default values specified for column”*
+- **Search input focus loss**: database, table, function, and table-data search inputs now keep focus and cursor position while typing
+- **Table data search**: fixed parameter numbering (`$1` vs `$3`) in the count query that caused *“could not determine data type of parameter $1”*
+
 ## [1.9.4] - 2026-07-19
 ### Added / Improved
 - **Auto-increment columns**: `serial` / `bigserial` types are now labeled “(auto increment)” in the Create Table and Table Config type dropdowns

@@ -246,6 +246,11 @@ function renderManageList() {
 window.dbFilterManage = function(value) {
   dbState.dbFilter = value;
   renderManageList();
+  var input = document.querySelector('#dbManageList .db-search-input');
+  if (input) {
+    input.focus();
+    input.setSelectionRange(value.length, value.length);
+  }
 };
 
 function selectDatabase(name) {
@@ -521,6 +526,11 @@ function renderTables(tables) {
 window.dbFilterTables = function(value) {
   dbState.tableFilter = value;
   renderTables(dbState.currentTables);
+  var input = document.querySelector('#dbTablesView .db-search-input');
+  if (input) {
+    input.focus();
+    input.setSelectionRange(value.length, value.length);
+  }
 };
 window.dbFilterTablesSchema = function(value) {
   dbState.tableSchemaFilter = value;
@@ -692,10 +702,20 @@ var dbSearchTimer;
 
 function dbSearchInput() {
   clearTimeout(dbSearchTimer);
-  dbSearchTimer = setTimeout(function() {
-    dbState.dataSearch = document.getElementById('dbDataSearch').value.trim();
+  dbSearchTimer = setTimeout(async function() {
+    var input = document.getElementById('dbDataSearch');
+    var hadFocus = input && input === document.activeElement;
+    var value = input ? input.value.trim() : '';
+    dbState.dataSearch = value;
     dbState.dataPage = 1;
-    loadTableData();
+    await loadTableData();
+    if (hadFocus) {
+      var newInput = document.getElementById('dbDataSearch');
+      if (newInput) {
+        newInput.focus();
+        newInput.setSelectionRange(value.length, value.length);
+      }
+    }
   }, 300);
 }
 
@@ -1262,7 +1282,11 @@ async function tedSave() {
   var cols = dbState.tableEditor.columns;
   var orig = dbState.tableEditor.original;
   cols.forEach(function(c) {
-    if (c._action === 'add') changes.push({ action: 'add', name: c.column_name, type: c.data_type, nullable: c.is_nullable === 'YES', default: c.column_default });
+    if (c._action === 'add') {
+      var type = (c.data_type || '').toLowerCase();
+      var isSerial = type === 'serial' || type === 'bigserial' || type === 'smallserial';
+      changes.push({ action: 'add', name: c.column_name, type: c.data_type, nullable: c.is_nullable === 'YES', default: isSerial ? undefined : c.column_default });
+    }
     else if (c._action === 'drop') changes.push({ action: 'drop', name: c._oldName });
     else if (c._action === 'alter') changes.push({ action: 'alter', oldName: c._oldName, type: c.data_type, nullable: c.is_nullable === 'YES' });
   });
@@ -2288,6 +2312,11 @@ async function renderFunctionsView() {
 window.dbFilterFunctions = function(value) {
   dbState.functionFilter = value;
   renderFunctionsView();
+  var input = document.querySelector('#dbFunctionsView .db-search-input');
+  if (input) {
+    input.focus();
+    input.setSelectionRange(value.length, value.length);
+  }
 };
 
 async function showFunctionDef(schema, name, args) {

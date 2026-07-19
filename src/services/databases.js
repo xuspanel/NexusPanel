@@ -140,10 +140,11 @@ async function getTableData(database, schema, table, limit, offset, search, sort
   if (!validateIdent(database)) throw new Error('Invalid database name');
   if (!validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid schema/table name');
   const full = `${quoteIdent(schema)}.${quoteIdent(table)}`;
-  const where = search ? ` WHERE (SELECT string_agg(COALESCE(CAST(${quoteIdent(schema)}.${quoteIdent(table)}.* AS text),''),' ') FROM ${full}) ILIKE $3` : '';
+  const searchWhere = search ? ` WHERE (SELECT string_agg(COALESCE(CAST(${quoteIdent(schema)}.${quoteIdent(table)}.* AS text),''),' ') FROM ${full}) ILIKE $3` : '';
+  const countWhere = search ? ` WHERE (SELECT string_agg(COALESCE(CAST(${quoteIdent(schema)}.${quoteIdent(table)}.* AS text),''),' ') FROM ${full}) ILIKE $1` : '';
   const params = [limit || 50, offset || 0];
   if (search) params.push(`%${search}%`);
-  const countSql = `SELECT COUNT(*)::int AS total FROM ${full}${where}`;
+  const countSql = `SELECT COUNT(*)::int AS total FROM ${full}${countWhere}`;
   const countParams = search ? [`%${search}%`] : [];
   const countResult = await queryOne(database, countSql, countParams);
   const total = countResult?.total || 0;
@@ -152,7 +153,7 @@ async function getTableData(database, schema, table, limit, offset, search, sort
     const dir = sortDir === 'desc' ? 'DESC' : 'ASC';
     order = ` ORDER BY ${quoteIdent(sortBy)} ${dir}`;
   }
-  const rows = await queryRows(database, `SELECT * FROM ${full}${where}${order} LIMIT $1 OFFSET $2`, params);
+  const rows = await queryRows(database, `SELECT * FROM ${full}${searchWhere}${order} LIMIT $1 OFFSET $2`, params);
   return { total, rows, limit: limit || 50, offset: offset || 0 };
 }
 
@@ -212,10 +213,12 @@ async function alterTable(database, schema, table, actions) {
   for (const action of actions) {
     if (action.op === 'add' && action.name && action.type) {
       if (!validateIdent(action.name)) throw new Error(`Invalid column name: ${action.name}`);
+      const type = (action.type || '').toLowerCase();
+      const isSerial = type === 'serial' || type === 'bigserial' || type === 'smallserial';
       let def = `ADD COLUMN ${quoteIdent(action.name)} ${action.type}`;
       if (action.primaryKey) def += ' PRIMARY KEY';
       if (action.nullable === false) def += ' NOT NULL';
-      if (action.default !== undefined && action.default !== null) def += ` DEFAULT ${quoteLiteral(action.default)}`;
+      if (!isSerial && action.default !== undefined && action.default !== null && action.default !== '') def += ` DEFAULT ${quoteLiteral(action.default)}`;
       parts.push(def);
     } else if (action.op === 'drop' && action.name) {
       if (!validateIdent(action.name)) throw new Error(`Invalid column name: ${action.name}`);
