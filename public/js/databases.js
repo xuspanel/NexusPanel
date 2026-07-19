@@ -1,28 +1,41 @@
-var dbState = { databases: [], schemas: [], users: [], views: [], view: 'cards', selDb: null, selTable: null, tableEditor: { columns: [], original: [], changes: [] }, tableMode: 'data', dataPage: 1, dataPageSize: 25, dataSortBy: '', dataSortDir: '', dataSearch: '', pkColumns: [], selectedRows: [], foreignKeys: [], indexes: [] };
+var dbState = { databases: [], schemas: [], users: [], views: [], matViews: [], view: 'cards', selDb: null, selTable: null, tableEditor: { columns: [], original: [], changes: [] }, tableMode: 'data', dataPage: 1, dataPageSize: 25, dataSortBy: '', dataSortDir: '', dataSearch: '', pkColumns: [], selectedRows: [], foreignKeys: [], indexes: [], triggers: [], dbFilter: '', tableFilter: '', functionFilter: '' };
 var dbInit = false;
 
-/* URL-based routing: restore database sub-view from popstate */
-window.dbRestoreState = function(dbSub) {
+/* URL-based routing */
+function dbNavigate(subPath, opts) {
+  opts = opts || {};
+  var fullPath = '/databases/' + subPath;
+  if (opts.replace) {
+    history.replaceState({ view: 'databases', dbSub: subPath }, '', fullPath);
+  } else {
+    history.pushState({ view: 'databases', dbSub: subPath }, '', fullPath);
+  }
+  dbApplyRoute(subPath, opts);
+}
+
+window.dbApplyRoute = function(dbSub, opts) {
+  opts = opts || {};
   if (!dbSub || dbSub === 'cards') { renderCards(); return; }
-  var parts = dbSub.split('/');
+  var parts = dbSub.split('/').filter(function(p) { return p.length > 0; });
+  if (!parts.length) { renderCards(); return; }
   if (parts[0] === 'manage') { showManage(); return; }
   if (parts[0] === 'query') { showQueryTerminal(); return; }
   if (parts[0] === 'search') { showSearchAll(); return; }
   if (parts[0] === 'functions' && parts[1]) {
-    dbState.selDb = dbState.databases.find(function(d) { return d.name === parts[1]; }) || null;
+    dbState.selDb = dbState.databases.find(function(d) { return d.name === decodeURIComponent(parts[1]); }) || null;
     if (dbState.selDb) showFunctionsView();
     return;
   }
   if (parts[0] === 'config' && parts[1]) {
-    dbState.selDb = dbState.databases.find(function(d) { return d.name === parts[1]; }) || null;
+    dbState.selDb = dbState.databases.find(function(d) { return d.name === decodeURIComponent(parts[1]); }) || null;
     if (dbState.selDb) renderConfView();
     return;
   }
   if (parts[0] === 'tables' && parts[1]) {
-    dbState.selDb = dbState.databases.find(function(d) { return d.name === parts[1]; }) || null;
+    dbState.selDb = dbState.databases.find(function(d) { return d.name === decodeURIComponent(parts[1]); }) || null;
     if (dbState.selDb) {
       if (parts[2] && parts[3]) {
-        openTableEditor(parts[2], parts[3]);
+        openTableEditor(decodeURIComponent(parts[2]), decodeURIComponent(parts[3]));
       } else {
         showTablesView();
       }
@@ -31,22 +44,37 @@ window.dbRestoreState = function(dbSub) {
   }
 };
 
-function dbSetURL(subPath) {
-  history.replaceState({ view: 'databases', dbSub: subPath }, '', '/databases/' + subPath);
+function dbShowView(viewId) {
+  var ids = ['dbCardsView','dbManageList','dbConfView','dbTablesView','dbEditorView','dbQueryView','dbSearchView','dbFunctionsView'];
+  ids.forEach(function(id) {
+    var el = document.getElementById(id);
+    if (el) el.style.display = (id === viewId) ? 'block' : 'none';
+  });
+  var subViews = ['dbManageList','dbConfView','dbTablesView','dbEditorView','dbQueryView','dbSearchView','dbFunctionsView'];
+  document.getElementById('dbSubViews').style.display = subViews.indexOf(viewId) !== -1 ? 'block' : 'none';
+  // Update nav rail active state
+  document.querySelectorAll('.db-nav-item').forEach(function(item) {
+    item.classList.toggle('active', item.dataset.target === viewId);
+  });
 }
 
 window.initDatabases = async function () {
-  if (!dbInit) { dbInit = true; document.getElementById('dbRefreshBtn')?.addEventListener('click', refreshDB); document.getElementById('dbRetryBtn')?.addEventListener('click', refreshDB); }
+  if (!dbInit) {
+    dbInit = true;
+    document.getElementById('dbRefreshBtn')?.addEventListener('click', refreshDB);
+    document.getElementById('dbRetryBtn')?.addEventListener('click', refreshDB);
+  }
   await loadDatabases();
-  // Restore deep-link from URL if present
   var dbPath = location.pathname.replace(/^\/databases\//, '');
-  if (dbPath && dbPath !== location.pathname && window.dbRestoreState) {
-    window.dbRestoreState(dbPath);
+  if (dbPath && dbPath !== location.pathname && window.dbApplyRoute) {
+    window.dbApplyRoute(dbPath, { replace: true });
   }
 };
 
 async function refreshDB() { await loadDatabases(); }
 function esc(s) { if(!s) return ''; return String(s).replace(/[&<>]/g, function(c) { return '&#'+c.charCodeAt(0)+';'; }); }
+function isValidIdent(name) { return /^[a-zA-Z_][a-zA-Z0-9_$]*$/.test(String(name || '')); }
+function identError(name) { return '"' + esc(name) + '" is not a valid PostgreSQL identifier (must start with a letter or underscore, then letters/numbers/_/$).'; }
 
 async function fetchJSON(url, opts) { var r = await fetch(url, { credentials: 'same-origin', ...opts }); var d = await r.json(); if (!r.ok) throw new Error(d.error); return d; }
 
@@ -75,13 +103,10 @@ function showDBError(msg) {
 
 /* ─── Top-Level Cards (Create / Manage / pgAdmin) ─── */
 function renderCards() {
-  document.querySelectorAll('#dbCardsView, #dbConfView, #dbTablesView, #dbEditorView, #dbQueryView, #dbSearchView, #dbFunctionsView').forEach(function(el) { if(el) el.style.display = 'none'; });
-  document.getElementById('dbCardsView').style.display = 'block';
-  document.getElementById('dbSubViews').style.display = 'none';
+  dbShowView('dbCardsView');
   var cnt = dbState.databases.length;
   document.getElementById('dbTitle').textContent = 'Database Manager';
   document.getElementById('dbBreadcrumb').innerHTML = cnt + ' database' + (cnt !== 1 ? 's' : '') + ' found';
-  dbSetURL('cards');
 }
 
 function showCreateForm() {
@@ -114,6 +139,7 @@ async function createDatabase() {
   var owner = document.getElementById('dbCreateOwner').value;
   var data = { name: document.getElementById('dbCreateName').value.trim(), encoding: document.getElementById('dbCreateEnc').value, template: document.getElementById('dbCreateTpl').value, connLimit: parseInt(document.getElementById('dbCreateLimit').value), comment: document.getElementById('dbCreateComment').value.trim() };
   if (!data.name) return dbModalError('Database name required');
+  if (!isValidIdent(data.name)) return dbModalError(identError(data.name));
 
   // Create new owner if selected
   if (owner === '__new__') {
@@ -144,6 +170,10 @@ async function createDatabase() {
 }
 
 function closeDBModal() { document.getElementById('dbModal').style.display = 'none'; }
+function showDBModal(html) {
+  document.getElementById('dbModalContent').innerHTML = html;
+  document.getElementById('dbModal').style.display = 'flex';
+}
 function dbModalError(msg) { var el = document.getElementById('dbModalError'); el.textContent = msg; el.style.display = 'block'; }
 
 function showConfirmModal(message, expected, onConfirm) {
@@ -176,32 +206,44 @@ function showConfirmModal(message, expected, onConfirm) {
 
 /* ─── Manage Databases ─── */
 function showManage() {
-  document.getElementById('dbCardsView').style.display = 'none';
-  document.getElementById('dbSubViews').style.display = 'block';
-  document.getElementById('dbConfView').style.display = 'none';
-  document.getElementById('dbTablesView').style.display = 'none';
-  document.getElementById('dbEditorView').style.display = 'none';
+  dbShowView('dbManageList');
   renderManageList();
-  dbSetURL('manage');
+  dbNavigate('manage');
 }
 
 function renderManageList() {
-  document.getElementById('dbManageList').style.display = '';
-  document.getElementById('dbConfView').style.display = 'none';
-  document.getElementById('dbTablesView').style.display = 'none';
-  document.getElementById('dbEditorView').style.display = 'none';
+  dbShowView('dbManageList');
   var el = document.getElementById('dbManageList');
-  if (!dbState.databases.length) { el.innerHTML = '<div class="db-empty">No databases found.</div>'; return; }
-  el.innerHTML = dbState.databases.map(function(d) {
-    return '<div class="db-manage-card" onclick="selectDatabase(\'' + esc(d.name) + '\')">'
-      + '<span class="db-manage-icon">🗄</span>'
-      + '<div class="db-manage-info"><span class="db-manage-name">' + esc(d.name) + '</span>'
-      + '<span class="db-manage-meta">' + (d.table_count||0) + ' tables · ' + (d.size_bytes ? formatBytes(d.size_bytes) : '—') + ' · ' + esc(d.owner||'') + '</span></div>'
-      + '<span class="db-manage-arrow">→</span></div>';
-  }).join('');
+  var filter = (dbState.dbFilter || '').toLowerCase();
+  var filtered = dbState.databases.filter(function(d) {
+    if (!filter) return true;
+    return (d.name || '').toLowerCase().indexOf(filter) !== -1 || (d.owner || '').toLowerCase().indexOf(filter) !== -1;
+  });
+  var html = '<div class="db-search-bar"><span class="db-data-search-icon">🔍</span>'
+    + '<input type="text" class="db-form-input db-search-input" placeholder="Search databases..." value="' + esc(filter) + '" oninput="dbFilterManage(this.value)">'
+    + '</div>';
+  if (!filtered.length) { html += '<div class="db-empty">No databases match.</div>'; }
+  else {
+    html += '<div class="db-manage-grid">' + filtered.map(function(d) {
+      return '<div class="db-manage-card">'
+        + '<span class="db-manage-icon">🗄</span>'
+        + '<div class="db-manage-info" onclick="selectDatabase(\'' + esc(d.name) + '\')" style="cursor:pointer;flex:1"><span class="db-manage-name">' + esc(d.name) + '</span>'
+        + '<span class="db-manage-meta">' + (d.table_count||0) + ' tables · ' + (d.size_bytes ? formatBytes(d.size_bytes) : '—') + ' · ' + esc(d.owner||'') + '</span></div>'
+        + '<div class="db-manage-actions" onclick="event.stopPropagation()">'
+        + '<button class="db-btn db-btn-xs" onclick="openDatabaseConfig(\'' + esc(d.name) + '\')" title="Configuration">⚙</button>'
+        + '<button class="db-btn db-btn-xs" onclick="selectDatabase(\'' + esc(d.name) + '\')" title="Tables">→</button>'
+        + '</div></div>';
+    }).join('') + '</div>';
+  }
+  el.innerHTML = html;
   document.getElementById('dbTitle').textContent = 'Manage Databases';
-  document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">' + dbState.databases.length + ' databases</a>';
+  document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="renderCards()">Home</a> / ' + dbState.databases.length + ' databases';
 }
+
+window.dbFilterManage = function(value) {
+  dbState.dbFilter = value;
+  renderManageList();
+};
 
 function selectDatabase(name) {
   dbState.selDb = dbState.databases.find(function(d) { return d.name === name; });
@@ -209,20 +251,27 @@ function selectDatabase(name) {
   showTablesView();
 }
 
+function openDatabaseConfig(name) {
+  dbState.selDb = dbState.databases.find(function(d) { return d.name === name; });
+  if (!dbState.selDb) return;
+  renderConfView();
+}
+
 /* ─── Database Config View ─── */
-function renderConfView() {
+async function renderConfView() {
   var d = dbState.selDb;
-  document.getElementById('dbManageList').style.display = 'none';
-  document.getElementById('dbTablesView').style.display = 'none';
-  document.getElementById('dbEditorView').style.display = 'none';
-  document.getElementById('dbConfView').style.display = 'block';
-  var users = dbState.users.map(function(u) { return '<option value="' + esc(u.name) + '" ' + (u.name === d.owner ? 'selected' : '') + '>' + esc(u.name) + '</option>'; }).join('');
+  if (!d) { dbToast('No database selected', 'error'); return; }
+  dbShowView('dbConfView');
+  var cfg = {};
+  try { cfg = await API.databases.config(d.name); } catch(e) {}
+  var users = dbState.users.map(function(u) { return '<option value="' + esc(u.name) + '" ' + (u.name === (cfg.owner || d.owner) ? 'selected' : '') + '>' + esc(u.name) + '</option>'; }).join('');
+  var limitVal = cfg.conn_limit !== undefined && cfg.conn_limit !== null ? cfg.conn_limit : (cfg.connection_limit !== undefined ? cfg.connection_limit : -1);
   document.getElementById('dbConfContent').innerHTML =
     '<h3>Configuration: ' + esc(d.name) + '</h3>'
     + '<div class="db-conf-grid">'
     + '<div class="n-form-group"><label>Owner</label><select id="dbConfOwner" class="db-form-input">' + users + '</select></div>'
-    + '<div class="n-form-group"><label>Connection Limit</label><input id="dbConfLimit" class="db-form-input" type="number" value="-1"></div>'
-    + '<div class="n-form-group"><label>Comment</label><input id="dbConfComment" class="db-form-input" placeholder="Database comment"></div>'
+    + '<div class="n-form-group"><label>Connection Limit</label><input id="dbConfLimit" class="db-form-input" type="number" value="' + esc(String(limitVal)) + '"></div>'
+    + '<div class="n-form-group"><label>Comment</label><input id="dbConfComment" class="db-form-input" placeholder="Database comment" value="' + esc(cfg.comment || '') + '"></div>'
     + '</div>'
     + '<div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap">'
     + '<button class="db-btn db-btn-primary" onclick="saveDBConfig()">💾 Save Configuration</button>'
@@ -236,10 +285,10 @@ function renderConfView() {
     + '<button class="db-btn db-btn-danger" onclick="dropDatabase()">🗑 Drop Database</button>'
     + '</div>'
     + '<div class="db-form-error" id="dbConfError"></div>'
-    + '<div style="text-align:center;margin-top:8px"><a href="#" onclick="showManage()" style="color:var(--text3)">← Back to all databases</a></div>';
+    + '<div style="text-align:center;margin-top:8px"><a href="#" onclick="showTablesView()" style="color:var(--text3)">← Back to tables</a> · <a href="#" onclick="showManage()" style="color:var(--text3)">All databases</a></div>';
   document.getElementById('dbTitle').textContent = 'Database: ' + d.name;
-  document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / ' + esc(d.name);
-  dbSetURL('config/' + encodeURIComponent(d.name));
+  document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / <a href="#" onclick="showTablesView()">' + esc(d.name) + '</a> / Config';
+  dbNavigate('config/' + encodeURIComponent(d.name));
 }
 
 async function saveDBConfig() {
@@ -264,14 +313,11 @@ async function dropDatabase() {
 /* ─── Tables View ─── */
 async function showTablesView() {
   if (!dbState.selDb) { dbToast('No database selected', 'error'); return; }
-  document.getElementById('dbManageList').style.display = 'none';
-  document.getElementById('dbConfView').style.display = 'none';
-  document.getElementById('dbEditorView').style.display = 'none';
-  document.getElementById('dbTablesView').style.display = 'block';
+  dbShowView('dbTablesView');
   document.getElementById('dbTitle').textContent = 'Database: ' + dbState.selDb.name;
   document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / ' + esc(dbState.selDb.name) + ' <a href="#" onclick="renderConfView()" style="font-size:11px;color:var(--accent-cyan);margin-left:8px">⚙ Config</a>';
   document.getElementById('dbTablesContent').innerHTML = '<div class="db-loading">Loading tables...</div>';
-  dbSetURL('tables/' + encodeURIComponent(dbState.selDb.name));
+  dbNavigate('tables/' + encodeURIComponent(dbState.selDb.name));
   try {
     var [tables, views, matviews] = await Promise.all([
       API.databases.tables(dbState.selDb.name),
@@ -286,15 +332,25 @@ async function showTablesView() {
 
 function renderViewsSection() {
   var views = dbState.views || [];
-  if (!views.length) return '';
-  var html = '<div class="db-views-section"><h4>👁 Views <button class="db-btn db-btn-xs" onclick="dbShowCreateView()" style="margin-left:8px">+ Create View</button></h4>'
+  var filter = (dbState.tableFilter || '').toLowerCase();
+  var schemaFilter = dbState.tableSchemaFilter || '';
+  var filtered = views.filter(function(v) {
+    var name = (v.table_schema + '.' + v.view_name).toLowerCase();
+    var matchesText = !filter || name.indexOf(filter) !== -1;
+    var matchesSchema = !schemaFilter || v.table_schema === schemaFilter;
+    return matchesText && matchesSchema;
+  });
+  if (!filtered.length) return '';
+  var html = '<div class="db-views-section"><h4>👁 Views (' + filtered.length + ')</h4>'
     + '<div class="db-manage-grid">';
-  views.forEach(function(v) {
-    html += '<div class="db-manage-card" onclick="dbOpenView(\'' + esc(v.table_schema) + '\',\'' + esc(v.view_name) + '\')">'
+  filtered.forEach(function(v) {
+    html += '<div class="db-manage-card">'
       + '<span class="db-manage-icon">👁</span>'
-      + '<div class="db-manage-info"><span class="db-manage-name">' + esc(v.table_schema) + '.' + esc(v.view_name) + '</span>'
+      + '<div class="db-manage-info" onclick="dbOpenView(\'' + esc(v.table_schema) + '\',\'' + esc(v.view_name) + '\')" style="cursor:pointer;flex:1"><span class="db-manage-name">' + esc(v.table_schema) + '.' + esc(v.view_name) + '</span>'
       + '<span class="db-manage-meta">VIEW</span></div>'
-      + '<span class="db-manage-arrow">→</span></div>';
+      + '<div class="db-manage-actions" onclick="event.stopPropagation()">'
+      + '<button class="db-btn db-btn-xs db-btn-danger" onclick="dbDropView(\'' + esc(v.table_schema) + '\',\'' + esc(v.view_name) + '\')" title="Drop view">✕</button>'
+      + '</div></div>';
   });
   html += '</div></div>';
   return html;
@@ -302,16 +358,27 @@ function renderViewsSection() {
 
 function renderMatViewsSection() {
   var matViews = dbState.matViews || [];
-  if (!matViews.length) return '';
-  var html = '<div class="db-views-section"><h4>📦 Materialized Views <button class="db-btn db-btn-xs" onclick="dbShowCreateMatView()" style="margin-left:8px">+ Create Mat View</button></h4>'
+  var filter = (dbState.tableFilter || '').toLowerCase();
+  var schemaFilter = dbState.tableSchemaFilter || '';
+  var filtered = matViews.filter(function(v) {
+    var name = (v.schema + '.' + v.matview_name).toLowerCase();
+    var matchesText = !filter || name.indexOf(filter) !== -1;
+    var matchesSchema = !schemaFilter || v.schema === schemaFilter;
+    return matchesText && matchesSchema;
+  });
+  if (!filtered.length) return '';
+  var html = '<div class="db-views-section"><h4>📦 Materialized Views (' + filtered.length + ')</h4>'
     + '<div class="db-manage-grid">';
-  matViews.forEach(function(v) {
+  filtered.forEach(function(v) {
     var sizeStr = v.size || '—';
-    html += '<div class="db-manage-card" onclick="dbOpenMatView(\'' + esc(v.schema) + '\',\'' + esc(v.matview_name) + '\')">'
+    html += '<div class="db-manage-card">'
       + '<span class="db-manage-icon">📦</span>'
-      + '<div class="db-manage-info"><span class="db-manage-name">' + esc(v.schema) + '.' + esc(v.matview_name) + '</span>'
+      + '<div class="db-manage-info" onclick="dbOpenMatView(\'' + esc(v.schema) + '\',\'' + esc(v.matview_name) + '\')" style="cursor:pointer;flex:1"><span class="db-manage-name">' + esc(v.schema) + '.' + esc(v.matview_name) + '</span>'
       + '<span class="db-manage-meta">' + (v.estimated_rows||0) + ' rows · ' + sizeStr + '</span></div>'
-      + '<span class="db-manage-arrow">→</span></div>';
+      + '<div class="db-manage-actions" onclick="event.stopPropagation()">'
+      + '<button class="db-btn db-btn-xs" onclick="dbRefreshMatView(\'' + esc(v.schema) + '\',\'' + esc(v.matview_name) + '\')" title="Refresh">🔄</button>'
+      + '<button class="db-btn db-btn-xs db-btn-danger" onclick="dbDropMatView(\'' + esc(v.schema) + '\',\'' + esc(v.matview_name) + '\')" title="Drop mat view">✕</button>'
+      + '</div></div>';
   });
   html += '</div></div>';
   return html;
@@ -347,6 +414,34 @@ async function dbOpenView(schema, viewName) {
   openTableEditor(schema, viewName);
 }
 
+async function dbDropView(schema, viewName) {
+  showConfirmModal('Drop view "' + schema + '.' + viewName + '"?', schema + '.' + viewName, async function() {
+    try {
+      await API.databases.dropView(dbState.selDb.name, schema, viewName);
+      dbToast('View dropped');
+      await showTablesView();
+    } catch (e) { dbToast(e.message, 'error'); }
+  });
+}
+
+async function dbRefreshMatView(schema, name) {
+  try {
+    await API.databases.refreshMatView(dbState.selDb.name, schema, name);
+    dbToast('Materialized view refreshed');
+    await showTablesView();
+  } catch (e) { dbToast(e.message, 'error'); }
+}
+
+async function dbDropMatView(schema, name) {
+  showConfirmModal('Drop materialized view "' + schema + '.' + name + '"?', schema + '.' + name, async function() {
+    try {
+      await API.databases.dropMatView(dbState.selDb.name, schema, name);
+      dbToast('Materialized view dropped');
+      await showTablesView();
+    } catch (e) { dbToast(e.message, 'error'); }
+  });
+}
+
 function dbShowCreateMatView() {
   var html = '<h3>Create Materialized View in ' + esc(dbState.selDb.name) + '</h3>'
     + '<div class="n-form-group"><label>Schema</label><select id="cmvSchema" class="db-form-input">'
@@ -380,13 +475,31 @@ async function dbOpenMatView(schema, name) {
 }
 
 function renderTables(tables) {
+  dbState.currentTables = tables || [];
   var el = document.getElementById('dbTablesContent');
-  var html = '<div style="margin-bottom:12px"><button class="db-btn db-btn-primary" onclick="showCreateTable()">+ Create Table</button>'
-    + '<button class="db-btn" onclick="dbShowCreateView()" style="margin-left:6px">👁 Create View</button>'
-    + '<button class="db-btn" onclick="showFunctionsView()" style="margin-left:6px">📦 Functions</button></div>';
-  if (tables.length) {
-    html += '<h4 style="margin-bottom:8px">📄 Tables</h4>'
-      + '<div class="db-manage-grid">' + tables.map(function(t) {
+  var filter = (dbState.tableFilter || '').toLowerCase();
+  var schemaFilter = dbState.tableSchemaFilter || '';
+  var filteredTables = dbState.currentTables.filter(function(t) {
+    var name = (t.schemaname + '.' + t.tablename).toLowerCase();
+    var matchesText = !filter || name.indexOf(filter) !== -1;
+    var matchesSchema = !schemaFilter || t.schemaname === schemaFilter;
+    return matchesText && matchesSchema;
+  });
+  var schemas = {};
+  dbState.currentTables.forEach(function(t) { schemas[t.schemaname] = true; });
+  var schemaOpts = '<option value="">All schemas</option>' + Object.keys(schemas).sort().map(function(s) { return '<option value="' + esc(s) + '" ' + (s === schemaFilter ? 'selected' : '') + '>' + esc(s) + '</option>'; }).join('');
+  var html = '<div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap;align-items:center">'
+    + '<button class="db-btn db-btn-primary" onclick="showCreateTable()">+ Create Table</button>'
+    + '<button class="db-btn" onclick="dbShowCreateView()">👁 Create View</button>'
+    + '<button class="db-btn" onclick="dbShowCreateMatView()">📦 Create Mat View</button>'
+    + '<button class="db-btn" onclick="showFunctionsView()">📦 Functions</button>'
+    + '<div class="db-search-bar" style="margin-left:auto"><span class="db-data-search-icon">🔍</span>'
+    + '<input type="text" class="db-form-input db-search-input" placeholder="Filter tables, views, matviews..." value="' + esc(filter) + '" oninput="dbFilterTables(this.value)">'
+    + '<select class="db-form-input" style="width:auto" onchange="dbFilterTablesSchema(this.value)">' + schemaOpts + '</select>'
+    + '</div></div>';
+  if (filteredTables.length) {
+    html += '<h4 style="margin-bottom:8px">📄 Tables (' + filteredTables.length + ')</h4>'
+      + '<div class="db-manage-grid">' + filteredTables.map(function(t) {
         return '<div class="db-manage-card" onclick="openTableEditor(\'' + esc(t.schemaname) + '\',\'' + esc(t.tablename) + '\')">'
           + '<span class="db-manage-icon">📄</span>'
           + '<div class="db-manage-info"><span class="db-manage-name">' + esc(t.schemaname) + '.' + esc(t.tablename) + '</span>'
@@ -394,13 +507,22 @@ function renderTables(tables) {
           + '<span class="db-manage-arrow">→</span></div>';
       }).join('') + '</div>';
   } else {
-    html += '<div class="db-empty">No tables yet. <a href="#" onclick="showCreateTable()">Create your first table</a></div>';
+    html += '<div class="db-empty">No tables match. <a href="#" onclick="showCreateTable()">Create a table</a></div>';
   }
   html += renderViewsSection();
   html += renderMatViewsSection();
   html += '<div style="text-align:center;margin-top:8px"><a href="#" onclick="showManage()" style="color:var(--text3)">← Back to databases</a></div>';
   el.innerHTML = html;
 }
+
+window.dbFilterTables = function(value) {
+  dbState.tableFilter = value;
+  renderTables(dbState.currentTables);
+};
+window.dbFilterTablesSchema = function(value) {
+  dbState.tableSchemaFilter = value;
+  renderTables(dbState.currentTables);
+};
 
 /* ─── Create Table Form ─── */
 function showCreateTable() {
@@ -435,7 +557,9 @@ async function doCreateTable() {
   var schema = document.getElementById('ctSchema').value;
   var name = document.getElementById('ctName').value.trim();
   if (!name) return dbModalError('Table name required');
+  if (!isValidIdent(name)) return dbModalError(identError(name));
   var cols = [];
+  var colError = '';
   document.querySelectorAll('.ct-col-row').forEach(function(r) {
     var cn = r.querySelector('.ct-col-name').value.trim();
     var ct = r.querySelector('.ct-col-type').value;
@@ -443,11 +567,13 @@ async function doCreateTable() {
     var pk = r.querySelector('.ct-col-pk-check').checked;
     var def = r.querySelector('.ct-col-default').value.trim();
     if (cn) {
+      if (!isValidIdent(cn) && !colError) colError = identError(cn);
       var col = { name: cn, type: ct, nullable: ck, primaryKey: pk };
       if (def) col.default = def;
       cols.push(col);
     }
   });
+  if (colError) return dbModalError(colError);
   // If any column has PK, ensure all PK columns are NOT NULL
   var hasPk = cols.some(function(c) { return c.primaryKey; });
   if (hasPk) {
@@ -466,6 +592,7 @@ function typeOptions() { return '<option>integer</option><option>bigint</option>
 
 /* ─── Table Editor ─── */
 async function openTableEditor(schema, table) {
+  if (!dbState.selDb) { dbToast('No database selected', 'error'); return; }
   dbState.selTable = { schema: schema, name: table };
   dbState.tableMode = 'data';
   dbState.dataPage = 1;
@@ -487,13 +614,12 @@ async function openTableEditor(schema, table) {
     // Load metadata in background
     try { dbState.tableMetadata = await API.databases.tableMetadata(dbState.selDb.name, schema, table); } catch(e) {}
     renderTableEditor();
-    dbSetURL('tables/' + encodeURIComponent(dbState.selDb.name) + '/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table));
+    dbNavigate('tables/' + encodeURIComponent(dbState.selDb.name) + '/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table));
   } catch (e) { dbToast(e.message, 'error'); }
 }
 
 function renderTableEditor() {
-  document.getElementById('dbTablesView').style.display = 'none';
-  document.getElementById('dbEditorView').style.display = 'block';
+  dbShowView('dbEditorView');
   var mode = dbState.tableMode;
   var meta = dbState.tableMetadata;
   var metaHtml = '';
@@ -997,7 +1123,7 @@ window.refreshTriggersModal = async function() {
   if (!el) return;
   el.innerHTML = '<div class="db-loading">Refreshing...</div>';
   try {
-    var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+    var dbName = document.querySelector('.fm-modal h3').textContent.split(' — ')[1];
     var triggers = await API.databases.listAllTriggers(dbName);
     if (!triggers || !triggers.length) {
       el.innerHTML = '<div class="db-meta">No triggers defined.</div>';
@@ -1023,7 +1149,7 @@ window.refreshTriggersModal = async function() {
 };
 window.showTriggerDefinition = async function(schema, triggerName) {
   try {
-    var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+    var dbName = document.querySelector('.fm-modal h3').textContent.split(' — ')[1];
     var def = await API.databases.triggerDefinition(dbName, schema, triggerName);
     var html = '<div style="margin-bottom:8px"><strong>' + esc(def.schema_name + '.' + def.trigger_name) + '</strong> on ' + esc(def.table_name) + '</div>'
       + '<pre style="background:var(--bg3);padding:8px;border-radius:4px;overflow:auto;max-height:400px;font-size:11px">' + esc(def.trigger_def || '') + '</pre>';
@@ -1033,7 +1159,7 @@ window.showTriggerDefinition = async function(schema, triggerName) {
 window.dropTriggerGlobal = async function(schema, triggerName) {
   showConfirmModal('Drop trigger "' + triggerName + '"?', triggerName, async function() {
     try {
-      var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+      var dbName = document.querySelector('.fm-modal h3').textContent.split(' — ')[1];
       await API.databases.dropTriggerGlobal(dbName, schema, triggerName);
       dbToast('Trigger "' + triggerName + '" dropped');
       refreshTriggersModal();
@@ -1064,7 +1190,7 @@ window.refreshConnectionsMonitor = async function() {
   if (!el) return;
   el.innerHTML = '<div class="db-loading">Refreshing...</div>';
   try {
-    var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+    var dbName = document.querySelector('.fm-modal h3').textContent.split(' — ')[1];
     var conns = await API.databases.connections(dbName);
     if (!conns || !conns.length) {
       el.innerHTML = '<div class="db-meta">No active connections.</div>';
@@ -1093,7 +1219,7 @@ window.refreshConnectionsMonitor = async function() {
 window.killConnection = async function(pid) {
   showConfirmModal('Kill connection PID ' + pid + '?', String(pid), async function() {
     try {
-      var dbName = document.querySelector('.db-modal h3').textContent.split(' — ')[1];
+      var dbName = document.querySelector('.fm-modal h3').textContent.split(' — ')[1];
       await API.databases.killConnection(dbName, pid);
       dbToast('Connection ' + pid + ' killed');
       refreshConnectionsMonitor();
@@ -1173,9 +1299,13 @@ async function saveTableComment() {
 async function dbDuplicateTable() {
   var name = prompt('New table name (schema.table):', dbState.selTable.schema + '.' + dbState.selTable.name + '_copy');
   if (!name || !name.trim()) return;
+  name = name.trim();
+  var parts = name.split('.');
+  var targetName = parts.length > 1 ? parts[parts.length - 1] : name;
+  if (!isValidIdent(targetName)) { dbToast(identError(targetName), 'error'); return; }
   try {
-    await API.databases.duplicateTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, name.trim());
-    dbToast('Table duplicated as "' + name.trim() + '"');
+    await API.databases.duplicateTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, name);
+    dbToast('Table duplicated as "' + name + '"');
     await showTablesView();
   } catch (e) { dbToast(e.message, 'error'); }
 }
@@ -1183,9 +1313,11 @@ async function dbDuplicateTable() {
 async function dbRenameTable() {
   var name = prompt('New table name (without schema):', dbState.selTable.name + '_new');
   if (!name || !name.trim()) return;
+  name = name.trim();
+  if (!isValidIdent(name)) { dbToast(identError(name), 'error'); return; }
   try {
-    await API.databases.renameTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, name.trim());
-    dbToast('Table renamed to "' + name.trim() + '"');
+    await API.databases.renameTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, name);
+    dbToast('Table renamed to "' + name + '"');
     await showTablesView();
   } catch (e) { dbToast(e.message, 'error'); }
 }
@@ -1335,16 +1467,10 @@ var SQL_KEYWORDS = [
 ];
 
 function showQueryTerminal() {
-  document.getElementById('dbCardsView').style.display = 'none';
-  document.getElementById('dbSubViews').style.display = 'block';
-  document.getElementById('dbManageList').style.display = 'none';
-  document.getElementById('dbConfView').style.display = 'none';
-  document.getElementById('dbTablesView').style.display = 'none';
-  document.getElementById('dbEditorView').style.display = 'none';
-  document.getElementById('dbQueryView').style.display = 'block';
+  dbShowView('dbQueryView');
   document.getElementById('dbTitle').textContent = 'SQL Query Terminal';
-  document.getElementById('dbBreadcrumb').innerHTML = 'Write & execute SQL queries';
-  dbSetURL('query');
+  document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="renderCards()">Home</a> / SQL Query';
+  dbNavigate('query');
   renderQueryTerminal();
 }
 
@@ -1481,22 +1607,18 @@ function showCSVImport() {
   input.click();
 }
 
+var csvImportPendingContent = '';
 async function handleCSVFile(e) {
   var file = e.target.files[0];
   if (!file) return;
   var content = await file.text();
   if (!content.trim()) { dbToast('CSV file is empty', 'warning'); return; }
+  csvImportPendingContent = content;
   var tableName = file.name.replace(/\.csv$/i, '').replace(/[^a-zA-Z0-9_]/g, '_').toLowerCase();
   if (!tableName) tableName = 'imported_data';
+  if (!isValidIdent(tableName)) tableName = 'imported_data';
   var dbName = dbState.queryDb || (dbState.databases.length ? dbState.databases[0].name : '');
-  // Show dialog
-  var overlay = document.createElement('div');
-  overlay.className = 'db-modal-overlay active';
-  overlay.onclick = function(e) { if (e.target === overlay) overlay.remove(); };
-  overlay.innerHTML =
-    '<div class="db-modal db-csv-modal" onclick="event.stopPropagation()" style="max-width:500px">'
-    + '<div class="db-modal-header" style="display:flex;justify-content:space-between;align-items:center"><h3 style="margin:0">Import CSV</h3><span class="db-modal-close" onclick="this.closest(\'.db-modal-overlay\').remove()">✕</span></div>'
-    + '<div class="db-modal-body">'
+  var html = '<h3>Import CSV</h3>'
     + '<div class="n-form-group"><label>Database</label><select id="csvDbSelect" class="db-form-input">'
     + dbState.databases.map(function(d) { return '<option value="' + esc(d.name) + '" ' + (d.name === dbName ? 'selected' : '') + '>' + esc(d.name) + '</option>'; }).join('')
     + '</select></div>'
@@ -1504,32 +1626,23 @@ async function handleCSVFile(e) {
     + '<div class="n-form-group"><label>Schema</label><input id="csvSchema" class="db-form-input" value="public"></div>'
     + '<div class="n-form-group"><label>Rows detected: <strong>' + (content.trim().split('\n').length - 1) + '</strong></label></div>'
     + '<div class="n-form-group"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="csvCreateTable" checked> Create table automatically (based on column types)</label></div>'
-    + '</div>'
-    + '<div class="db-modal-footer" style="display:flex;gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--border)">'
-    + '<button class="db-btn" onclick="this.closest(\'.db-modal-overlay\').remove()">Cancel</button>'
-    + '<button class="db-btn db-btn-primary" onclick="runCSVImport()">Import</button>'
-    + '</div>'
-    + '<div id="csvImportError" class="db-form-error" style="margin:0 16px 12px"></div>'
-    + '<div id="csvImportProgress" style="margin:0 16px 12px;display:none"><div class="db-loading"></div></div>'
-    + '</div>';
-  document.body.appendChild(overlay);
-  overlay.dataset.csvContent = content;
+    + '<div class="db-form-error" id="csvImportError"></div>'
+    + '<div id="csvImportProgress" style="display:none"><div class="db-loading"></div></div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="runCSVImport()">Import</button></div>';
+  showDBModal(html);
 }
 
 async function runCSVImport() {
-  var overlay = document.querySelector('.db-csv-modal');
-  if (!overlay) return;
-  overlay = overlay.closest('.db-modal-overlay');
   var dbName = document.getElementById('csvDbSelect').value;
   var tableName = document.getElementById('csvTableName').value.trim();
   var schema = document.getElementById('csvSchema').value.trim() || 'public';
   var createTable = document.getElementById('csvCreateTable').checked;
-  var content = overlay.dataset.csvContent;
+  var content = csvImportPendingContent;
   var errEl = document.getElementById('csvImportError');
   var progEl = document.getElementById('csvImportProgress');
 
   if (!tableName) { errEl.textContent = 'Table name is required'; errEl.style.display = 'block'; return; }
-  if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName)) { errEl.textContent = 'Invalid table name'; errEl.style.display = 'block'; return; }
+  if (!isValidIdent(tableName)) { errEl.textContent = identError(tableName); errEl.style.display = 'block'; return; }
 
   errEl.style.display = 'none';
   progEl.style.display = 'block';
@@ -1546,36 +1659,19 @@ async function runCSVImport() {
     }
     if (!dataLines.length) throw new Error('No data rows found');
     if (createTable) {
-      // Detect column types
-      var colTypes = header.map(function(colName) {
+      var colError = '';
+      var columns = header.map(function(colName) {
+        if (!isValidIdent(colName) && !colError) colError = identError(colName);
         var vals = dataLines.map(function(r) { return r[header.indexOf(colName)]; });
-        return detectCSVType(vals);
+        return { name: colName, type: detectCSVType(vals), nullable: true, primaryKey: false };
       });
-      var colDefs = header.map(function(colName, i) { return quoteIdent(colName) + ' ' + colTypes[i]; });
-      var stmt = 'CREATE TABLE ' + quoteIdent(schema) + '.' + quoteIdent(tableName) + ' (\n  ' + colDefs.join(',\n  ') + '\n);';
-      await API.databases.runQuery(dbName, stmt);
+      if (colError) throw new Error(colError);
+      await API.databases.createTable(dbName, { schema, name: tableName, columns });
     }
-    // Insert data in batches
-    var batchSize = 50;
-    for (var b = 0; b < dataLines.length; b += batchSize) {
-      var batch = dataLines.slice(b, b + batchSize);
-      var valuesSQL = batch.map(function(row) {
-        return '(' + row.map(function(v) {
-          v = v.trim();
-          if (v === '' || v === 'NULL' || v === 'null') return 'NULL';
-          if (v === 'TRUE' || v === 'true' || v === 't') return 'true';
-          if (v === 'FALSE' || v === 'false' || v === 'f') return 'false';
-          if (!isNaN(v) && v !== '') return v;
-          return quoteLiteral(v);
-        }).join(',') + ')';
-      }).join(',\n');
-      var insertSQL = 'INSERT INTO ' + quoteIdent(schema) + '.' + quoteIdent(tableName) + ' (' + header.map(function(c) { return quoteIdent(c); }).join(',') + ') VALUES\n' + valuesSQL + ';';
-      await API.databases.runQuery(dbName, insertSQL);
-      progEl.innerHTML = '<div class="db-loading">Imported ' + Math.min(b + batchSize, dataLines.length) + ' / ' + dataLines.length + ' rows...</div>';
-    }
-    overlay.remove();
-    dbToast('CSV imported into ' + schema + '.' + tableName + ' (' + dataLines.length + ' rows)', 'success');
-    // Show the SQL in the editor
+    progEl.innerHTML = '<div class="db-loading">Importing ' + dataLines.length + ' rows...</div>';
+    var result = await API.databases.importTable(dbName, schema, tableName, 'csv', content);
+    closeDBModal();
+    dbToast('CSV imported into ' + schema + '.' + tableName + ' (' + (result.rowsImported || dataLines.length) + ' rows)', 'success');
     var ta = document.getElementById('queryInput');
     if (ta) {
       ta.value = 'SELECT * FROM ' + quoteIdent(schema) + '.' + quoteIdent(tableName) + ' LIMIT 100;';
@@ -1620,7 +1716,7 @@ function detectCSVType(vals) {
     maxLen = Math.max(maxLen, v.length);
     if (v === 'TRUE' || v === 'true' || v === 't' || v === 'FALSE' || v === 'false' || v === 'f') continue;
     allBool = false;
-    if (isNaN(parseFloat(v)) || !isFinite(v)) { allNumeric = false; allInt = false; }
+    if (isNaN(parseFloat(v)) || !isFinite(v)) { allNumeric = false; }
     else if (v.indexOf('.') >= 0) hasDecimal = true;
   }
   if (!maxLen) return 'TEXT';
@@ -2130,16 +2226,10 @@ async function doRevokePrivilege() {
 /* ─── 3.3 Function / Procedure Browser ─── */
 async function showFunctionsView() {
   if (!dbState.selDb) return dbToast('No database selected', 'warning');
-  document.getElementById('dbManageList').style.display = 'none';
-  document.getElementById('dbConfView').style.display = 'none';
-  document.getElementById('dbTablesView').style.display = 'none';
-  document.getElementById('dbEditorView').style.display = 'none';
-  document.getElementById('dbQueryView').style.display = 'none';
-  document.getElementById('dbSearchView').style.display = 'none';
-  document.getElementById('dbFunctionsView').style.display = 'block';
+  dbShowView('dbFunctionsView');
   document.getElementById('dbTitle').textContent = 'Functions — ' + dbState.selDb.name;
-  document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / <a href="#" onclick="renderConfView()">' + esc(dbState.selDb.name) + '</a> / Functions';
-  dbSetURL('functions/' + encodeURIComponent(dbState.selDb.name));
+  document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / <a href="#" onclick="showTablesView()">' + esc(dbState.selDb.name) + '</a> / Functions';
+  dbNavigate('functions/' + encodeURIComponent(dbState.selDb.name));
   renderFunctionsView();
 }
 
@@ -2148,15 +2238,26 @@ async function renderFunctionsView() {
   el.innerHTML = '<div class="db-loading">Loading functions...</div>';
   try {
     var funcs = await API.databases.listFunctions(dbState.selDb.name);
+    dbState.currentFunctions = funcs || [];
+    var filter = (dbState.functionFilter || '').toLowerCase();
+    var filtered = funcs.filter(function(f) {
+      if (!filter) return true;
+      var text = ((f.schema || '') + '.' + (f.name || '') + ' ' + (f.arguments || '')).toLowerCase();
+      return text.indexOf(filter) !== -1;
+    });
     var html = '<h3>📦 Stored Functions / Procedures</h3>';
-    html += '<div style="display:flex;gap:8px;margin:12px 0"><button class="db-btn" onclick="showTablesView()">← Back to tables</button></div>';
+    html += '<div style="display:flex;gap:8px;margin:12px 0;flex-wrap:wrap;align-items:center">'
+      + '<button class="db-btn" onclick="showTablesView()">← Back to tables</button>'
+      + '<div class="db-search-bar" style="margin-left:auto"><span class="db-data-search-icon">🔍</span>'
+      + '<input type="text" class="db-form-input db-search-input" placeholder="Filter functions..." value="' + esc(filter) + '" oninput="dbFilterFunctions(this.value)">'
+      + '</div></div>';
 
-    if (!funcs.length) {
+    if (!filtered.length) {
       html += '<div class="db-meta">No functions or procedures found in this database.</div>';
     } else {
       html += '<div style="max-height:500px;overflow:auto">';
       html += '<table class="db-fk-table"><thead><tr><th>Schema</th><th>Name</th><th>Kind</th><th>Arguments</th><th>Result</th><th>Language</th><th></th></tr></thead><tbody>';
-      funcs.forEach(function(f) {
+      filtered.forEach(function(f) {
         html += '<tr>'
           + '<td>' + esc(f.schema) + '</td>'
           + '<td><strong>' + esc(f.name) + '</strong></td>'
@@ -2175,6 +2276,11 @@ async function renderFunctionsView() {
     el.innerHTML = '<div class="db-error">Failed to load functions: ' + esc(e.message) + '</div>';
   }
 }
+
+window.dbFilterFunctions = function(value) {
+  dbState.functionFilter = value;
+  renderFunctionsView();
+};
 
 async function showFunctionDef(schema, name, args) {
   try {
@@ -2225,18 +2331,10 @@ async function dumpDatabase() {
 
 /* ─── 3.5 Search Across All Tables ─── */
 async function showSearchAll() {
-  document.getElementById('dbCardsView').style.display = 'none';
-  document.getElementById('dbSubViews').style.display = 'block';
-  document.getElementById('dbManageList').style.display = 'none';
-  document.getElementById('dbConfView').style.display = 'none';
-  document.getElementById('dbTablesView').style.display = 'none';
-  document.getElementById('dbEditorView').style.display = 'none';
-  document.getElementById('dbQueryView').style.display = 'none';
-  document.getElementById('dbFunctionsView').style.display = 'none';
-  document.getElementById('dbSearchView').style.display = 'block';
+  dbShowView('dbSearchView');
   document.getElementById('dbTitle').textContent = 'Search All Tables';
   document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="renderCards()">Home</a> / Search All Tables';
-  dbSetURL('search');
+  dbNavigate('search');
   renderSearchAll();
 }
 

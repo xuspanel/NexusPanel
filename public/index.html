@@ -5,19 +5,19 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NexusPanel — VPS Control Center</title>
   <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('nx-theme') || 'dark');</script>
-  <link rel="stylesheet" href="/css/style.css?v=1.9.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.9.1">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>">
   <link rel="stylesheet" href="/libs/xterm.css?v=1.6.1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ace.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-language_tools.js"></script>
   <script defer src="/js/theme.js?v=1.1.0"></script>
-  <script defer src="/js/api.js?v=1.9.0"></script>
+  <script defer src="/js/api.js?v=1.9.1"></script>
   <script defer src="/js/auth.js?v=1.1.0"></script>
   <script defer src="/js/dashboard.js?v=1.1.0"></script>
   <script defer src="/js/profile.js?v=1.1.0"></script>
   <script defer src="/js/filemanager.js?v=1.1.0"></script>
-  <script defer src="/js/databases.js?v=1.9.0"></script>
+  <script defer src="/js/databases.js?v=1.9.1"></script>
   <script defer src="/js/emails.js?v=1.1.0"></script>
   <script defer src="/js/docker.js?v=1.1.0"></script>
   <script defer src="/libs/xterm.js?v=1.6.1"></script>
@@ -26,7 +26,7 @@
   <script defer src="/libs/xterm-addon-web-links.js?v=1.6.1"></script>
   <script defer src="/libs/xterm-addon-webgl.js?v=1.6.1"></script>
   <script defer src="/libs/xterm-addon-unicode11.js?v=1.6.1"></script>
-  <script defer src="/js/terminal.js?v=1.9.0"></script>
+  <script defer src="/js/terminal.js?v=1.9.1"></script>
   <script defer src="/js/users.js?v=1.1.0"></script>
   <script defer src="/js/ftp.js?v=1.1.0"></script>
   <script defer src="/js/domains.js?v=1.1.0"></script>
@@ -43,7 +43,7 @@
   <script defer src="/js/phpfpm.js?v=1.1.0"></script>
   <script defer src="/js/updates.js?v=1.1.0"></script>
   <script defer src="/js/settings.js?v=1.6.1"></script>
-  <script defer src="/js/search.js?v=1.9.0"></script>
+  <script defer src="/js/search.js?v=1.9.1"></script>
   <script defer src="/js/notifications.js?v=1.1.0"></script>
 
 </head>
@@ -697,27 +697,37 @@
       <div id="dbError" class="db-error" style="display:none;"><span class="db-error-icon">⚠</span><span id="dbErrorText">Failed to connect</span><button class="db-btn db-btn-retry" id="dbRetryBtn">Retry</button></div>
 
       <div id="dbContent" style="display:none;">
-        <div id="dbCardsView">
-          <div class="db-cards-grid">
-            <div class="db-action-card" onclick="showCreateForm()"><span class="db-action-icon">➕</span><h3>Create Database</h3><p>Create a new PostgreSQL database with custom configuration</p></div>
-            <div class="db-action-card" onclick="showManage()"><span class="db-action-icon">📋</span><h3>Manage Databases</h3><p>Edit config, browse tables, modify schema</p></div>
-            <div class="db-action-card" onclick="window.open('/pgadmin','_blank')"><span class="db-action-icon">🐘</span><h3>Access pgAdmin</h3><p>Open pgAdmin web interface for advanced management</p></div>
-            <div class="db-action-card" onclick="showSearchAll()"><span class="db-action-icon">🔍</span><h3>Search All Tables</h3><p>Search for a value across all text columns in the database</p></div>
-            <div class="db-action-card" onclick="showQueryTerminal()"><span class="db-action-icon">⌨</span><h3>SQL Query</h3><p>Execute SQL queries, browse data, run schema commands</p></div>
+        <div class="db-screen-layout">
+          <aside class="db-nav-rail" id="dbNavRail">
+            <a class="db-nav-item active" data-target="dbCardsView" onclick="dbNavigate('cards')" title="Home"><span>🏠</span><small>Home</small></a>
+            <a class="db-nav-item" data-target="dbManageList" onclick="dbNavigate('manage')" title="Manage"><span>🗄</span><small>Manage</small></a>
+            <a class="db-nav-item" data-target="dbQueryView" onclick="dbNavigate('query')" title="SQL Query"><span>⌨</span><small>Query</small></a>
+            <a class="db-nav-item" data-target="dbSearchView" onclick="dbNavigate('search')" title="Search"><span>🔍</span><small>Search</small></a>
+          </aside>
+          <div class="db-screen-main">
+            <div id="dbCardsView">
+              <div class="db-cards-grid">
+                <div class="db-action-card" onclick="showCreateForm()"><span class="db-action-icon">➕</span><h3>Create Database</h3><p>Create a new PostgreSQL database with custom configuration</p></div>
+                <div class="db-action-card" onclick="showManage()"><span class="db-action-icon">📋</span><h3>Manage Databases</h3><p>Edit config, browse tables, modify schema</p></div>
+                <div class="db-action-card" onclick="window.open('/pgadmin','_blank')"><span class="db-action-icon">🐘</span><h3>Access pgAdmin</h3><p>Open pgAdmin web interface for advanced management</p></div>
+                <div class="db-action-card" onclick="showSearchAll()"><span class="db-action-icon">🔍</span><h3>Search All Tables</h3><p>Search for a value across all text columns in the database</p></div>
+                <div class="db-action-card" onclick="showQueryTerminal()"><span class="db-action-icon">⌨</span><h3>SQL Query</h3><p>Execute SQL queries, browse data, run schema commands</p></div>
+              </div>
+            </div>
+
+            <div id="dbSubViews" style="display:none">
+              <div id="dbManageList" class="db-manage-grid"></div>
+
+              <div id="dbConfView" style="display:none"><div id="dbConfContent"></div></div>
+
+              <div id="dbTablesView" style="display:none"><div id="dbTablesContent"></div></div>
+
+              <div id="dbEditorView" style="display:none"><div id="dbEditorContent"></div></div>
+              <div id="dbQueryView" style="display:none"><div id="dbQueryContent"></div></div>
+              <div id="dbSearchView" style="display:none"><div id="dbSearchContent"></div></div>
+              <div id="dbFunctionsView" style="display:none"><div id="dbFunctionsContent"></div></div>
+            </div>
           </div>
-        </div>
-
-        <div id="dbSubViews" style="display:none">
-          <div id="dbManageList" class="db-manage-grid"></div>
-
-          <div id="dbConfView" style="display:none"><div id="dbConfContent"></div></div>
-
-          <div id="dbTablesView" style="display:none"><div id="dbTablesContent"></div></div>
-
-          <div id="dbEditorView" style="display:none"><div id="dbEditorContent"></div></div>
-          <div id="dbQueryView" style="display:none"><div id="dbQueryContent"></div></div>
-          <div id="dbSearchView" style="display:none"><div id="dbSearchContent"></div></div>
-          <div id="dbFunctionsView" style="display:none"><div id="dbFunctionsContent"></div></div>
         </div>
       </div>
 

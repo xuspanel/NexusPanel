@@ -1741,6 +1741,15 @@ body::before {
   gap: 10px;
 }
 
+.db-screen-layout { display:flex; gap:16px; min-height: calc(100vh - 140px); }
+.db-nav-rail { width:64px; flex-shrink:0; display:flex; flex-direction:column; gap:6px; padding:12px 8px; background:var(--bg-card); border:1px solid var(--glass-border); border-radius:var(--radius-md); align-self:flex-start; position:sticky; top:16px; }
+.db-nav-item { display:flex; flex-direction:column; align-items:center; gap:4px; padding:10px 4px; border-radius:var(--radius-sm); cursor:pointer; color:var(--text-secondary); text-decoration:none; transition:all 0.15s; }
+.db-nav-item span { font-size:18px; }
+.db-nav-item small { font-size:10px; font-weight:500; }
+.db-nav-item:hover { background:rgba(255,255,255,0.05); color:var(--text-primary); }
+.db-nav-item.active { background:var(--accent-cyan); color:#fff; }
+.db-screen-main { flex:1; min-width:0; }
+
 .db-search-wrap {
   position: relative;
 }
@@ -9072,6 +9081,9 @@ body::before {
 .db-manage-name { display:block; font-size:14px; font-weight:600; color:var(--text-primary); }
 .db-manage-meta { font-size:11px; color:var(--text-tertiary); }
 .db-manage-arrow { color:var(--text-tertiary); }
+.db-manage-actions { display:flex; gap:6px; align-items:center; flex-shrink:0; opacity:0; transition:opacity 0.15s; }
+.db-manage-card:hover .db-manage-actions { opacity:1; }
+.db-manage-actions .db-btn { padding:4px 8px; font-size:11px; }
 
 .db-conf-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(200px,1fr)); gap:12px; }
 
@@ -9104,6 +9116,10 @@ body::before {
   .db-editor-row input:nth-child(4),.db-editor-header span:nth-child(4),
   .db-editor-row input:nth-child(5),.db-editor-header span:nth-child(5) { display:none; }
   .ct-col-row { flex-wrap:wrap; }
+  .db-screen-layout { flex-direction:column; }
+  .db-nav-rail { width:auto; flex-direction:row; justify-content:center; position:static; }
+  .db-nav-item { flex-direction:row; padding:8px 12px; }
+  .db-nav-item small { display:none; }
 }
 
 /* ── Table Mode Tabs ── */
@@ -9136,6 +9152,8 @@ body::before {
 .db-data-search-icon { font-size:14px; color:var(--text-tertiary); }
 .db-data-search-input { flex:1; min-width:120px; }
 .db-data-toolbar-actions { display:flex; gap:6px; }
+.db-search-bar { display:flex; align-items:center; gap:6px; flex:1; min-width:220px; max-width:420px; }
+.db-search-bar .db-search-input { flex:1; min-width:120px; }
 .db-data-footer { display:flex; justify-content:space-between; align-items:center; margin-top:8px; flex-wrap:wrap; gap:8px; }
 .db-data-pagination { display:flex; align-items:center; gap:4px; }
 .db-data-page-info { font-size:12px; color:var(--text-secondary); padding:0 8px; white-space:nowrap; }

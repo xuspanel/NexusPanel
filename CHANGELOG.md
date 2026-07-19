@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.9.1] - 2026-07-19
+### Added
+- **Database Screen navigation rail**: persistent left sidebar with Home / Manage / Query / Search shortcuts
+- **Search & filter**: filter databases by name/owner, filter tables/views/materialized views by name and schema, filter functions by name/schema/arguments
+- **Database card actions**: each database in Manage view now has a ⚙ Config button alongside the → Tables button
+- **View / Materialized View actions**: views can be dropped; materialized views can be refreshed or dropped directly from the tables list
+- **Client-side identifier validation**: database, table, column, and rename/duplicate names are validated before hitting the API
+
+### Changed
+- **Browser history integration**: internal Database Screen transitions now use `history.pushState`, so back/forward navigation works correctly
+- **Centralized view router**: new `dbNavigate()`/`dbApplyRoute()`/`dbShowView()` functions replace scattered `style.display` toggles and fix view-leak bugs
+- **Config view pre-fills values**: connection limit and comment are loaded from `/databases/:db/config`
+- **CSV import uses dedicated endpoints**: CREATE TABLE goes through `/databases/:db/table` and data import uses the transaction-safe `/databases/:db/table/:schema/:table/import` endpoint
+- **Standardized modal system**: CSV import dialog now uses the shared `dbModal` (`fm-modal`) instead of a custom overlay
+
+### Fixed
+- `detectCSVType()` referenced an undefined `allInt` variable
+- `/databases/:db/matviews` and other parameterized routes were unreachable until the server was restarted
+- Modal title queries in trigger/connection monitors now target the correct `.fm-modal` class
+
 ## [1.9.0] - 2026-07-19
 ### Added
 - **URL-based routing for Database Manager**: deep-linkable URLs for `/databases/cards`, `/databases/tables/:db`, `/databases/config/:db`, `/databases/query`, `/databases/search`, `/databases/functions/:db`, and table editor paths. `popstate` restores the view on back/forward navigation

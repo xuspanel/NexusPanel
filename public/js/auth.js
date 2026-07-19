@@ -118,9 +118,8 @@ document.addEventListener('DOMContentLoaded', async () => {
 
   window.addEventListener('popstate', function (e) {
     const state = e.state;
-    if (state && state.view === 'databases' && state.dbSub && window.dbRestoreState) {
-      window.dbRestoreState(state.dbSub);
-      return;
+    if (state && state.view === 'databases' && state.dbSub && window.dbApplyRoute) {
+      window.dbApplyRoute(state.dbSub);
     }
     const view = (state && state.view) || 'dashboard';
     switchView(view);
