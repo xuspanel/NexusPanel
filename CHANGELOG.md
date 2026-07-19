@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.9.4] - 2026-07-19
+### Added / Improved
+- **Auto-increment columns**: `serial` / `bigserial` types are now labeled “(auto increment)” in the Create Table and Table Config type dropdowns
+- **Auto-increment detection**: backend now flags serial columns (`is_serial`) so the Add Row form skips them automatically and the Table Config grid shows an **AI** badge
+
 ## [1.9.3] - 2026-07-19
 ### Fixed
 - **SQL Query Terminal status message**: execution time (`<span class="db-meta">· 7ms</span>`) is now rendered as HTML instead of being displayed as literal text for non-SELECT results

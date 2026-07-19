@@ -591,7 +591,7 @@ async function doCreateTable() {
   } catch (e) { dbModalError(e.message); }
 }
 
-function typeOptions() { return '<option>integer</option><option>bigint</option><option>smallint</option><option>serial</option><option>bigserial</option><option>varchar(255)</option><option>text</option><option>boolean</option><option>timestamptz</option><option>timestamp</option><option>date</option><option>numeric</option><option>real</option><option>jsonb</option><option>uuid</option>'; }
+function typeOptions() { return '<option>integer</option><option>bigint</option><option>smallint</option><option value="serial">serial (auto increment)</option><option value="bigserial">bigserial (auto increment)</option><option>varchar(255)</option><option>text</option><option>boolean</option><option>timestamptz</option><option>timestamp</option><option>date</option><option>numeric</option><option>real</option><option>jsonb</option><option>uuid</option>'; }
 
 /* ─── Table Editor ─── */
 async function openTableEditor(schema, table) {
@@ -954,10 +954,14 @@ function renderTableConfig() {
   cols.forEach(function(c, i) {
     var isNew = c._action === 'add';
     var isDeleted = c._action === 'drop';
+    var isSerial = c.is_serial || (c.data_type || '').toLowerCase().indexOf('serial') !== -1;
     var colComment = c._comment || (meta && meta.column_comments && meta.column_comments[c.column_name]) || '';
     html += '<div class="db-editor-row' + (isNew ? ' db-editor-new' : '') + (isDeleted ? ' db-editor-deleted' : '') + '">'
       + '<input value="' + esc(c.column_name) + '" onchange="tedChangeCol(' + i + ',\'column_name\',this.value)" class="db-form-input">'
+      + '<div style="display:flex;align-items:center;gap:6px">'
       + '<select class="db-form-input" onchange="tedChangeCol(' + i + ',\'data_type\',this.value)">' + typeOptionsSelected(c.data_type) + '</select>'
+      + (isSerial ? '<span class="db-meta" title="Auto Increment">AI</span>' : '')
+      + '</div>'
       + '<label><input type="checkbox" ' + (c.is_nullable === 'YES' ? 'checked' : '') + ' onchange="tedChangeCol(' + i + ',\'is_nullable\',this.checked ? \'YES\' : \'NO\')"> Null</label>'
       + '<input value="' + esc(c.column_default||'') + '" onchange="tedChangeCol(' + i + ',\'column_default\',this.value)" class="db-form-input" placeholder="default">'
       + '<input value="' + esc(colComment) + '" onchange="tedChangeColComment(' + i + ',this.value)" class="db-form-input" placeholder="column comment">'
@@ -1232,7 +1236,8 @@ window.killConnection = async function(pid) {
 
 function typeOptionsSelected(current) {
   var types = ['integer','bigint','smallint','serial','bigserial','varchar(255)','text','boolean','timestamptz','timestamp','date','numeric','real','jsonb','uuid'];
-  return types.map(function(t) { return '<option value="' + t + '" ' + (t === current ? 'selected' : '') + '>' + t + '</option>'; }).join('');
+  var labels = { serial: 'serial (auto increment)', bigserial: 'bigserial (auto increment)' };
+  return types.map(function(t) { return '<option value="' + t + '" ' + (t === current ? 'selected' : '') + '>' + (labels[t] || t) + '</option>'; }).join('');
 }
 
 function tedChangeCol(i, key, val) {

@@ -124,7 +124,8 @@ async function getTableInfo(database, schema, table) {
   if (!validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid schema/table name');
   const columns = await queryRows(database, `SELECT c.column_name, c.data_type, c.is_nullable, c.column_default,
   c.character_maximum_length, c.numeric_precision, c.numeric_scale,
-  CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END AS is_primary_key
+  CASE WHEN pk.column_name IS NOT NULL THEN true ELSE false END AS is_primary_key,
+  CASE WHEN c.column_default IS NOT NULL AND c.column_default LIKE 'nextval(%' THEN true ELSE false END AS is_serial
 FROM information_schema.columns c
 LEFT JOIN (SELECT ku.column_name FROM information_schema.table_constraints tc
   JOIN information_schema.key_column_usage ku ON tc.constraint_name = ku.constraint_name AND tc.table_schema = ku.table_schema
