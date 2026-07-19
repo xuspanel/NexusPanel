@@ -153,6 +153,7 @@ async function createTable(database, schema, tableName, columns) {
     let def = `${quoteIdent(col.name)} ${col.type || 'text'}`;
     if (col.primaryKey) def += ' PRIMARY KEY';
     if (col.nullable === false) def += ' NOT NULL';
+    if (col.default !== undefined && col.default !== null && col.default !== '') def += ` DEFAULT ${quoteLiteral(col.default)}`;
     return def;
   });
   const sql = `CREATE TABLE ${quoteIdent(schema)}.${quoteIdent(tableName)} (${defs.join(', ')})`;

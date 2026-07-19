@@ -106,6 +106,34 @@ async function createDatabase() {
 function closeDBModal() { document.getElementById('dbModal').style.display = 'none'; }
 function dbModalError(msg) { var el = document.getElementById('dbModalError'); el.textContent = msg; el.style.display = 'block'; }
 
+function showConfirmModal(message, expected, onConfirm) {
+  var html = '<h3>Confirm</h3>'
+    + '<p style="color:var(--text-secondary);margin-bottom:12px">' + esc(message) + '</p>'
+    + '<div class="n-form-group"><label>Type <strong>' + esc(expected) + '</strong> to confirm:</label>'
+    + '<input id="confirmInput" class="db-form-input" placeholder="' + esc(expected) + '" autocomplete="off" spellcheck="false"></div>'
+    + '<div class="db-form-error" id="dbModalError"></div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button>'
+    + '<button class="fm-btn fm-btn-danger" id="confirmBtn" disabled onclick="closeConfirmModal()">Delete</button></div>';
+  document.getElementById('dbModalContent').innerHTML = html;
+  document.getElementById('dbModal').style.display = 'flex';
+  var input = document.getElementById('confirmInput');
+  input.focus();
+  input.addEventListener('input', function() {
+    document.getElementById('confirmBtn').disabled = input.value !== expected;
+  });
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter' && input.value === expected) {
+      closeDBModal();
+      onConfirm();
+    }
+  });
+  window.closeConfirmModal = function() {
+    if (document.getElementById('confirmInput').value !== expected) return;
+    closeDBModal();
+    onConfirm();
+  };
+}
+
 /* ─── Manage Databases ─── */
 function showManage() {
   document.getElementById('dbCardsView').style.display = 'none';
@@ -179,10 +207,10 @@ async function saveDBConfig() {
 
 async function dropDatabase() {
   var name = dbState.selDb.name;
-  var confirm = prompt('Type "' + name + '" to confirm permanent deletion:');
-  if (confirm !== name) { dbToast('Deletion cancelled'); return; }
-  try { await API.databases.del(name, name); dbToast('Database dropped'); await loadDatabases(); showManage(); }
-  catch (e) { dbToast(e.message, 'error'); }
+  showConfirmModal('Permanently delete database "' + name + '"? All data will be lost.', name, async function() {
+    try { await API.databases.del(name, name); dbToast('Database "' + name + '" dropped'); await loadDatabases(); showManage(); }
+    catch (e) { dbToast(e.message, 'error'); }
+  });
 }
 
 /* ─── Tables View ─── */
@@ -225,17 +253,26 @@ function showCreateTable() {
     '<h3>Create Table in ' + esc(dbState.selDb.name) + '</h3>'
     + '<div class="n-form-group"><label>Schema</label><select id="ctSchema" class="db-form-input">' + dbState.schemas.map(function(s) { return '<option value="' + esc(s.name) + '" ' + (s.name==='public'?'selected':'') + '>' + esc(s.name) + '</option>'; }).join('') + '</select></div>'
     + '<div class="n-form-group"><label>Table Name</label><input id="ctName" class="db-form-input" placeholder="my_table"></div>'
-    + '<div id="ctColumns"><div class="ct-col-row"><input placeholder="column_name" class="db-form-input ct-col-name"><select class="db-form-input ct-col-type">'
-    + typeOptions() + '</select><label class="ct-col-null"><input type="checkbox" class="ct-col-check"> Null</label><button class="db-btn db-btn-sm" onclick="this.parentElement.remove()">✕</button></div></div>'
+    + '<div id="ctColumns" style="margin-bottom:8px">'
+    + '<div class="ct-col-row"><input placeholder="column_name" class="db-form-input ct-col-name"><select class="db-form-input ct-col-type">'
+    + typeOptions() + '</select>'
+    + '<label class="ct-col-null"><input type="checkbox" class="ct-col-check" checked> Null</label>'
+    + '<label class="ct-col-pk" title="Primary Key"><input type="checkbox" class="ct-col-pk-check"> PK</label>'
+    + '<input placeholder="default" class="db-form-input ct-col-default" title="Default value">'
+    + '<button class="db-btn db-btn-sm" onclick="this.parentElement.remove()">✕</button></div></div>'
     + '<button class="db-btn" onclick="ctAddCol()">+ Add Column</button>'
-    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doCreateTable()">Create Table</button></div>'
-    + '<div class="db-form-error" id="dbModalError"></div>';
+    + '<div class="db-form-error" id="dbModalError"></div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doCreateTable()">Create Table</button></div>';
   document.getElementById('dbModal').style.display = 'flex';
 }
 
 function ctAddCol() {
   var d = document.createElement('div'); d.className = 'ct-col-row';
-  d.innerHTML = '<input placeholder="column_name" class="db-form-input ct-col-name"><select class="db-form-input ct-col-type">' + typeOptions() + '</select><label class="ct-col-null"><input type="checkbox" class="ct-col-check"> Null</label><button class="db-btn db-btn-sm" onclick="this.parentElement.remove()">✕</button>';
+  d.innerHTML = '<input placeholder="column_name" class="db-form-input ct-col-name"><select class="db-form-input ct-col-type">' + typeOptions() + '</select>'
+    + '<label class="ct-col-null"><input type="checkbox" class="ct-col-check" checked> Null</label>'
+    + '<label class="ct-col-pk" title="Primary Key"><input type="checkbox" class="ct-col-pk-check"> PK</label>'
+    + '<input placeholder="default" class="db-form-input ct-col-default" title="Default value">'
+    + '<button class="db-btn db-btn-sm" onclick="this.parentElement.remove()">✕</button>';
   document.getElementById('ctColumns').appendChild(d);
 }
 
@@ -248,13 +285,24 @@ async function doCreateTable() {
     var cn = r.querySelector('.ct-col-name').value.trim();
     var ct = r.querySelector('.ct-col-type').value;
     var ck = r.querySelector('.ct-col-check').checked;
-    if (cn) cols.push({ name: cn, type: ct, nullable: ck, primaryKey: false });
+    var pk = r.querySelector('.ct-col-pk-check').checked;
+    var def = r.querySelector('.ct-col-default').value.trim();
+    if (cn) {
+      var col = { name: cn, type: ct, nullable: ck, primaryKey: pk };
+      if (def) col.default = def;
+      cols.push(col);
+    }
   });
+  // If any column has PK, ensure all PK columns are NOT NULL
+  var hasPk = cols.some(function(c) { return c.primaryKey; });
+  if (hasPk) {
+    cols.forEach(function(c) { if (c.primaryKey) c.nullable = false; });
+  }
   if (!cols.length) return dbModalError('At least one column required');
   try {
     await API.databases.createTable(dbState.selDb.name, { schema, name: name, columns: cols });
     closeDBModal();
-    dbToast('Table created');
+    dbToast('Table "' + name + '" created');
     await showTablesView();
   } catch (e) { dbModalError(e.message); }
 }
@@ -416,10 +464,10 @@ async function tedSave() {
 
 async function dropTable() {
   var fullName = dbState.selTable.schema + '.' + dbState.selTable.name;
-  var confirm = prompt('Type "' + fullName + '" to confirm permanent deletion:');
-  if (confirm !== fullName) { dbToast('Deletion cancelled'); return; }
-  try { await API.databases.dropTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, fullName); dbToast('Table dropped'); await showTablesView(); }
-  catch (e) { dbToast(e.message, 'error'); }
+  showConfirmModal('Permanently delete table "' + fullName + '"? All data and indexes will be lost.', fullName, async function() {
+    try { await API.databases.dropTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, fullName); dbToast('Table "' + fullName + '" dropped'); await showTablesView(); }
+    catch (e) { dbToast(e.message, 'error'); }
+  });
 }
 
 /* ─── SQL Query Terminal ─── */

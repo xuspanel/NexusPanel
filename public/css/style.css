@@ -3086,6 +3086,10 @@ body::before {
   border-color: rgba(239,68,68,0.4);
   box-shadow: 0 0 12px rgba(239,68,68,0.1);
 }
+.fm-btn-danger:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
 
 .btn-spinner {
   width: 16px;
@@ -9177,6 +9181,9 @@ body::before {
 .ct-col-type { flex:1; }
 .ct-col-null { display:flex; align-items:center; gap:4px; font-size:12px; color:var(--text-secondary); white-space:nowrap; }
 .ct-col-check { width:14px; height:14px; }
+.ct-col-pk { display:flex; align-items:center; gap:3px; font-size:12px; color:var(--accent-orange); white-space:nowrap; cursor:pointer; }
+.ct-col-pk input { width:14px; height:14px; cursor:pointer; }
+.ct-col-default { width:90px; font-size:12px; padding:3px 6px; border:1px solid var(--border); border-radius:var(--radius-sm); background:transparent; color:var(--text-primary); }
 
 @media(max-width:768px) {
   .db-editor-row,.db-editor-header { grid-template-columns:1fr 1fr 60px; }

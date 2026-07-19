@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.6.4] - 2026-07-19
+### Added
+- **Database confirm modal**: replaced bare `prompt()` calls in `dropDatabase()` and `dropTable()` with a proper modal confirmation that requires typing the entity name to enable the Delete button. Uses Enter key support, disabled state, and inline error display
+- **Primary Key toggle in table creation**: each column row now has a PK checkbox (orange highlight) that sets `primaryKey: true` in the column definition. PK columns are automatically set to `NOT NULL`
+- **Default value input in table creation**: each column row now has a text input for specifying a SQL default value (e.g. `NOW()`, `true`, `0`). The service layer (`databases.js:createTable`) applies defaults using `quoteLiteral()`
+
+### Changed
+- `public/js/databases.js`: `showCreateTable()`, `ctAddCol()`, and `doCreateTable()` updated to include PK toggle and Default field; `dropDatabase()` and `dropTable()` use `showConfirmModal()` instead of `prompt()`
+- `public/css/style.css`: added `.ct-col-pk`, `.ct-col-pk input`, `.ct-col-default`, and `.fm-btn-danger:disabled` styles
+
 ## [1.6.3] - 2026-07-19
 ### Changed
 - **Database screen refactored (Phase 1)**: replaced all `psql` shell calls and `parseCSV()` in `src/routes/databases.js` with the new `pg`-based service layer (`src/services/databases.js`). All database operations now use parameterized queries, pool-per-database connection caching, and proper identifier validation. Shell-based `psql()`/`parseCSV()` utilities removed entirely
