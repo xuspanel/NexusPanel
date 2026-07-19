@@ -1,5 +1,11 @@
 # Changelog
 
+## [1.9.2] - 2026-07-19
+### Fixed
+- **Critical navigation loop bug**: `dbNavigate()` no longer calls `dbApplyRoute()`, preventing infinite pushState/apply loops that caused rapid-fire API requests and 429 rate-limit errors
+- **Nav rail links**: Home / Manage / Query / Search shortcuts now call the correct view functions directly
+- **Connections auto-refresh timer**: cleared when the modal closes to avoid leaking background requests
+
 ## [1.9.1] - 2026-07-19
 ### Added
 - **Database Screen navigation rail**: persistent left sidebar with Home / Manage / Query / Search shortcuts

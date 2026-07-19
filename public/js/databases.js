@@ -5,12 +5,12 @@ var dbInit = false;
 function dbNavigate(subPath, opts) {
   opts = opts || {};
   var fullPath = '/databases/' + subPath;
+  if (location.pathname === fullPath && !opts.replace) return;
   if (opts.replace) {
     history.replaceState({ view: 'databases', dbSub: subPath }, '', fullPath);
   } else {
     history.pushState({ view: 'databases', dbSub: subPath }, '', fullPath);
   }
-  dbApplyRoute(subPath, opts);
 }
 
 window.dbApplyRoute = function(dbSub, opts) {
@@ -169,7 +169,10 @@ async function createDatabase() {
   } catch (e) { dbModalError(e.message); }
 }
 
-function closeDBModal() { document.getElementById('dbModal').style.display = 'none'; }
+function closeDBModal() {
+  document.getElementById('dbModal').style.display = 'none';
+  if (connectionsRefreshTimer) { clearInterval(connectionsRefreshTimer); connectionsRefreshTimer = null; }
+}
 function showDBModal(html) {
   document.getElementById('dbModalContent').innerHTML = html;
   document.getElementById('dbModal').style.display = 'flex';
