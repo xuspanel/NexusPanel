@@ -424,6 +424,228 @@ async function runQuery(database, sql, params) {
   return { rows: result.rows, rowCount: result.rowCount, fields: result.fields?.map(f => ({ name: f.name, dataType: f.dataTypeID })) };
 }
 
+/* ─── FK Relations (all tables in a database) ─── */
+
+async function getAllForeignKeys(database) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  return await queryRows(database, `SELECT
+    tc.table_schema, tc.table_name, kcu.column_name,
+    ccu.table_schema AS foreign_schema, ccu.table_name AS foreign_table, ccu.column_name AS foreign_column,
+    tc.constraint_name, rc.update_rule, rc.delete_rule
+  FROM information_schema.table_constraints tc
+  JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+  JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema
+  JOIN information_schema.referential_constraints rc ON tc.constraint_name = rc.constraint_name AND tc.table_schema = rc.constraint_schema
+  WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema NOT IN ('pg_catalog','information_schema','pg_toast')
+  ORDER BY tc.table_schema, tc.table_name, kcu.ordinal_position`);
+}
+
+/* ─── Privileges ─── */
+
+async function getPrivileges(database) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  const tablePrivs = await queryRows(database, `SELECT
+    schemaname, tablename, grantee, privilege_type, is_grantable
+  FROM information_schema.table_privileges
+  WHERE schemaname NOT IN ('pg_catalog','information_schema','pg_toast')
+  ORDER BY schemaname, tablename, grantee`);
+
+  const dbPrivs = await queryRows('postgres', `SELECT
+    datname, pg_catalog.pg_get_userbyid(datdba) AS owner
+  FROM pg_catalog.pg_database WHERE datname = $1`, [database]);
+
+  return { database: dbPrivs[0] || null, tables: tablePrivs };
+}
+
+async function grantPrivilege(database, schema, table, privilege, grantee) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  if (!validateIdent(grantee)) throw new Error('Invalid grantee name');
+  const validPrivs = ['SELECT','INSERT','UPDATE','DELETE','TRUNCATE','REFERENCES','TRIGGER','ALL'];
+  if (!validPrivs.includes(privilege.toUpperCase())) throw new Error('Invalid privilege');
+  await exec(database, `GRANT ${privilege} ON ${quoteIdent(schema)}.${quoteIdent(table)} TO ${quoteIdent(grantee)}`);
+  return { ok: true };
+}
+
+async function revokePrivilege(database, schema, table, privilege, grantee) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  if (!validateIdent(grantee)) throw new Error('Invalid grantee name');
+  await exec(database, `REVOKE ${privilege} ON ${quoteIdent(schema)}.${quoteIdent(table)} FROM ${quoteIdent(grantee)}`);
+  return { ok: true };
+}
+
+/* ─── Functions / Procedures ─── */
+
+async function listFunctions(database, schema) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  const schemaFilter = schema && validateIdent(schema) ? ` AND n.nspname = ${quoteLiteral(schema)}` : ` AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')`;
+  return await queryRows(database, `SELECT
+    n.nspname AS schema,
+    p.proname AS name,
+    pg_catalog.pg_get_function_result(p.oid) AS result_type,
+    pg_catalog.pg_get_function_arguments(p.oid) AS arguments,
+    l.lanname AS language,
+    CASE WHEN p.prokind = 'p' THEN 'PROCEDURE' ELSE 'FUNCTION' END AS kind,
+    pg_catalog.pg_get_functiondef(p.oid) AS definition
+  FROM pg_catalog.pg_proc p
+  JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+  JOIN pg_catalog.pg_language l ON p.prolang = l.oid
+  WHERE p.prokind IN ('f','p')${schemaFilter}
+  ORDER BY n.nspname, p.proname`);
+}
+
+async function getFunctionDefinition(database, schema, name, args) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(name)) throw new Error('Invalid name');
+  const oidSql = `SELECT p.oid FROM pg_catalog.pg_proc p
+    JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
+    WHERE n.nspname = $1 AND p.proname = $2`;
+  const oidRow = await queryOne(database, oidSql, [schema, name]);
+  if (!oidRow) throw new Error('Function not found');
+  const def = await queryOne(database, `SELECT pg_catalog.pg_get_functiondef($1) AS definition`, [oidRow.oid]);
+  return def;
+}
+
+async function dropFunction(database, schema, name, args) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(name)) throw new Error('Invalid name');
+  const argStr = args ? `(${args})` : '()';
+  await exec(database, `DROP FUNCTION ${quoteIdent(schema)}.${quoteIdent(name)}${argStr} CASCADE`);
+  return { ok: true };
+}
+
+/* ─── SQL Dump ─── */
+
+async function dumpDatabase(database, format) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  // Collect DDL for all tables
+  const tables = await queryRows(database, `SELECT table_schema, table_name FROM information_schema.tables
+    WHERE table_type = 'BASE TABLE' AND table_schema NOT IN ('pg_catalog','information_schema','pg_toast')
+    ORDER BY table_schema, table_name`);
+
+  let parts = [`-- Dump of database: ${database}\n-- Generated: ${new Date().toISOString()}\n\n`];
+
+  for (const t of tables) {
+    const full = `${quoteIdent(t.table_schema)}.${quoteIdent(t.table_name)}`;
+
+    // CREATE TABLE
+    const def = await queryOne(database, `SELECT pg_catalog.pg_get_viewdef(${full}::regclass, true) AS ddl`);
+    const createSql = await queryRows(database,
+      `SELECT 'CREATE TABLE IF NOT EXISTS ' || ${quoteLiteral(full)} || ' (' || string_agg(
+        quote_ident(column_name) || ' ' || data_type ||
+        CASE WHEN is_nullable = 'NO' THEN ' NOT NULL' ELSE '' END ||
+        COALESCE(' DEFAULT ' || column_default, ''), ', ') || ')' AS ddl
+      FROM information_schema.columns WHERE table_schema = $1 AND table_name = $2
+      GROUP BY table_schema, table_name`, [t.table_schema, t.table_name]);
+    if (createSql.length) parts.push(createSql[0].ddl + ';\n');
+
+    // COMMENT ON TABLE
+    const comment = await queryOne(database,
+      `SELECT pg_catalog.obj_description(${full}::regclass, 'pg_class') AS comment`);
+    if (comment && comment.comment) parts.push(`COMMENT ON TABLE ${full} IS ${quoteLiteral(comment.comment)};\n`);
+
+    if (format === 'data' || format === 'full') {
+      // SELECT data
+      const rows = await queryRows(database, `SELECT * FROM ${full} ORDER BY (SELECT NULL)`);
+      if (rows.length) {
+        const cols = Object.keys(rows[0]);
+        const colList = cols.map(c => quoteIdent(c)).join(', ');
+        const inserts = rows.map(r => {
+          const vals = cols.map(c => {
+            const v = r[c];
+            if (v === null || v === undefined) return 'NULL';
+            if (typeof v === 'number') return String(v);
+            return quoteLiteral(v);
+          }).join(', ');
+          return `INSERT INTO ${full} (${colList}) VALUES (${vals});`;
+        });
+        parts.push(inserts.join('\n') + '\n');
+      }
+    }
+    parts.push('\n');
+  }
+
+  // Indexes
+  const indexes = await queryRows(database, `SELECT indexdef FROM pg_catalog.pg_indexes
+    WHERE schemaname NOT IN ('pg_catalog','information_schema','pg_toast')
+    ORDER BY schemaname, tablename, indexname`);
+  if (indexes.length) {
+    parts.push('-- Indexes\n');
+    indexes.forEach(idx => parts.push(idx.indexdef + ';\n'));
+  }
+
+  return { content: parts.join(''), contentType: 'text/sql', ext: 'sql' };
+}
+
+/* ─── Search Across All Tables ─── */
+
+async function searchAllTables(database, searchTerm, schema) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  const schemaFilter = schema && validateIdent(schema) ? ` AND c.table_schema = ${quoteLiteral(schema)}` : ` AND c.table_schema NOT IN ('pg_catalog','information_schema','pg_toast')`;
+  const tables = await queryRows(database, `SELECT c.table_schema, c.table_name, c.column_name, c.data_type
+    FROM information_schema.columns c
+    JOIN information_schema.tables t ON c.table_schema = t.table_schema AND c.table_name = t.table_name
+    WHERE t.table_type = 'BASE TABLE'${schemaFilter}
+      AND c.data_type IN ('text','varchar','character varying','char','name','citext','json','jsonb')
+    ORDER BY c.table_schema, c.table_name, c.ordinal_position`);
+
+  const results = [];
+  const term = `%${searchTerm}%`;
+
+  for (const t of tables) {
+    try {
+      const rows = await queryRows(database,
+        `SELECT * FROM ${quoteIdent(t.table_schema)}.${quoteIdent(t.table_name)}
+         WHERE ${quoteIdent(t.column_name)}::text ILIKE $1 LIMIT 5`,
+        [term]);
+      if (rows.length) {
+        results.push({
+          schema: t.table_schema,
+          table: t.table_name,
+          column: t.column_name,
+          rows: rows.slice(0, 3),
+          total_matches: rows.length,
+        });
+      }
+    } catch {}
+  }
+  return results;
+}
+
+/* ─── Bookmarkable Queries ─── */
+
+// We store bookmarks in a dedicated table "nexus_query_bookmarks" in the postgres database
+async function ensureBookmarksTable() {
+  await exec('postgres', `CREATE TABLE IF NOT EXISTS nexus_query_bookmarks (
+    id SERIAL PRIMARY KEY,
+    database_name TEXT NOT NULL,
+    label TEXT NOT NULL,
+    sql TEXT NOT NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+  )`);
+}
+
+async function listBookmarks(database) {
+  await ensureBookmarksTable();
+  const param = database ? [database] : [];
+  const where = database ? ' WHERE database_name = $1' : '';
+  return await queryRows('postgres', `SELECT id, database_name, label, sql, created_at
+    FROM nexus_query_bookmarks${where} ORDER BY created_at DESC`, param);
+}
+
+async function createBookmark(database, label, sql) {
+  await ensureBookmarksTable();
+  if (!label || !label.trim()) throw new Error('Label required');
+  if (!sql || !sql.trim()) throw new Error('SQL required');
+  const result = await query('postgres',
+    `INSERT INTO nexus_query_bookmarks (database_name, label, sql) VALUES ($1, $2, $3) RETURNING id`,
+    [database || 'postgres', label.trim(), sql.trim()]);
+  return { ok: true, id: result.rows[0].id };
+}
+
+async function deleteBookmark(id) {
+  await ensureBookmarksTable();
+  await exec('postgres', `DELETE FROM nexus_query_bookmarks WHERE id = $1`, [id]);
+  return { ok: true };
+}
+
 async function checkConnection() {
   try {
     await queryOne('postgres', 'SELECT 1 AS test');
@@ -649,4 +871,10 @@ module.exports = {
   createDatabase, dropDatabase, runQuery,
   insertRow, updateRow, deleteRow,
   checkConnection, validateIdent, quoteIdent, quoteLiteral,
+  getAllForeignKeys,
+  getPrivileges, grantPrivilege, revokePrivilege,
+  listFunctions, getFunctionDefinition, dropFunction,
+  dumpDatabase,
+  searchAllTables,
+  listBookmarks, createBookmark, deleteBookmark,
 };

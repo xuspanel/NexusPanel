@@ -36,7 +36,7 @@ function showDBError(msg) {
 
 /* ─── Top-Level Cards (Create / Manage / pgAdmin) ─── */
 function renderCards() {
-  document.querySelectorAll('#dbCardsView, #dbConfView, #dbTablesView, #dbEditorView, #dbQueryView').forEach(function(el) { if(el) el.style.display = 'none'; });
+  document.querySelectorAll('#dbCardsView, #dbConfView, #dbTablesView, #dbEditorView, #dbQueryView, #dbSearchView, #dbFunctionsView').forEach(function(el) { if(el) el.style.display = 'none'; });
   document.getElementById('dbCardsView').style.display = 'block';
   document.getElementById('dbSubViews').style.display = 'none';
   var cnt = dbState.databases.length;
@@ -183,9 +183,13 @@ function renderConfView() {
     + '<div class="n-form-group"><label>Connection Limit</label><input id="dbConfLimit" class="db-form-input" type="number" value="-1"></div>'
     + '<div class="n-form-group"><label>Comment</label><input id="dbConfComment" class="db-form-input" placeholder="Database comment"></div>'
     + '</div>'
-    + '<div style="display:flex;gap:8px;margin:16px 0">'
+    + '<div style="display:flex;gap:8px;margin:16px 0;flex-wrap:wrap">'
     + '<button class="db-btn db-btn-primary" onclick="saveDBConfig()">💾 Save Configuration</button>'
     + '<button class="db-btn" onclick="showTablesView()">📋 View Tables</button>'
+    + '<button class="db-btn" onclick="showFunctionsView()">📦 Functions</button>'
+    + '<button class="db-btn" onclick="dumpDatabase()">🗄 Dump</button>'
+    + '<button class="db-btn" onclick="showPrivilegeEditor()">🔐 Privileges</button>'
+    + '<button class="db-btn" onclick="showFKRelationsModal()">🔗 Relations</button>'
     + '<button class="db-btn db-btn-danger" onclick="dropDatabase()">🗑 Drop Database</button>'
     + '</div>'
     + '<div class="db-form-error" id="dbConfError"></div>'
@@ -282,7 +286,8 @@ async function dbOpenView(schema, viewName) {
 function renderTables(tables) {
   var el = document.getElementById('dbTablesContent');
   var html = '<div style="margin-bottom:12px"><button class="db-btn db-btn-primary" onclick="showCreateTable()">+ Create Table</button>'
-    + '<button class="db-btn" onclick="dbShowCreateView()" style="margin-left:6px">👁 Create View</button></div>';
+    + '<button class="db-btn" onclick="dbShowCreateView()" style="margin-left:6px">👁 Create View</button>'
+    + '<button class="db-btn" onclick="showFunctionsView()" style="margin-left:6px">📦 Functions</button></div>';
   if (tables.length) {
     html += '<h4 style="margin-bottom:8px">📄 Tables</h4>'
       + '<div class="db-manage-grid">' + tables.map(function(t) {
@@ -684,6 +689,7 @@ function renderTableConfig() {
   html += '<div class="db-editor-table-actions">';
   html += '<div class="n-form-group" style="flex:1;min-width:200px"><label>Table Comment</label><input id="dbTableCommentInput" class="db-form-input" value="' + esc((meta && meta.table_comment) || '') + '" placeholder="Optional description"></div>';
   html += '<div class="db-editor-toolbar"><button class="db-btn db-btn-sm" onclick="saveTableComment()">💬 Set Comment</button>';
+  html += '<button class="db-btn db-btn-sm" onclick="showFKRelationsModal()" title="View all FK relations in database">🔗 Relations</button>';
   html += '<button class="db-btn db-btn-sm" onclick="dbDuplicateTable()" title="Create copy of this table">📋 Duplicate</button>';
   html += '<button class="db-btn db-btn-sm" onclick="dbRenameTable()" title="Rename table">✏️ Rename</button>';
   html += '<button class="db-btn db-btn-sm db-btn-warn" onclick="dbTruncateTable()" title="Remove all rows">🗑 Empty</button>';
@@ -1014,7 +1020,7 @@ async function renderQueryTerminal() {
 
   var html = '<div class="db-query-toolbar">'
     + '<div class="db-query-db-select"><label>Database:</label><select id="queryDbSelect" class="db-form-input" onchange="dbState.queryDb=this.value">' + dbOpts + '</select></div>'
-    + '<div class="db-query-actions"><button class="db-btn db-btn-primary" id="queryRunBtn" onclick="executeQuery()">▶ Run</button><button class="db-btn" onclick="clearQuery()">Clear</button><button class="db-btn db-btn-icon" onclick="showQueryHistory()" title="History">📋</button></div>'
+    + '<div class="db-query-actions"><button class="db-btn db-btn-primary" id="queryRunBtn" onclick="executeQuery()">▶ Run</button><button class="db-btn" onclick="clearQuery()">Clear</button><button class="db-btn db-btn-icon" onclick="showQueryHistory()" title="History">📋</button><button class="db-btn db-btn-icon" onclick="saveBookmark()" title="Save as Bookmark">💾</button><button class="db-btn db-btn-icon" onclick="loadBookmarks()" title="Load Bookmarks">📑</button></div>'
     + '</div>'
     + '<div class="db-query-layout">'
     + '<div class="db-query-left-col">'
@@ -1383,6 +1389,362 @@ async function dbExportQueryResult(format) {
   a.href = url; a.download = 'query-result.' + ext;
   document.body.appendChild(a); a.click();
   setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
+}
+
+/* ═══════════════════════════════════════════════════
+   Tier 3 Features
+   ═══════════════════════════════════════════════════ */
+
+/* ─── 3.1 FK Relation Designer ─── */
+async function showFKRelationsModal() {
+  var dbName = dbState.selDb ? dbState.selDb.name : dbState.queryDb;
+  if (!dbName) return dbToast('No database selected', 'warning');
+  document.getElementById('dbModalContent').innerHTML = '<div class="db-loading">Loading relations...</div>';
+  document.getElementById('dbModal').style.display = 'flex';
+  try {
+    var fks = await API.databases.allForeignKeys(dbName);
+    var html = '<h3>🔗 Foreign Key Relations — ' + esc(dbName) + '</h3>';
+    if (!fks.length) {
+      html += '<div class="db-meta" style="margin:20px 0">No foreign key relationships found in this database.</div>';
+    } else {
+      html += '<div style="max-height:400px;overflow:auto;margin:12px 0">';
+      html += '<table class="db-fk-table"><thead><tr><th>Source Table</th><th>Column</th><th>→</th><th>Target Table</th><th>Target Column</th><th>On Update</th><th>On Delete</th></tr></thead><tbody>';
+      fks.forEach(function(fk) {
+        html += '<tr><td>' + esc(fk.table_schema + '.' + fk.table_name) + '</td>'
+          + '<td>' + esc(fk.column_name) + '</td>'
+          + '<td>→</td>'
+          + '<td>' + esc(fk.foreign_schema + '.' + fk.foreign_table) + '</td>'
+          + '<td>' + esc(fk.foreign_column) + '</td>'
+          + '<td>' + esc(fk.update_rule) + '</td>'
+          + '<td>' + esc(fk.delete_rule) + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    html += '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Close</button></div>';
+    document.getElementById('dbModalContent').innerHTML = html;
+  } catch (e) {
+    document.getElementById('dbModalContent').innerHTML = '<div class="db-error">Failed to load relations: ' + esc(e.message) + '</div>';
+  }
+}
+
+/* ─── 3.2 Privilege Editor ─── */
+var privState = { currentDb: '', privileges: [] };
+
+async function showPrivilegeEditor() {
+  var dbName = dbState.selDb ? dbState.selDb.name : dbState.queryDb;
+  if (!dbName) return dbToast('No database selected', 'warning');
+  privState.currentDb = dbName;
+  document.getElementById('dbModalContent').innerHTML = '<div class="db-loading">Loading privileges...</div>';
+  document.getElementById('dbModal').style.display = 'flex';
+  try {
+    var data = await API.databases.privileges(dbName);
+    privState.privileges = data.tables || [];
+    renderPrivilegeEditor(data);
+  } catch (e) {
+    document.getElementById('dbModalContent').innerHTML = '<div class="db-error">Failed to load privileges: ' + esc(e.message) + '</div>';
+  }
+}
+
+function renderPrivilegeEditor(data) {
+  var html = '<h3>🔐 Privileges — ' + esc(privState.currentDb) + '</h3>';
+  // Group privileges by table
+  var tables = {};
+  privState.privileges.forEach(function(p) {
+    var key = p.schemaname + '.' + p.tablename;
+    if (!tables[key]) tables[key] = [];
+    tables[key].push(p);
+  });
+
+  html += '<div class="db-query-toolbar" style="margin:8px 0">';
+  html += '<input id="privGranteeInput" class="db-form-input" placeholder="Grantee role name" style="width:160px">';
+  html += '<select id="privSchemaSelect" class="db-form-input" style="width:auto">'
+    + dbState.schemas.map(function(s) { return '<option value="' + esc(s.name) + '" ' + (s.name === 'public' ? 'selected' : '') + '>' + esc(s.name) + '</option>'; }).join('')
+    + '</select>';
+  html += '<input id="privTableInput" class="db-form-input" placeholder="Table name" style="width:140px">';
+  html += '<select id="privTypeSelect" class="db-form-input" style="width:auto"><option>SELECT</option><option>INSERT</option><option>UPDATE</option><option>DELETE</option><option>ALL</option></select>';
+  html += '<button class="db-btn db-btn-sm" onclick="doGrantPrivilege()">➕ Grant</button>';
+  html += '<button class="db-btn db-btn-sm db-btn-danger" onclick="doRevokePrivilege()">✕ Revoke</button>';
+  html += '</div>';
+
+  if (Object.keys(tables).length) {
+    html += '<div style="max-height:350px;overflow:auto">';
+    Object.keys(tables).sort().forEach(function(key) {
+      html += '<div class="db-config-section"><h4>' + esc(key) + '</h4>';
+      html += '<table class="db-fk-table"><thead><tr><th>Grantee</th><th>Privilege</th><th>Grantable</th></tr></thead><tbody>';
+      tables[key].forEach(function(p) {
+        html += '<tr><td>' + esc(p.grantee) + '</td><td>' + esc(p.privilege_type) + '</td><td>' + (p.is_grantable === 'YES' ? '✅' : '—') + '</td></tr>';
+      });
+      html += '</tbody></table></div>';
+    });
+    html += '</div>';
+  } else {
+    html += '<div class="db-meta" style="margin:12px 0">No table-level privileges found.</div>';
+  }
+  html += '<div class="db-form-error" id="dbModalError"></div>';
+  html += '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Close</button></div>';
+  document.getElementById('dbModalContent').innerHTML = html;
+}
+
+async function doGrantPrivilege() {
+  var grantee = document.getElementById('privGranteeInput').value.trim();
+  var schema = document.getElementById('privSchemaSelect').value;
+  var table = document.getElementById('privTableInput').value.trim();
+  var privilege = document.getElementById('privTypeSelect').value;
+  if (!grantee || !table) return dbModalError('Grantee and table name required');
+  try {
+    await API.databases.grantPrivilege(privState.currentDb, { schema, table, privilege, grantee });
+    dbToast('Privilege granted');
+    var data = await API.databases.privileges(privState.currentDb);
+    privState.privileges = data.tables || [];
+    renderPrivilegeEditor(data);
+  } catch (e) { dbModalError(e.message); }
+}
+
+async function doRevokePrivilege() {
+  var grantee = document.getElementById('privGranteeInput').value.trim();
+  var schema = document.getElementById('privSchemaSelect').value;
+  var table = document.getElementById('privTableInput').value.trim();
+  var privilege = document.getElementById('privTypeSelect').value;
+  if (!grantee || !table) return dbModalError('Grantee and table name required');
+  try {
+    await API.databases.revokePrivilege(privState.currentDb, { schema, table, privilege, grantee });
+    dbToast('Privilege revoked');
+    var data = await API.databases.privileges(privState.currentDb);
+    privState.privileges = data.tables || [];
+    renderPrivilegeEditor(data);
+  } catch (e) { dbModalError(e.message); }
+}
+
+/* ─── 3.3 Function / Procedure Browser ─── */
+async function showFunctionsView() {
+  if (!dbState.selDb) return dbToast('No database selected', 'warning');
+  document.getElementById('dbManageList').style.display = 'none';
+  document.getElementById('dbConfView').style.display = 'none';
+  document.getElementById('dbTablesView').style.display = 'none';
+  document.getElementById('dbEditorView').style.display = 'none';
+  document.getElementById('dbQueryView').style.display = 'none';
+  document.getElementById('dbSearchView').style.display = 'none';
+  document.getElementById('dbFunctionsView').style.display = 'block';
+  document.getElementById('dbTitle').textContent = 'Functions — ' + dbState.selDb.name;
+  document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / <a href="#" onclick="renderConfView()">' + esc(dbState.selDb.name) + '</a> / Functions';
+  renderFunctionsView();
+}
+
+async function renderFunctionsView() {
+  var el = document.getElementById('dbFunctionsContent');
+  el.innerHTML = '<div class="db-loading">Loading functions...</div>';
+  try {
+    var funcs = await API.databases.listFunctions(dbState.selDb.name);
+    var html = '<h3>📦 Stored Functions / Procedures</h3>';
+    html += '<div style="display:flex;gap:8px;margin:12px 0"><button class="db-btn" onclick="showTablesView()">← Back to tables</button></div>';
+
+    if (!funcs.length) {
+      html += '<div class="db-meta">No functions or procedures found in this database.</div>';
+    } else {
+      html += '<div style="max-height:500px;overflow:auto">';
+      html += '<table class="db-fk-table"><thead><tr><th>Schema</th><th>Name</th><th>Kind</th><th>Arguments</th><th>Result</th><th>Language</th><th></th></tr></thead><tbody>';
+      funcs.forEach(function(f) {
+        html += '<tr>'
+          + '<td>' + esc(f.schema) + '</td>'
+          + '<td><strong>' + esc(f.name) + '</strong></td>'
+          + '<td>' + esc(f.kind) + '</td>'
+          + '<td><code style="font-size:11px">' + esc(f.arguments) + '</code></td>'
+          + '<td>' + esc(f.result_type) + '</td>'
+          + '<td>' + esc(f.language) + '</td>'
+          + '<td><button class="db-btn db-btn-xs" onclick="showFunctionDef(\'' + esc(f.schema) + '\',\'' + esc(f.name) + '\',\'' + esc(f.arguments.replace(/'/g, "\\'")) + '\')" title="View definition">📄</button>'
+          + '<button class="db-btn db-btn-xs db-btn-danger" onclick="dbDropFunction(\'' + esc(f.schema) + '\',\'' + esc(f.name) + '\',\'' + esc(f.arguments.replace(/'/g, "\\'")) + '\')" title="Drop">✕</button></td>'
+          + '</tr>';
+      });
+      html += '</tbody></table></div>';
+    }
+    el.innerHTML = html;
+  } catch (e) {
+    el.innerHTML = '<div class="db-error">Failed to load functions: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function showFunctionDef(schema, name, args) {
+  try {
+    var def = await API.databases.functionDefinition(dbState.selDb.name, schema, name, args);
+    if (!def) return dbToast('Definition not found', 'error');
+    var html = '<h3>Definition: ' + esc(schema + '.' + name) + '</h3>'
+      + '<pre style="background:var(--bg2);padding:16px;border-radius:6px;overflow:auto;max-height:400px;font-size:12px;line-height:1.5;white-space:pre-wrap">' + esc(def.definition) + '</pre>'
+      + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Close</button></div>';
+    document.getElementById('dbModalContent').innerHTML = html;
+    document.getElementById('dbModal').style.display = 'flex';
+  } catch (e) {
+    dbToast('Failed to load definition: ' + e.message, 'error');
+  }
+}
+
+async function dbDropFunction(schema, name, args) {
+  showConfirmModal('Drop function ' + esc(schema + '.' + name) + '?', name, async function() {
+    try {
+      await API.databases.dropFunction(dbState.selDb.name, schema, name, args);
+      dbToast('Function dropped');
+      await renderFunctionsView();
+    } catch (e) { dbToast(e.message, 'error'); }
+  });
+}
+
+/* ─── 3.4 SQL Dump ─── */
+async function dumpDatabase() {
+  var name = dbState.selDb ? dbState.selDb.name : dbState.queryDb;
+  if (!name) return dbToast('No database selected', 'warning');
+  // Ask format via modal
+  var html = '<h3>🗄 Download Database Dump — ' + esc(name) + '</h3>'
+    + '<p style="margin-bottom:16px;color:var(--text-secondary)">Choose what to include in the export:</p>'
+    + '<div style="display:flex;flex-direction:column;gap:12px;margin-bottom:20px">'
+    + '<button class="db-btn db-btn-primary" onclick="doDump(\'full\')" style="text-align:left;padding:12px">📦 Full (DDL + Data)<br><span style="font-size:11px;color:var(--text-secondary)">Table definitions, indexes, comments, and all row data</span></button>'
+    + '<button class="db-btn" onclick="doDump(\'schema\')" style="text-align:left;padding:12px">📋 Schema Only<br><span style="font-size:11px;color:var(--text-secondary)">Table definitions, indexes, and comments only</span></button>'
+    + '<button class="db-btn" onclick="doDump(\'data\')" style="text-align:left;padding:12px">📊 Data Only<br><span style="font-size:11px;color:var(--text-secondary)">INSERT statements for all tables</span></button>'
+    + '</div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button></div>';
+  document.getElementById('dbModalContent').innerHTML = html;
+  document.getElementById('dbModal').style.display = 'flex';
+  window.doDump = function(format) {
+    var url = API.databases.dump(name, format);
+    window.open(url, '_blank');
+    closeDBModal();
+    dbToast('Dump download started');
+  };
+}
+
+/* ─── 3.5 Search Across All Tables ─── */
+async function showSearchAll() {
+  document.getElementById('dbCardsView').style.display = 'none';
+  document.getElementById('dbSubViews').style.display = 'block';
+  document.getElementById('dbManageList').style.display = 'none';
+  document.getElementById('dbConfView').style.display = 'none';
+  document.getElementById('dbTablesView').style.display = 'none';
+  document.getElementById('dbEditorView').style.display = 'none';
+  document.getElementById('dbQueryView').style.display = 'none';
+  document.getElementById('dbFunctionsView').style.display = 'none';
+  document.getElementById('dbSearchView').style.display = 'block';
+  document.getElementById('dbTitle').textContent = 'Search All Tables';
+  document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="renderCards()">Home</a> / Search All Tables';
+  renderSearchAll();
+}
+
+function renderSearchAll() {
+  var dbOpts = dbState.databases.map(function(d) {
+    return '<option value="' + esc(d.name) + '" ' + (d.name === (dbState.selDb ? dbState.selDb.name : dbState.queryDb) ? 'selected' : '') + '>' + esc(d.name) + '</option>';
+  }).join('');
+  var html = '<div class="db-query-toolbar">'
+    + '<div class="db-query-db-select"><label>Database:</label><select id="searchDbSelect" class="db-form-input">' + dbOpts + '</select></div>'
+    + '<div style="flex:1;min-width:200px;position:relative"><input id="searchAllInput" class="db-form-input" placeholder="Search term..." style="width:100%" onkeydown="if(event.key===\'Enter\')doSearchAll()"></div>'
+    + '<button class="db-btn db-btn-primary" onclick="doSearchAll()">🔍 Search</button>'
+    + '</div>'
+    + '<div id="searchAllProgress" class="db-query-loading" style="display:none">⏳ Searching...</div>'
+    + '<div id="searchAllResultsArea" class="db-query-results"><div class="db-query-welcome">Enter a search term and click Search to find it across all tables<br><span class="db-meta">Searches text columns (text, varchar, char, json, etc.)</span></div></div>';
+  document.getElementById('dbSearchContent').innerHTML = html;
+}
+
+async function doSearchAll() {
+  var dbName = document.getElementById('searchDbSelect').value;
+  var term = document.getElementById('searchAllInput').value.trim();
+  if (!term) return dbToast('Enter a search term', 'warning');
+  document.getElementById('searchAllProgress').style.display = 'flex';
+  var ra = document.getElementById('searchAllResultsArea');
+  if (ra) ra.innerHTML = '';
+  try {
+    var results = await API.databases.searchAll(dbName, term);
+    document.getElementById('searchAllProgress').style.display = 'none';
+    var html = '<div class="db-query-status">' + results.length + ' column match(es) found for "' + esc(term) + '"</div>';
+    if (!results.length) {
+      html += '<div class="db-query-welcome">No matches found in any text column.</div>';
+    } else {
+      html += '<div style="max-height:500px;overflow:auto">';
+      results.forEach(function(r) {
+        html += '<div class="db-config-section" style="margin-bottom:8px">'
+          + '<h4>' + esc(r.schema + '.' + r.table + '(' + r.column + ')') + ' <span class="db-meta">(' + r.total_matches + ' match(es))</span></h4>';
+        r.rows.forEach(function(row) {
+          var vals = Object.keys(row).map(function(k) {
+            var v = row[k];
+            if (v === null || v === undefined) return '<span class="db-null">NULL</span>';
+            var s = String(v);
+            // Highlight the search term
+            var idx = s.toUpperCase().indexOf(term.toUpperCase());
+            if (idx >= 0) {
+              s = s.substring(0, idx) + '<strong style="background:rgba(255,200,0,0.3);color:var(--text)">' + s.substring(idx, idx + term.length) + '</strong>' + s.substring(idx + term.length);
+            }
+            if (s.length > 100) s = s.substring(0, 100) + '...';
+            return esc(s);
+          });
+          html += '<div style="font-size:11px;padding:4px 8px;border-bottom:1px solid var(--border-color, #333);color:var(--text-secondary);word-break:break-all">' + vals.join(' | ') + '</div>';
+        });
+        html += '</div>';
+      });
+      html += '</div>';
+    }
+    ra.innerHTML = html;
+  } catch (e) {
+    document.getElementById('searchAllProgress').style.display = 'none';
+    if (ra) ra.innerHTML = '<div class="db-query-error"><span class="db-query-error-icon">✕</span>' + esc(e.message) + '</div>';
+  }
+}
+
+/* ─── 3.6 Bookmarkable Queries ─── */
+async function saveBookmark() {
+  var ta = document.getElementById('queryInput');
+  if (!ta || !ta.value.trim()) return dbToast('No query to save', 'warning');
+  var html = '<h3>💾 Save Query Bookmark</h3>'
+    + '<div class="n-form-group"><label>Label</label><input id="bkLabel" class="db-form-input" placeholder="My Query"></div>'
+    + '<div class="n-form-group"><label>SQL</label><textarea id="bkSql" class="db-form-input" rows="6" style="font-family:monospace;font-size:12px">' + esc(ta.value.trim()) + '</textarea></div>'
+    + '<div class="db-form-error" id="dbModalError"></div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doSaveBookmark()">Save Bookmark</button></div>';
+  document.getElementById('dbModalContent').innerHTML = html;
+  document.getElementById('dbModal').style.display = 'flex';
+  window.doSaveBookmark = async function() {
+    var label = document.getElementById('bkLabel').value.trim();
+    var sql = document.getElementById('bkSql').value.trim();
+    if (!label) return dbModalError('Label required');
+    if (!sql) return dbModalError('SQL required');
+    try {
+      var result = await API.databases.createBookmark({ database: dbState.queryDb || 'postgres', label, sql });
+      closeDBModal();
+      dbToast('Bookmark saved');
+    } catch (e) { dbModalError(e.message); }
+  };
+}
+
+async function loadBookmarks() {
+  document.getElementById('dbModalContent').innerHTML = '<div class="db-loading">Loading bookmarks...</div>';
+  document.getElementById('dbModal').style.display = 'flex';
+  try {
+    var bks = await API.databases.listBookmarks(dbState.queryDb || '');
+    var html = '<h3>📑 Query Bookmarks</h3>';
+    if (!bks.length) {
+      html += '<div class="db-meta" style="margin:16px 0">No bookmarks saved yet. Run a query and click 💾 to save it.</div>';
+    } else {
+      html += '<div style="max-height:400px;overflow:auto">';
+      bks.forEach(function(b) {
+        html += '<div class="db-config-section" style="cursor:pointer" onclick="document.getElementById(\'queryInput\').value=this.querySelector(\'code\').textContent;closeDBModal();setTimeout(function(){executeQuery()},100)">'
+          + '<div style="display:flex;justify-content:space-between;align-items:center">'
+          + '<h4 style="margin:0">' + esc(b.label) + ' <span class="db-meta">(' + esc(b.database_name) + ')</span></h4>'
+          + '<button class="db-btn db-btn-xs db-btn-danger" onclick="event.stopPropagation();doDeleteBookmark(' + b.id + ')" title="Delete bookmark">✕</button>'
+          + '</div>'
+          + '<code style="font-size:11px;color:var(--text-secondary);display:block;margin-top:4px">' + esc(b.sql.length > 100 ? b.sql.substring(0, 100) + '...' : b.sql) + '</code>'
+          + '<div class="db-meta" style="margin-top:2px">' + new Date(b.created_at).toLocaleString() + '</div>'
+          + '</div>';
+      });
+      html += '</div>';
+    }
+    html += '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Close</button></div>';
+    document.getElementById('dbModalContent').innerHTML = html;
+  } catch (e) {
+    document.getElementById('dbModalContent').innerHTML = '<div class="db-error">Failed to load bookmarks: ' + esc(e.message) + '</div>';
+  }
+}
+
+async function doDeleteBookmark(id) {
+  showConfirmModal('Delete this bookmark?', 'yes', async function() {
+    try {
+      await API.databases.deleteBookmark(id);
+      dbToast('Bookmark deleted');
+      loadBookmarks();
+    } catch (e) { dbToast(e.message, 'error'); }
+  });
 }
 
 /* ─── Toast ─── */

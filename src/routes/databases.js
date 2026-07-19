@@ -526,4 +526,132 @@ router.post('/query-run', async (req, res) => {
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+/* ─── Tier 3: FK Relations (all tables) ─── */
+router.get('/:db/foreign-keys', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const fks = await db.getAllForeignKeys(database);
+    res.json(fks);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* ─── Tier 3: Privileges ─── */
+router.get('/:db/privileges', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const privs = await db.getPrivileges(database);
+    res.json(privs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:db/privileges/grant', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const { schema, table, privilege, grantee } = req.body;
+    if (!schema || !table || !privilege || !grantee) return res.status(400).json({ error: 'schema, table, privilege, grantee required' });
+    const result = await db.grantPrivilege(database, schema, table, privilege, grantee);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.post('/:db/privileges/revoke', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const { schema, table, privilege, grantee } = req.body;
+    if (!schema || !table || !privilege || !grantee) return res.status(400).json({ error: 'schema, table, privilege, grantee required' });
+    const result = await db.revokePrivilege(database, schema, table, privilege, grantee);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+/* ─── Tier 3: Functions / Procedures ─── */
+router.get('/:db/functions', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const schema = req.query.schema || '';
+    const funcs = await db.listFunctions(database, schema);
+    res.json(funcs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.get('/:db/functions/:schema/:name/definition', async (req, res) => {
+  try {
+    const { db: database, schema, name } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(name)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const def = await db.getFunctionDefinition(database, schema, name, req.query.args);
+    res.json(def);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.delete('/:db/functions/:schema/:name', async (req, res) => {
+  try {
+    const { db: database, schema, name } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(name)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const result = await db.dropFunction(database, schema, name, req.query.args);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+/* ─── Tier 3: SQL Dump ─── */
+router.get('/:db/dump', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const format = req.query.format || 'full';
+    if (!['schema', 'data', 'full'].includes(format)) return res.status(400).json({ error: 'Invalid format (schema/data/full)' });
+    const result = await db.dumpDatabase(database, format);
+    res.setHeader('Content-Type', result.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="${database}-dump.${result.ext}"`);
+    res.send(result.content);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* ─── Tier 3: Search Across All Tables ─── */
+router.post('/:db/search-all', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const { searchTerm, schema } = req.body;
+    if (!searchTerm) return res.status(400).json({ error: 'searchTerm required' });
+    const results = await db.searchAllTables(database, searchTerm, schema || '');
+    res.json(results);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* ─── Tier 3: Bookmarkable Queries ─── */
+router.get('/bookmarks', async (req, res) => {
+  try {
+    const database = req.query.db || '';
+    const bookmarks = await db.listBookmarks(database);
+    res.json(bookmarks);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/bookmarks', async (req, res) => {
+  try {
+    const { database, label, sql } = req.body;
+    if (!label || !sql) return res.status(400).json({ error: 'Label and SQL required' });
+    const result = await db.createBookmark(database || 'postgres', label, sql);
+    res.status(201).json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/bookmarks/:id', async (req, res) => {
+  try {
+    const id = parseInt(req.params.id, 10);
+    if (isNaN(id)) return res.status(400).json({ error: 'Invalid id' });
+    const result = await db.deleteBookmark(id);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 module.exports = router;

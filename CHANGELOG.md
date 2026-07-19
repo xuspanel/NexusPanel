@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.8.0] - 2026-07-19
+### Added
+- **Visual FK relation designer**: "Relations" button in table config and database config opens a modal showing all foreign key relationships across the entire database with source/target table, column, on-update, and on-delete rules (Tier 3.1)
+- **Full privilege editor**: "Privileges" button in database config opens a modal showing all table-level GRANTs with grantee, privilege type, and grantable status. Toolbar allows granting or revoking privileges on any table/role combination (Tier 3.2)
+- **Stored procedure / function browser**: "Functions" button in the tables view and config view shows all functions and procedures in the database with schema, name, kind, arguments, result type, and language. Each entry has a 📄 button to view full definition and ✕ to drop with confirmation (Tier 3.3)
+- **SQL dump (full database)**: "Dump" button in database config opens a format chooser (Full/Schema Only/Data Only). Downloads a .sql file with CREATE TABLE, COMMENT, INSERT, and index definitions (Tier 3.4)
+- **Search across all tables**: New "Search All Tables" card on the main DB screen provides a search UI that scans all text/varchar/json columns for a term across every table, showing matches with highlighted terms (Tier 3.5)
+- **Bookmarkable queries**: 💾 Save and 📑 Load buttons in the query terminal toolbar. Saved bookmarks include label, SQL, and database name, stored in a `nexus_query_bookmarks` table. Click a bookmark to load it into the query editor and auto-execute (Tier 3.6)
+### Changed
+- bumped cache-busting query parameter to v1.8.0 for all changed assets
+
 ## [1.7.0] - 2026-07-19
 ### Added
 - **Import CSV/SQL**: "Import" button in data toolbar opens a modal to paste CSV (with header) or SQL INSERT statements. CSV is parsed and inserted row-by-row; SQL is executed statement-by-statement
