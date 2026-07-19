@@ -736,10 +736,20 @@ function dbGoPage(n) {
   loadTableData();
 }
 
+function getOrderedColumns() {
+  var editorCols = dbState.tableEditor && dbState.tableEditor.columns;
+  if (editorCols && editorCols.length) {
+    return editorCols.map(function(c) { return c.column_name; });
+  }
+  var data = dbState.tableEditor.data || { columns: [] };
+  return data.columns || [];
+}
+
 function renderTableData() {
   var data = dbState.tableEditor.data || { columns: [], rows: [], total: 0 };
   var total = data.total;
-  if (!data.columns.length) return '<div class="db-empty">No data found.</div><div style="margin-top:12px;text-align:center"><button class="db-btn" onclick="switchTableMode(\'config\')">⚙ Config Mode</button> <button class="db-btn" onclick="showTablesView()">← Back to tables</button></div>';
+  var orderedCols = getOrderedColumns();
+  if (!orderedCols.length) return '<div class="db-empty">No data found.</div><div style="margin-top:12px;text-align:center"><button class="db-btn" onclick="switchTableMode(\'config\')">⚙ Config Mode</button> <button class="db-btn" onclick="showTablesView()">← Back to tables</button></div>';
 
   var hasPk = dbState.pkColumns.length > 0;
   var html = '<div class="db-data-toolbar">'
@@ -757,7 +767,7 @@ function renderTableData() {
 
   html += '<div class="db-data-table-wrap"><table class="db-data-table" id="dbDataTable"><thead><tr>';
   if (hasPk) html += '<th class="db-data-th-check"><input type="checkbox" id="dbSelectAll" onchange="dbToggleSelectAll(this.checked)"></th>';
-  data.columns.forEach(function(col) {
+  orderedCols.forEach(function(col) {
     var sortArrow = '';
     if (dbState.dataSortBy === col) sortArrow = dbState.dataSortDir === 'asc' ? ' ▲' : ' ▼';
     html += '<th class="db-data-th" onclick="dbSortBy(\'' + esc(col) + '\')" title="Sort by ' + esc(col) + '">' + esc(col) + sortArrow + '</th>';
@@ -765,7 +775,7 @@ function renderTableData() {
   html += '<th class="db-data-th-actions" style="width:60px">Actions</th>';
   html += '</tr></thead><tbody>';
   if (!data.rows.length) {
-    html += '<tr><td colspan="' + (data.columns.length + 1 + (hasPk ? 1 : 0)) + '" class="db-empty-row">' + (dbState.dataSearch ? 'No matching rows' : '0 rows') + '</td></tr>';
+    html += '<tr><td colspan="' + (orderedCols.length + 1 + (hasPk ? 1 : 0)) + '" class="db-empty-row">' + (dbState.dataSearch ? 'No matching rows' : '0 rows') + '</td></tr>';
   } else {
     dbState.selectedRows = [];
     data.rows.forEach(function(row, ri) {
@@ -778,7 +788,7 @@ function renderTableData() {
         }
         html += '<td class="db-data-cell-check"><input type="checkbox" class="db-row-check" data-pk="' + esc(String(pkVal)) + '" onchange="dbUpdateSelectAll()"></td>';
       }
-      data.columns.forEach(function(col) {
+      orderedCols.forEach(function(col) {
         var val = row[col];
         var display = val === null || val === undefined ? '<span class="db-null">NULL</span>' : esc(String(val));
         var copyVal = val === null || val === undefined ? 'NULL' : String(val);
@@ -977,7 +987,11 @@ function renderTableConfig() {
     var isSerial = c.is_serial || (c.data_type || '').toLowerCase().indexOf('serial') !== -1;
     var colComment = c._comment || (meta && meta.column_comments && meta.column_comments[c.column_name]) || '';
     html += '<div class="db-editor-row' + (isNew ? ' db-editor-new' : '') + (isDeleted ? ' db-editor-deleted' : '') + '">'
+      + '<div style="display:flex;align-items:center;gap:6px">'
       + '<input value="' + esc(c.column_name) + '" onchange="tedChangeCol(' + i + ',\'column_name\',this.value)" class="db-form-input">'
+      + '<button class="db-btn db-btn-xs" onclick="tedMoveColumn(' + i + ', -1)" title="Move up" ' + (i === 0 ? 'disabled' : '') + '>↑</button>'
+      + '<button class="db-btn db-btn-xs" onclick="tedMoveColumn(' + i + ', 1)" title="Move down" ' + (i === cols.length - 1 ? 'disabled' : '') + '>↓</button>'
+      + '</div>'
       + '<div style="display:flex;align-items:center;gap:6px">'
       + '<select class="db-form-input" onchange="tedChangeCol(' + i + ',\'data_type\',this.value)">' + typeOptionsSelected(c.data_type) + '</select>'
       + (isSerial ? '<span class="db-meta" title="Auto Increment">AI</span>' : '')
@@ -1277,10 +1291,24 @@ function tedToggleDelete(i) {
   renderTableEditor();
 }
 
+function tedMoveColumn(i, dir) {
+  var cols = dbState.tableEditor.columns;
+  var newIndex = i + dir;
+  if (newIndex < 0 || newIndex >= cols.length) return;
+  var tmp = cols[i];
+  cols[i] = cols[newIndex];
+  cols[newIndex] = tmp;
+  // Track that the order has changed; saveTableOrder will persist it
+  dbState.tableEditor.orderChanged = true;
+  renderTableEditor();
+  dbToast('Column order updated; click Save Changes to persist');
+}
+
 async function tedSave() {
   var changes = [];
   var cols = dbState.tableEditor.columns;
   var orig = dbState.tableEditor.original;
+  var orderChanged = dbState.tableEditor.orderChanged;
   cols.forEach(function(c) {
     if (c._action === 'add') {
       var type = (c.data_type || '').toLowerCase();
@@ -1297,9 +1325,17 @@ async function tedSave() {
     }
   }
   dbState.tableEditor.changes = changes;
-  if (!changes.length) return dbToast('No changes to save', 'warning');
+  if (!changes.length && !orderChanged) return dbToast('No changes to save', 'warning');
   try {
-    await API.databases.updateTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, { changes: changes });
+    if (changes.length) {
+      await API.databases.updateTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, { changes: changes });
+    }
+    if (orderChanged) {
+      var order = {};
+      cols.forEach(function(c, idx) { order[c.column_name] = idx; });
+      await API.databases.setColumnOrder(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, order);
+      dbState.tableEditor.orderChanged = false;
+    }
     dbToast('Changes saved');
     await openTableEditor(dbState.selTable.schema, dbState.selTable.name);
   } catch (e) { document.getElementById('dbEditorError').textContent = e.message; document.getElementById('dbEditorError').style.display = 'block'; }

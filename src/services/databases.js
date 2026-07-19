@@ -133,15 +133,24 @@ LEFT JOIN (SELECT ku.column_name FROM information_schema.table_constraints tc
   ON pk.column_name = c.column_name
 WHERE c.table_schema = $1 AND c.table_name = $2
 ORDER BY c.ordinal_position`, [schema, table]);
-  return columns;
+  const order = await getColumnOrder(database, schema, table).catch(() => ({}));
+  return columns.map(function(c) {
+    c.display_order = order[c.column_name] !== undefined ? order[c.column_name] : null;
+    return c;
+  }).sort(function(a, b) {
+    if (a.display_order !== null && b.display_order !== null) return a.display_order - b.display_order;
+    if (a.display_order !== null) return -1;
+    if (b.display_order !== null) return 1;
+    return 0;
+  });
 }
 
 async function getTableData(database, schema, table, limit, offset, search, sortBy, sortDir) {
   if (!validateIdent(database)) throw new Error('Invalid database name');
   if (!validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid schema/table name');
   const full = `${quoteIdent(schema)}.${quoteIdent(table)}`;
-  const searchWhere = search ? ` WHERE (SELECT string_agg(COALESCE(CAST(${quoteIdent(schema)}.${quoteIdent(table)}.* AS text),''),' ') FROM ${full}) ILIKE $3` : '';
-  const countWhere = search ? ` WHERE (SELECT string_agg(COALESCE(CAST(${quoteIdent(schema)}.${quoteIdent(table)}.* AS text),''),' ') FROM ${full}) ILIKE $1` : '';
+  const searchWhere = search ? ` WHERE to_jsonb(${full}.*)::text ILIKE $3::text` : '';
+  const countWhere = search ? ` WHERE to_jsonb(${full}.*)::text ILIKE $1::text` : '';
   const params = [limit || 50, offset || 0];
   if (search) params.push(`%${search}%`);
   const countSql = `SELECT COUNT(*)::int AS total FROM ${full}${countWhere}`;
@@ -386,11 +395,53 @@ async function setColumnComment(database, schema, table, column, comment) {
   return { ok: true };
 }
 
+async function ensureColumnOrderTable(database) {
+  await exec(database, `CREATE TABLE IF NOT EXISTS nexus_panel_column_order (
+    schema_name TEXT NOT NULL,
+    table_name TEXT NOT NULL,
+    column_name TEXT NOT NULL,
+    display_order INTEGER NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (schema_name, table_name, column_name)
+  )`);
+}
+
+async function getColumnOrder(database, schema, table) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  await ensureColumnOrderTable(database);
+  const rows = await queryRows(database, `SELECT column_name, display_order FROM nexus_panel_column_order WHERE schema_name = $1 AND table_name = $2`, [schema, table]);
+  const order = {};
+  rows.forEach(function(r) { order[r.column_name] = r.display_order; });
+  return order;
+}
+
+async function setColumnOrder(database, schema, table, columnOrder) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  await ensureColumnOrderTable(database);
+  const entries = Object.entries(columnOrder || {});
+  if (!entries.length) return { ok: true };
+  await exec(database, `DELETE FROM nexus_panel_column_order WHERE schema_name = ${quoteLiteral(schema)} AND table_name = ${quoteLiteral(table)}`);
+  const values = entries.map(function(e, i) {
+    return `(${quoteLiteral(schema)}, ${quoteLiteral(table)}, ${quoteLiteral(e[0])}, ${parseInt(e[1], 10)})`;
+  }).join(', ');
+  await exec(database, `INSERT INTO nexus_panel_column_order (schema_name, table_name, column_name, display_order) VALUES ${values}`);
+  return { ok: true };
+}
+
 async function exportTableData(database, schema, table, format) {
   if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
   const full = `${quoteIdent(schema)}.${quoteIdent(table)}`;
   const rows = await queryRows(database, `SELECT * FROM ${full} ORDER BY (SELECT NULL)`);
-  const cols = rows.length ? Object.keys(rows[0]) : [];
+  const physicalCols = rows.length ? Object.keys(rows[0]) : [];
+  const order = await getColumnOrder(database, schema, table).catch(() => ({}));
+  const cols = physicalCols.slice().sort(function(a, b) {
+    const oa = order[a];
+    const ob = order[b];
+    if (oa !== undefined && ob !== undefined) return oa - ob;
+    if (oa !== undefined) return -1;
+    if (ob !== undefined) return 1;
+    return 0;
+  });
 
   if (format === 'csv') {
     const header = cols.map(c => `"${c.replace(/"/g, '""')}"`).join(',');
@@ -1132,7 +1183,7 @@ module.exports = {
   getTableInfo, getTableData,
   createTable, alterTable, dropTable, duplicateTable, renameTable, truncateTable,
   vacuumTable, analyzeTable, getTableMetadata, setTableComment,
-  getColumnComments, setColumnComment, exportTableData,
+  getColumnComments, setColumnComment, getColumnOrder, setColumnOrder, exportTableData,
   importTableData,
   getForeignKeys,
   listIndexes, createIndex, dropIndex,

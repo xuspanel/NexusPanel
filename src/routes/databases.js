@@ -290,6 +290,30 @@ router.put('/:db/table/:schema/:table/column/:column/comment', async (req, res) 
   } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
+router.get('/:db/table/:schema/:table/column-order', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid database/schema/table name' });
+    }
+    const result = await db.getColumnOrder(database, schema, table);
+    res.json(result);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.put('/:db/table/:schema/:table/column-order', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid database/schema/table name' });
+    }
+    const { order } = req.body;
+    if (!order || typeof order !== 'object') return res.status(400).json({ error: 'order object required' });
+    const result = await db.setColumnOrder(database, schema, table, order);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 router.get('/:db/table/:schema/:table/export', async (req, res) => {
   try {
     const { db: database, schema, table } = req.params;

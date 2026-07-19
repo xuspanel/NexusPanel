@@ -1,10 +1,20 @@
 # Changelog
 
+## [1.9.6] - 2026-07-19
+### Fixed
+- **Table data search root cause**: the previous fix never reached production because the live process is managed by `systemd`. The `nexuspanel.service` has now been restarted with the corrected code.
+- **Table data search SQL**: switched the global row search to `to_jsonb(table.*)::text ILIKE $N::text`, which PostgreSQL can parameterize reliably.
+- **Auto-increment on existing tables**: adding a `serial`/`bigserial` column no longer includes an empty `DEFAULT ''` clause, fixing *"multiple default values specified for column"*.
+- **Search input focus loss**: database, table, function, and table-data search inputs now keep focus and cursor position while typing.
+
+### Added
+- **Column reordering in Table Config**: each column now has ↑/↓ arrows. Reordering is saved to a per-table metadata store (`nexus_panel_column_order`) and is used when displaying table data and exporting CSV/JSON/SQL.
+
 ## [1.9.5] - 2026-07-19
 ### Fixed
-- **Auto-increment on existing tables**: adding a `serial`/`bigserial` column no longer includes an empty `DEFAULT ''` clause, fixing *“multiple default values specified for column”*
+- **Auto-increment on existing tables**: adding a `serial`/`bigserial` column no longer includes an empty `DEFAULT ''` clause, fixing *"multiple default values specified for column"*
 - **Search input focus loss**: database, table, function, and table-data search inputs now keep focus and cursor position while typing
-- **Table data search**: fixed parameter numbering (`$1` vs `$3`) in the count query that caused *“could not determine data type of parameter $1”*
+- **Table data search**: fixed parameter numbering (`$1` vs `$3`) in the count query that caused *"could not determine data type of parameter $1"*
 
 ## [1.9.4] - 2026-07-19
 ### Added / Improved

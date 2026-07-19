@@ -105,6 +105,8 @@ const API = {
     tableMetadata: (db, schema, table) => API.request('GET', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/metadata'),
     setTableComment: (db, schema, table, comment) => API.request('PUT', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/comment', { comment }),
     setColumnComment: (db, schema, table, column, comment) => API.request('PUT', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/column/' + encodeURIComponent(column) + '/comment', { comment }),
+    getColumnOrder: (db, schema, table) => API.request('GET', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/column-order'),
+    setColumnOrder: (db, schema, table, order) => API.request('PUT', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/column-order', { order }),
     exportTable: (db, schema, table, format) => '/api/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/export?format=' + encodeURIComponent(format),
     importTable: (db, schema, table, format, content) => API.request('POST', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/import', { format, content }),
     foreignKeys: (db, schema, table) => API.request('GET', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/foreign-keys'),
