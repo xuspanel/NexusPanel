@@ -73,7 +73,22 @@ const API = {
     list: (owner) => API.request('GET', '/databases/list' + (owner ? '?owner=' + encodeURIComponent(owner) : '')),
     tables: (db) => API.request('GET', '/databases/' + encodeURIComponent(db) + '/tables'),
     tableInfo: (db, schema, table) => API.request('GET', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/info'),
-    tableData: (db, schema, table) => API.request('GET', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/data'),
+    tableData: (db, schema, table, params) => {
+      var qs = '';
+      if (params) {
+        var parts = [];
+        if (params.limit) parts.push('limit=' + params.limit);
+        if (params.offset) parts.push('offset=' + params.offset);
+        if (params.q) parts.push('q=' + encodeURIComponent(params.q));
+        if (params.sortBy) parts.push('sortBy=' + encodeURIComponent(params.sortBy));
+        if (params.sortDir) parts.push('sortDir=' + encodeURIComponent(params.sortDir));
+        if (parts.length) qs = '?' + parts.join('&');
+      }
+      return API.request('GET', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/data' + qs);
+    },
+    insertRow: (db, schema, table, data) => API.request('POST', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/row', data),
+    updateRow: (db, schema, table, pkCol, pkVal, data) => API.request('PUT', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/row/' + encodeURIComponent(pkCol) + '/' + encodeURIComponent(pkVal), data),
+    deleteRow: (db, schema, table, pkCol, pkVal) => API.request('DELETE', '/databases/' + encodeURIComponent(db) + '/table/' + encodeURIComponent(schema) + '/' + encodeURIComponent(table) + '/row/' + encodeURIComponent(pkCol) + '/' + encodeURIComponent(pkVal)),
     schemas: (db) => API.request('GET', '/databases/' + encodeURIComponent(db) + '/schemas'),
     extensions: (db) => API.request('GET', '/databases/' + encodeURIComponent(db) + '/extensions'),
     create: (data) => API.request('POST', '/databases/create', data),

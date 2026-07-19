@@ -88,12 +88,48 @@ router.get('/:db/table/:schema/:table/data', async (req, res) => {
     }
     const limit = Math.min(parseInt(req.query.limit) || 50, 200);
     const offset = parseInt(req.query.offset) || 0;
-    const result = await db.getTableData(database, schema, table, limit, offset);
+    const search = req.query.q || '';
+    const sortBy = req.query.sortBy || '';
+    const sortDir = req.query.sortDir || '';
+    const result = await db.getTableData(database, schema, table, limit, offset, search, sortBy, sortDir);
     const headers = result.rows.length ? Object.keys(result.rows[0]) : [];
-    res.json({ columns: headers, rows: result.rows, total: result.total, limit: result.limit, offset: result.offset });
+    res.json({ columns: headers, rows: result.rows, total: result.total, limit: result.limit, offset: result.offset, search, sortBy, sortDir });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+router.post('/:db/table/:schema/:table/row', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid database/schema/table name' });
+    }
+    const result = await db.insertRow(database, schema, table, req.body.data || {});
+    res.status(201).json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.put('/:db/table/:schema/:table/row/:pkCol/:pkVal', async (req, res) => {
+  try {
+    const { db: database, schema, table, pkCol, pkVal } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table) || !db.validateIdent(pkCol)) {
+      return res.status(400).json({ error: 'Invalid parameters' });
+    }
+    const result = await db.updateRow(database, schema, table, pkCol, pkVal, req.body.data || {});
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/:db/table/:schema/:table/row/:pkCol/:pkVal', async (req, res) => {
+  try {
+    const { db: database, schema, table, pkCol, pkVal } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table) || !db.validateIdent(pkCol)) {
+      return res.status(400).json({ error: 'Invalid parameters' });
+    }
+    const result = await db.deleteRow(database, schema, table, pkCol, pkVal);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
 });
 
 router.get('/:db/schemas', async (req, res) => {

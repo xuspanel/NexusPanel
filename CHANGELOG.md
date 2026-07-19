@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.6.5] - 2026-07-19
+### Added
+- **Search/filter for table data**: search bar above the data table with 300ms debounce. Filters rows server-side using `ILIKE` on a concatenated text representation of each row
+- **Sortable column headers**: click any column header to toggle ascending/descending sort. Sort is applied server-side with `ORDER BY`. Active sort column gets ▲/▼ indicators
+- **Pagination controls**: page navigation (first/prev/next/last buttons) with page X of Y display; configurable page size (10/25/50/100 rows) via dropdown; fetches data with `LIMIT/OFFSET`
+- **Inline cell editing**: click any data cell to enter edit mode with ✔/✕ save/cancel buttons. Press Enter to save, Escape to cancel. Saves via PUT `/:db/table/:schema/:table/row/:pkCol/:pkVal`
+- **Add Row modal**: "+ Row" button opens a modal with inputs for each non-auto-increment column, submits via POST `/:db/table/:schema/:table/row`
+- **Delete Row**: ✕ button on each row (requires primary key) with type-to-confirm modal, deletes via DELETE `/:db/table/:schema/:table/row/:pkCol/:pkVal`
+- **Row CRUD endpoints**: `POST/PUT/DELETE /:db/table/:schema/:table/row[/:pkCol/:pkVal]` with `insertRow`/`updateRow`/`deleteRow` service functions using parameterized RETURNING queries
+
+### Changed
+- `src/services/databases.js`: `getTableData()` now accepts `search`, `sortBy`, `sortDir` params; added `insertRow()`, `updateRow()`, `deleteRow()`
+- `src/routes/databases.js`: data endpoint passes query/sort params to service; added row CRUD endpoints
+- `public/js/api.js`: `tableData()` accepts params object; added `insertRow()`/`updateRow()`/`deleteRow()` API methods
+- `public/js/databases.js`: `dbState` extended with `dataPage`, `dataPageSize`, `dataSortBy`, `dataSortDir`, `dataSearch`, `pkColumns`; `openTableEditor()` stores PK columns; `loadTableData()` passes pagination/search/sort params; `renderTableData()` completely rewritten with search bar, sortable headers, pagination, inline editing; added `dbSearchInput()`, `dbSortBy()`, `dbGoPage()`, `dbStartEdit()`, `dbSaveEdit()`, `dbCancelEdit()`, `dbDeleteRow()`, `dbAddRow()`
+- `public/css/style.css`: added `.db-data-th`, `.db-data-cell`, `.db-data-toolbar`, `.db-data-search`, `.db-data-pagination`, `.db-inline-edit`, `.db-inline-save`, `.db-inline-cancel` and related styles
+
 ## [1.6.4] - 2026-07-19
 ### Added
 - **Database confirm modal**: replaced bare `prompt()` calls in `dropDatabase()` and `dropTable()` with a proper modal confirmation that requires typing the entity name to enable the Delete button. Uses Enter key support, disabled state, and inline error display

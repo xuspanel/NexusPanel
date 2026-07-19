@@ -1,4 +1,4 @@
-var dbState = { databases: [], schemas: [], users: [], view: 'cards', selDb: null, selTable: null, tableEditor: { columns: [], original: [], changes: [] }, tableMode: 'data' };
+var dbState = { databases: [], schemas: [], users: [], view: 'cards', selDb: null, selTable: null, tableEditor: { columns: [], original: [], changes: [] }, tableMode: 'data', dataPage: 1, dataPageSize: 25, dataSortBy: '', dataSortDir: '', dataSearch: '', pkColumns: [] };
 var dbInit = false;
 
 window.initDatabases = async function () {
@@ -313,11 +313,16 @@ function typeOptions() { return '<option>integer</option><option>bigint</option>
 async function openTableEditor(schema, table) {
   dbState.selTable = { schema: schema, name: table };
   dbState.tableMode = 'data';
+  dbState.dataPage = 1;
+  dbState.dataSortBy = '';
+  dbState.dataSortDir = '';
+  dbState.dataSearch = '';
   try {
     var [info, data] = await Promise.all([
       API.databases.tableInfo(dbState.selDb.name, schema, table),
       API.databases.tableData(dbState.selDb.name, schema, table),
     ]);
+    dbState.pkColumns = (info.columns || []).filter(function(c) { return c.is_primary_key; }).map(function(c) { return c.column_name; });
     dbState.tableEditor.original = info.columns || [];
     dbState.tableEditor.columns = (info.columns || []).map(function(c) { return { ...c, _action: null, _oldName: c.column_name }; });
     dbState.tableEditor.changes = [];
@@ -354,7 +359,13 @@ async function loadTableData() {
   var body = document.getElementById('dbEditorBody');
   if (body) body.innerHTML = '<div class="db-loading">Loading data...</div>';
   try {
-    var data = await API.databases.tableData(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name);
+    var params = {
+      limit: dbState.dataPageSize,
+      offset: (dbState.dataPage - 1) * dbState.dataPageSize,
+    };
+    if (dbState.dataSearch) params.q = dbState.dataSearch;
+    if (dbState.dataSortBy) { params.sortBy = dbState.dataSortBy; params.sortDir = dbState.dataSortDir; }
+    var data = await API.databases.tableData(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, params);
     dbState.tableEditor.data = data;
     renderTableEditor();
   } catch (e) {
@@ -362,31 +373,204 @@ async function loadTableData() {
   }
 }
 
+var dbSearchTimer;
+
+function dbSearchInput() {
+  clearTimeout(dbSearchTimer);
+  dbSearchTimer = setTimeout(function() {
+    dbState.dataSearch = document.getElementById('dbDataSearch').value.trim();
+    dbState.dataPage = 1;
+    loadTableData();
+  }, 300);
+}
+
+function dbSortBy(col) {
+  if (dbState.dataSortBy === col) {
+    dbState.dataSortDir = dbState.dataSortDir === 'asc' ? 'desc' : 'asc';
+  } else {
+    dbState.dataSortBy = col;
+    dbState.dataSortDir = 'asc';
+  }
+  loadTableData();
+}
+
+function dbGoPage(n) {
+  var total = dbState.tableEditor.data.total || 0;
+  var maxPage = Math.max(1, Math.ceil(total / dbState.dataPageSize));
+  dbState.dataPage = Math.max(1, Math.min(n, maxPage));
+  loadTableData();
+}
+
 function renderTableData() {
-  var data = dbState.tableEditor.data || { columns: [], rows: [] };
-  var rowCount = dbState.tableEditor.rowCount || data.rows.length;
-  if (!data.columns.length) return '<div class="db-empty">No data found.</div><div style="margin-top:12px;text-align:center"><button class="db-btn" onclick="switchTableMode(\'config\')">⚙ Switch to Config Mode</button> <button class="db-btn" onclick="showTablesView()">← Back to tables</button></div>';
-  var html = '<div class="db-data-table-wrap"><table class="db-data-table"><thead><tr>';
+  var data = dbState.tableEditor.data || { columns: [], rows: [], total: 0 };
+  var total = data.total;
+  if (!data.columns.length) return '<div class="db-empty">No data found.</div><div style="margin-top:12px;text-align:center"><button class="db-btn" onclick="switchTableMode(\'config\')">⚙ Config Mode</button> <button class="db-btn" onclick="showTablesView()">← Back to tables</button></div>';
+
+  var html = '<div class="db-data-toolbar">'
+    + '<div class="db-data-search"><span class="db-data-search-icon">🔍</span><input id="dbDataSearch" class="db-form-input db-data-search-input" placeholder="Search data..." value="' + esc(dbState.dataSearch) + '" oninput="dbSearchInput()"></div>'
+    + '<div class="db-data-toolbar-actions"><button class="db-btn db-btn-sm" onclick="dbAddRow()" title="Add Row">+ Row</button>'
+    + '<button class="db-btn db-btn-sm" onclick="switchTableMode(\'config\')">⚙ Config</button>'
+    + '<button class="db-btn" onclick="showTablesView()">← Tables</button></div></div>';
+
+  html += '<div class="db-data-table-wrap"><table class="db-data-table" id="dbDataTable"><thead><tr>';
   data.columns.forEach(function(col) {
-    html += '<th>' + esc(col) + '</th>';
+    var sortArrow = '';
+    if (dbState.dataSortBy === col) sortArrow = dbState.dataSortDir === 'asc' ? ' ▲' : ' ▼';
+    html += '<th class="db-data-th" onclick="dbSortBy(\'' + esc(col) + '\')" title="Sort by ' + esc(col) + '">' + esc(col) + sortArrow + '</th>';
   });
+  html += '<th class="db-data-th-actions" style="width:60px">Actions</th>';
   html += '</tr></thead><tbody>';
   if (!data.rows.length) {
-    html += '<tr><td colspan="' + data.columns.length + '" class="db-empty-row">0 rows</td></tr>';
+    html += '<tr><td colspan="' + (data.columns.length + 1) + '" class="db-empty-row">' + (dbState.dataSearch ? 'No matching rows' : '0 rows') + '</td></tr>';
   } else {
-    data.rows.forEach(function(row) {
-      html += '<tr>';
+    data.rows.forEach(function(row, ri) {
+      html += '<tr class="db-data-row" data-idx="' + ri + '">';
       data.columns.forEach(function(col) {
         var val = row[col];
-        html += '<td>' + (val === null || val === undefined ? '<span class="db-null">NULL</span>' : esc(String(val))) + '</td>';
+        html += '<td class="db-data-cell" onclick="dbStartEdit(' + ri + ',\'' + esc(col) + '\',this)" title="Click to edit">'
+          + (val === null || val === undefined ? '<span class="db-null">NULL</span>' : esc(String(val))) + '</td>';
       });
-      html += '</tr>';
+      // Actions column
+      var pkVal = '';
+      for (var i = 0; i < dbState.pkColumns.length; i++) {
+        var pk = dbState.pkColumns[i];
+        if (row[pk] !== undefined && row[pk] !== null) {
+          pkVal = row[pk];
+          break;
+        }
+      }
+      html += '<td class="db-data-cell-actions">';
+      if (pkVal !== '' && dbState.pkColumns.length > 0) {
+        html += '<button class="db-btn db-btn-sm db-btn-danger" onclick="dbDeleteRow(' + ri + ')" title="Delete row">✕</button>';
+      }
+      html += '</td></tr>';
     });
   }
   html += '</tbody></table></div>';
-  html += '<div style="display:flex;justify-content:space-between;align-items:center;margin-top:8px"><span class="db-meta">' + data.rows.length + ' row' + (data.rows.length !== 1 ? 's' : '') + ' shown</span>'
-    + '<div style="display:flex;gap:8px"><button class="db-btn" onclick="switchTableMode(\'config\')">⚙ Config Mode</button> <button class="db-btn" onclick="showTablesView()">← Back to tables</button></div></div>';
+
+  // Pagination
+  var totalPages = Math.max(1, Math.ceil(total / dbState.dataPageSize));
+  html += '<div class="db-data-footer">'
+    + '<span class="db-meta">' + data.rows.length + ' row' + (data.rows.length !== 1 ? 's' : '') + ' · ' + total + ' total</span>'
+    + '<div class="db-data-pagination">'
+    + '<button class="db-btn db-btn-sm" onclick="dbGoPage(1)" ' + (dbState.dataPage <= 1 ? 'disabled' : '') + '>⏮</button>'
+    + '<button class="db-btn db-btn-sm" onclick="dbGoPage(' + (dbState.dataPage - 1) + ')" ' + (dbState.dataPage <= 1 ? 'disabled' : '') + '>◀</button>'
+    + '<span class="db-data-page-info">Page ' + dbState.dataPage + ' of ' + totalPages + '</span>'
+    + '<button class="db-btn db-btn-sm" onclick="dbGoPage(' + (dbState.dataPage + 1) + ')" ' + (dbState.dataPage >= totalPages ? 'disabled' : '') + '>▶</button>'
+    + '<button class="db-btn db-btn-sm" onclick="dbGoPage(' + totalPages + ')" ' + (dbState.dataPage >= totalPages ? 'disabled' : '') + '>⏭</button>'
+    + '<select class="db-form-input db-data-page-size" onchange="dbState.dataPageSize=parseInt(this.value);dbState.dataPage=1;loadTableData()">'
+    + '<option value="10" ' + (dbState.dataPageSize === 10 ? 'selected' : '') + '>10</option>'
+    + '<option value="25" ' + (dbState.dataPageSize === 25 ? 'selected' : '') + '>25</option>'
+    + '<option value="50" ' + (dbState.dataPageSize === 50 ? 'selected' : '') + '>50</option>'
+    + '<option value="100" ' + (dbState.dataPageSize === 100 ? 'selected' : '') + '>100</option>'
+    + '</select></div></div>';
   return html;
+}
+
+/* ─── Inline Row CRUD ─── */
+
+function dbStartEdit(rowIdx, colName, td) {
+  if (td.querySelector('input')) return;
+  var row = dbState.tableEditor.data.rows[rowIdx];
+  if (!row) return;
+  var val = row[colName];
+  var isNull = val === null || val === undefined;
+  td.innerHTML = '<input class="db-inline-edit" type="text" value="' + esc(isNull ? '' : String(val)) + '" autocomplete="off">'
+    + '<button class="db-btn db-btn-xs db-inline-save" onclick="dbSaveEdit(' + rowIdx + ',\'' + esc(colName) + '\',this.parentElement)">✔</button>'
+    + '<button class="db-btn db-btn-xs db-inline-cancel" onclick="dbCancelEdit(' + rowIdx + ',\'' + esc(colName) + '\',this.parentElement)">✕</button>';
+  var input = td.querySelector('input');
+  input.focus();
+  input.select();
+  input.addEventListener('keydown', function(e) {
+    if (e.key === 'Enter') dbSaveEdit(rowIdx, colName, td);
+    if (e.key === 'Escape') dbCancelEdit(rowIdx, colName, td);
+  });
+}
+
+function dbCancelEdit(rowIdx, colName, td) {
+  var row = dbState.tableEditor.data.rows[rowIdx];
+  if (!row) return;
+  var val = row[colName];
+  td.innerHTML = val === null || val === undefined ? '<span class="db-null">NULL</span>' : esc(String(val));
+}
+
+async function dbSaveEdit(rowIdx, colName, td) {
+  var input = td.querySelector('input');
+  if (!input) return;
+  var newVal = input.value;
+  var row = dbState.tableEditor.data.rows[rowIdx];
+  if (!row) return;
+  var pkCol = dbState.pkColumns[0];
+  var pkVal = pkCol ? row[pkCol] : null;
+  if (!pkCol || pkVal === null || pkVal === undefined) {
+    dbToast('Cannot edit: no primary key found on this table', 'error');
+    dbCancelEdit(rowIdx, colName, td);
+    return;
+  }
+  try {
+    await API.databases.updateRow(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, pkCol, pkVal, { data: { [colName]: newVal } });
+    row[colName] = newVal;
+    td.innerHTML = esc(String(newVal));
+    dbToast('Cell updated', 'success');
+  } catch (e) {
+    dbToast('Failed to update: ' + e.message, 'error');
+    dbCancelEdit(rowIdx, colName, td);
+  }
+}
+
+async function dbDeleteRow(rowIdx) {
+  var row = dbState.tableEditor.data.rows[rowIdx];
+  if (!row) return;
+  var pkCol = dbState.pkColumns[0];
+  var pkVal = pkCol ? row[pkCol] : null;
+  if (!pkCol || pkVal === null || pkVal === undefined) {
+    dbToast('Cannot delete: no primary key found on this table', 'error');
+    return;
+  }
+  showConfirmModal('Delete this row? (PK: ' + pkCol + ' = ' + pkVal + ')', String(pkVal), async function() {
+    try {
+      await API.databases.deleteRow(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, pkCol, pkVal);
+      dbToast('Row deleted');
+      await loadTableData();
+    } catch (e) { dbToast('Failed to delete: ' + e.message, 'error'); }
+  });
+}
+
+async function dbAddRow() {
+  // Build a form with all columns as inputs
+  var cols = dbState.tableEditor.columns;
+  var html = '<h3>Add Row to ' + esc(dbState.selTable.name) + '</h3>';
+  cols.forEach(function(c) {
+    if (c.column_default === 'auto_increment' || c.is_serial) {
+      html += '<div class="n-form-group"><label>' + esc(c.column_name) + ' <span class="db-meta">(auto)</span></label><input class="db-form-input" disabled value="auto"></div>';
+    } else {
+      var def = c.column_default || '';
+      html += '<div class="n-form-group"><label>' + esc(c.column_name) + ' <span class="db-meta">' + esc(c.data_type) + '</span></label>'
+        + '<input id="dbAddRow_' + esc(c.column_name) + '" class="db-form-input" placeholder="' + esc(def) + '" value="' + esc(def) + '"></div>';
+    }
+  });
+  html += '<div class="db-form-error" id="dbModalError"></div>';
+  html += '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doAddRow()">Add Row</button></div>';
+  document.getElementById('dbModalContent').innerHTML = html;
+  document.getElementById('dbModal').style.display = 'flex';
+  window.doAddRow = async function() {
+    var data = {};
+    cols.forEach(function(c) {
+      if (c.column_default === 'auto_increment' || c.is_serial) return;
+      var el = document.getElementById('dbAddRow_' + c.column_name);
+      if (el) {
+        var val = el.value.trim();
+        if (val !== '') data[c.column_name] = val;
+      }
+    });
+    try {
+      await API.databases.insertRow(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, { data: data });
+      closeDBModal();
+      dbToast('Row added');
+      dbState.dataPage = 1;
+      await loadTableData();
+    } catch (e) { dbModalError(e.message); }
+  };
 }
 
 function renderTableConfig() {

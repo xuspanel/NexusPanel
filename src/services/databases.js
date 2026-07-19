@@ -134,14 +134,55 @@ ORDER BY c.ordinal_position`, [schema, table]);
   return columns;
 }
 
-async function getTableData(database, schema, table, limit, offset) {
+async function getTableData(database, schema, table, limit, offset, search, sortBy, sortDir) {
   if (!validateIdent(database)) throw new Error('Invalid database name');
   if (!validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid schema/table name');
   const full = `${quoteIdent(schema)}.${quoteIdent(table)}`;
-  const countResult = await queryOne(database, `SELECT COUNT(*)::int AS total FROM ${full}`);
+  const where = search ? ` WHERE (SELECT string_agg(COALESCE(CAST(${quoteIdent(schema)}.${quoteIdent(table)}.* AS text),''),' ') FROM ${full}) ILIKE $3` : '';
+  const params = [limit || 50, offset || 0];
+  if (search) params.push(`%${search}%`);
+  const countSql = `SELECT COUNT(*)::int AS total FROM ${full}${where}`;
+  const countParams = search ? [`%${search}%`] : [];
+  const countResult = await queryOne(database, countSql, countParams);
   const total = countResult?.total || 0;
-  const rows = await queryRows(database, `SELECT * FROM ${full} LIMIT $1 OFFSET $2`, [limit || 50, offset || 0]);
+  let order = '';
+  if (sortBy && validateIdent(sortBy)) {
+    const dir = sortDir === 'desc' ? 'DESC' : 'ASC';
+    order = ` ORDER BY ${quoteIdent(sortBy)} ${dir}`;
+  }
+  const rows = await queryRows(database, `SELECT * FROM ${full}${where}${order} LIMIT $1 OFFSET $2`, params);
   return { total, rows, limit: limit || 50, offset: offset || 0 };
+}
+
+async function insertRow(database, schema, table, data) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  if (!validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid schema/table name');
+  const cols = Object.keys(data);
+  const vals = Object.values(data);
+  const colList = cols.map(c => quoteIdent(c)).join(', ');
+  const placeholders = vals.map((_, i) => `$${i + 1}`).join(', ');
+  const sql = `INSERT INTO ${quoteIdent(schema)}.${quoteIdent(table)} (${colList}) VALUES (${placeholders}) RETURNING *`;
+  const result = await query(database, sql, vals);
+  return { rows: result.rows, rowCount: result.rowCount };
+}
+
+async function updateRow(database, schema, table, pkCol, pkVal, data) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  if (!validateIdent(schema) || !validateIdent(table) || !validateIdent(pkCol)) throw new Error('Invalid name');
+  const sets = Object.keys(data).map((c, i) => `${quoteIdent(c)} = $${i + 1}`).join(', ');
+  const vals = Object.values(data);
+  const pkIdx = vals.length + 1;
+  const sql = `UPDATE ${quoteIdent(schema)}.${quoteIdent(table)} SET ${sets} WHERE ${quoteIdent(pkCol)} = $${pkIdx} RETURNING *`;
+  const result = await query(database, sql, [...vals, pkVal]);
+  return { rows: result.rows, rowCount: result.rowCount };
+}
+
+async function deleteRow(database, schema, table, pkCol, pkVal) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  if (!validateIdent(schema) || !validateIdent(table) || !validateIdent(pkCol)) throw new Error('Invalid name');
+  const sql = `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(table)} WHERE ${quoteIdent(pkCol)} = $1 RETURNING *`;
+  const result = await query(database, sql, [pkVal]);
+  return { rows: result.rows, rowCount: result.rowCount };
 }
 
 async function createTable(database, schema, tableName, columns) {
@@ -280,5 +321,6 @@ module.exports = {
   createTable, alterTable, dropTable,
   getDbConfig, updateDbConfig,
   createDatabase, dropDatabase, runQuery,
+  insertRow, updateRow, deleteRow,
   checkConnection, validateIdent, quoteIdent, quoteLiteral,
 };
