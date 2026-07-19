@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.6.3] - 2026-07-19
+### Changed
+- **Database screen refactored (Phase 1)**: replaced all `psql` shell calls and `parseCSV()` in `src/routes/databases.js` with the new `pg`-based service layer (`src/services/databases.js`). All database operations now use parameterized queries, pool-per-database connection caching, and proper identifier validation. Shell-based `psql()`/`parseCSV()` utilities removed entirely
+
 ## [1.6.2] - 2026-07-19
 ### Fixed
 - **PRO Terminal search conflict**: global search shortcut (`/` and `Ctrl+K`) no longer interferes with the terminal search. Added `term-search-active` body class when the terminal search bar is open, and global search now ignores shortcuts when the terminal is focused (`#termProPanes`) or terminal search is active

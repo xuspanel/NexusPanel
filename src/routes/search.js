@@ -3,6 +3,7 @@ const { authMiddleware } = require('../middleware/auth');
 const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const dbService = require('../services/databases');
 
 const MAX_RESULTS = 40;
 
@@ -84,13 +85,13 @@ function searchFirewall(q) {
   } catch { return []; }
 }
 
-function searchDatabases(q) {
+async function searchDatabases(q) {
   try {
-    const out = execSync('sudo -u postgres psql -A -F\'|\' -t -c "SELECT datname FROM pg_catalog.pg_database WHERE datistemplate = false ORDER BY datname" 2>/dev/null', { encoding: 'utf8', timeout: 3000 });
-    return out.split('\n').filter(l => l.trim() && l.toLowerCase().includes(q)).map(db => ({
+    const dbs = await dbService.listDatabases();
+    return dbs.filter(d => d.name.toLowerCase().includes(q)).map(d => ({
       type: 'database',
       module: 'Databases',
-      title: db.trim(),
+      title: d.name,
       desc: 'PostgreSQL database',
       view: 'databases'
     }));
@@ -100,7 +101,7 @@ function searchDatabases(q) {
 const router = express.Router();
 router.use(authMiddleware);
 
-router.get('/', (req, res) => {
+router.get('/', async (req, res) => {
   const q = (req.query.q || '').trim().toLowerCase();
   if (!q || q.length < 2) return res.json({ query: q, results: [] });
 
@@ -114,7 +115,7 @@ router.get('/', (req, res) => {
     ...searchDomains(terms[0]),
     ...searchCron(terms[0]),
     ...searchFirewall(terms[0]),
-    ...searchDatabases(terms[0]),
+    ...(await searchDatabases(terms[0])),
   ];
 
   const scored = [];
