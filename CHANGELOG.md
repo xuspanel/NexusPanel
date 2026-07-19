@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.6] - 2026-07-19
+### Fixed
+- **CSS duplicate cleanup**: removed duplicate `.db-data-table-wrap` and `.db-data-table` definitions in the early database section (lines 2395-2444) that were silently overriding the later consolidated definitions. Merged unique properties (`max-height`, `overflow-y`, `font-family`, `position:sticky`) into the canonical `.db-data-table` section
+- **Unresolved `--red` variable**: replaced `var(--red)` in `.db-form-error` with hardcoded `#ef4444` — the variable was never defined anywhere in the stylesheet
+- **Missing toast variant**: added `.bk-toast-warning` CSS class (amber background) — `dbToast(msg, 'warning')` was called in `tedSave()` but had no matching style
+
+### Added
+- **Graceful DB pool shutdown**: `server.js` now closes all pg connection pools on `SIGTERM`/`SIGINT` via `require('./src/services/databases').close()`
+
 ## [1.6.5] - 2026-07-19
 ### Added
 - **Search/filter for table data**: search bar above the data table with 300ms debounce. Filters rows server-side using `ILIKE` on a concatenated text representation of each row

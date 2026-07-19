@@ -304,4 +304,9 @@ server.listen(PORT, '127.0.0.1', () => {
       }
     } catch (e) { /* silent */ }
   }, 60000);
+
+  // Graceful shutdown — close DB pools
+  const closeDb = () => { try { require('./src/services/databases').close(); } catch {} };
+  process.on('SIGTERM', () => { closeDb(); server.close(() => process.exit(0)); });
+  process.on('SIGINT', () => { closeDb(); server.close(() => process.exit(0)); });
 });
