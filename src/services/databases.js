@@ -437,6 +437,193 @@ function quoteLiteral(val) {
   return `'${s.replace(/'/g, "''")}'`;
 }
 
+/* ─── Import CSV / SQL ─── */
+
+async function importTableData(database, schema, table, format, content) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  if (!content || !content.trim()) throw new Error('No content to import');
+
+  if (format === 'csv') {
+    const lines = content.trim().split('\n');
+    if (lines.length < 2) throw new Error('CSV must have a header row and at least one data row');
+    const header = parseCSVLine(lines[0]);
+    const cols = header.map(c => {
+      if (!validateIdent(c)) throw new Error(`Invalid column name in CSV header: ${c}`);
+      return c;
+    });
+    let imported = 0;
+    for (let i = 1; i < lines.length; i++) {
+      const vals = parseCSVLine(lines[i]);
+      if (vals.length !== cols.length) continue;
+      const row = {};
+      cols.forEach((c, idx) => { row[c] = vals[idx]; });
+      await insertRow(database, schema, table, row);
+      imported++;
+    }
+    return { ok: true, rowsImported: imported };
+  }
+
+  if (format === 'sql') {
+    // Execute each SQL statement separated by semicolons
+    const stmts = content.split(';').map(s => s.trim()).filter(s => s.length > 0);
+    let executed = 0;
+    for (const stmt of stmts) {
+      await exec(database, stmt);
+      executed++;
+    }
+    return { ok: true, statementsExecuted: executed };
+  }
+
+  throw new Error('Unsupported import format (csv or sql)');
+}
+
+function parseCSVLine(line) {
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (inQuotes) {
+      if (ch === '"') {
+        if (i + 1 < line.length && line[i + 1] === '"') {
+          current += '"';
+          i++;
+        } else {
+          inQuotes = false;
+        }
+      } else {
+        current += ch;
+      }
+    } else {
+      if (ch === '"') {
+        inQuotes = true;
+      } else if (ch === ',') {
+        result.push(current);
+        current = '';
+      } else {
+        current += ch;
+      }
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+/* ─── Foreign Keys ─── */
+
+async function getForeignKeys(database, schema, table) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  const sql = `SELECT
+    tc.constraint_name,
+    kcu.column_name,
+    ccu.table_schema AS foreign_schema,
+    ccu.table_name AS foreign_table,
+    ccu.column_name AS foreign_column,
+    rc.update_rule,
+    rc.delete_rule
+  FROM information_schema.table_constraints tc
+  JOIN information_schema.key_column_usage kcu ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+  JOIN information_schema.constraint_column_usage ccu ON tc.constraint_name = ccu.constraint_name AND tc.table_schema = ccu.table_schema
+  JOIN information_schema.referential_constraints rc ON tc.constraint_name = rc.constraint_name AND tc.table_schema = rc.constraint_schema
+  WHERE tc.constraint_type = 'FOREIGN KEY' AND tc.table_schema = $1 AND tc.table_name = $2
+  ORDER BY kcu.ordinal_position`;
+  return await queryRows(database, sql, [schema, table]);
+}
+
+/* ─── Index Management ─── */
+
+async function listIndexes(database, schema, table) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  return await queryRows(database,
+    `SELECT indexname, indexdef, tablename, schemaname FROM pg_catalog.pg_indexes WHERE schemaname = $1 AND tablename = $2 ORDER BY indexname`,
+    [schema, table]
+  );
+}
+
+async function createIndex(database, schema, table, indexName, column, unique, method) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table)) throw new Error('Invalid name');
+  if (!validateIdent(column)) throw new Error('Invalid column name');
+  const name = indexName || `${table}_${column}_idx`;
+  if (!validateIdent(name)) throw new Error('Invalid index name');
+  const uniqueStr = unique ? 'UNIQUE ' : '';
+  const methodStr = method && ['btree','hash','gist','gin','brin'].includes(method) ? ` USING ${method}` : '';
+  await exec(database, `CREATE ${uniqueStr}INDEX ${quoteIdent(name)} ON ${quoteIdent(schema)}.${quoteIdent(table)}${methodStr} (${quoteIdent(column)})`);
+  return { ok: true, indexName: name };
+}
+
+async function dropIndex(database, schema, indexName) {
+  if (!validateIdent(database) || !validateIdent(indexName)) throw new Error('Invalid name');
+  await exec(database, `DROP INDEX ${quoteIdent(schema)}.${quoteIdent(indexName)}`);
+  return { ok: true };
+}
+
+/* ─── Batch Delete ─── */
+
+async function deleteRows(database, schema, table, pkCol, pkVals) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(table) || !validateIdent(pkCol)) throw new Error('Invalid name');
+  if (!Array.isArray(pkVals) || !pkVals.length) throw new Error('No values provided');
+  const placeholders = pkVals.map((_, i) => `$${i + 1}`).join(', ');
+  const sql = `DELETE FROM ${quoteIdent(schema)}.${quoteIdent(table)} WHERE ${quoteIdent(pkCol)} IN (${placeholders}) RETURNING *`;
+  const result = await query(database, sql, pkVals);
+  return { rows: result.rows, rowCount: result.rowCount };
+}
+
+/* ─── View Management ─── */
+
+async function listViews(database, schema) {
+  if (!validateIdent(database)) throw new Error('Invalid database name');
+  const schemaFilter = schema && validateIdent(schema) ? `AND table_schema = ${quoteLiteral(schema)}` : `AND table_schema NOT IN ('pg_catalog','information_schema','pg_toast')`;
+  return await queryRows(database, `SELECT table_schema, table_name AS view_name, view_definition FROM information_schema.views WHERE 1=1 ${schemaFilter} ORDER BY table_schema, table_name`);
+}
+
+async function createView(database, schema, viewName, query) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(viewName)) throw new Error('Invalid name');
+  if (!query || !query.trim()) throw new Error('View query required');
+  await exec(database, `CREATE VIEW ${quoteIdent(schema)}.${quoteIdent(viewName)} AS ${query}`);
+  return { ok: true, schema, viewName };
+}
+
+async function dropView(database, schema, viewName) {
+  if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(viewName)) throw new Error('Invalid name');
+  await exec(database, `DROP VIEW IF EXISTS ${quoteIdent(schema)}.${quoteIdent(viewName)}`);
+  return { ok: true };
+}
+
+/* ─── Export Query Results ─── */
+
+async function exportQueryResult(rows, format) {
+  if (!Array.isArray(rows) || !rows.length) throw new Error('No rows to export');
+  const cols = Object.keys(rows[0]);
+
+  if (format === 'csv') {
+    const header = cols.map(c => `"${c.replace(/"/g, '""')}"`).join(',');
+    const data = rows.map(r => cols.map(c => {
+      const v = r[c];
+      if (v === null || v === undefined) return '';
+      return `"${String(v).replace(/"/g, '""')}"`;
+    }).join(','));
+    return { content: [header, ...data].join('\n'), contentType: 'text/csv', ext: 'csv' };
+  }
+
+  if (format === 'json') {
+    return { content: JSON.stringify(rows, null, 2), contentType: 'application/json', ext: 'json' };
+  }
+
+  // SQL INSERT
+  const colList = cols.map(c => quoteIdent(c)).join(', ');
+  const lines = rows.map(r => {
+    const vals = cols.map(c => {
+      const v = r[c];
+      if (v === null || v === undefined) return 'NULL';
+      if (typeof v === 'number') return String(v);
+      return quoteLiteral(v);
+    }).join(', ');
+    return `INSERT INTO result (${colList}) VALUES (${vals});`;
+  });
+  const h = `-- Query Result Export\n-- ${new Date().toISOString()}\n\n`;
+  return { content: h + lines.join('\n'), contentType: 'text/sql', ext: 'sql' };
+}
+
 async function close() {
   for (const [key, pool] of pools) {
     try { await pool.end(); } catch {}
@@ -452,6 +639,12 @@ module.exports = {
   createTable, alterTable, dropTable, duplicateTable, renameTable, truncateTable,
   vacuumTable, analyzeTable, getTableMetadata, setTableComment,
   getColumnComments, setColumnComment, exportTableData,
+  importTableData,
+  getForeignKeys,
+  listIndexes, createIndex, dropIndex,
+  deleteRows,
+  listViews, createView, dropView,
+  exportQueryResult,
   getDbConfig, updateDbConfig,
   createDatabase, dropDatabase, runQuery,
   insertRow, updateRow, deleteRow,

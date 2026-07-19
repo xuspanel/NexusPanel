@@ -1,5 +1,21 @@
 # Changelog
 
+## [1.7.0] - 2026-07-19
+### Added
+- **Import CSV/SQL**: "Import" button in data toolbar opens a modal to paste CSV (with header) or SQL INSERT statements. CSV is parsed and inserted row-by-row; SQL is executed statement-by-statement
+- **Foreign key display**: Config mode now shows a "Foreign Keys" table listing column → referenced table/column, on-update/on-delete rules, and constraint name
+- **Index management UI**: Config mode lists all indexes with their definitions and a delete button. "Add Index" button opens a modal to create an index on any column with optional uniqueness and index method (B-tree/Hash/GiST/GIN/BRIN)
+- **Query result export**: CSV, JSON, and SQL download buttons in the query results header. Exports the current result set client-side as a file download
+- **Batch delete**: Checkbox column in data table (only when a primary key exists). Select all/none via header checkbox; "✕ Sel" button deletes all checked rows with type-to-confirm
+- **View management**: Tables view now lists views in a separate "Views" section. "Create View" button opens a modal for defining a view with schema, name, and SELECT query. Views can be opened in the table editor (data/config)
+
+### Changed
+- `public/js/databases.js`: added `dbImportCSV()`, `dbToggleSelectAll()`, `dbUpdateSelectAll()`, `dbDeleteSelected()`, `dbExportQueryResult()`, `loadTableConfigData()`, `dbShowCreateIndex()`, `doCreateIndex()`, `dbDropIndex()`, `dbShowCreateView()`, `doCreateView()`, `dbOpenView()`, `renderViewsSection()`; updated `renderTableData()` with checkbox column and Import/BatchDelete buttons; updated `renderTableConfig()` with FK and Index sections; updated `showTablesView()` to load views; updated `renderTables()` to show views section; updated `renderQueryResults()` with export buttons
+- `public/js/api.js`: added `importTable()`, `foreignKeys()`, `listIndexes()`, `createIndex()`, `dropIndex()`, `deleteRows()`, `views()`, `createView()`, `dropView()`, `exportQuery()` methods
+- `public/css/style.css`: added `.db-data-th-check`, `.db-data-cell-check`, `.db-config-section`, `.db-fk-table`, `.db-views-section`, `.db-query-export-actions`, `.db-btn-xs`
+- `src/routes/databases.js`: added 9 new endpoints for import, foreign keys, indexes CRUD, batch delete, views CRUD, and query export
+- `src/services/databases.js`: added `importTableData()`, `getForeignKeys()`, `listIndexes()`, `createIndex()`, `dropIndex()`, `deleteRows()`, `listViews()`, `createView()`, `dropView()`, `exportQueryResult()`; updated module.exports
+
 ## [1.6.7] - 2026-07-19
 ### Added
 - **Table metadata display**: header bar in the table editor shows owner, size, estimated rows, index/trigger counts, and table comment. Loaded in background from `GET /:db/table/:schema/:table/metadata`

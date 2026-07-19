@@ -1,4 +1,4 @@
-var dbState = { databases: [], schemas: [], users: [], view: 'cards', selDb: null, selTable: null, tableEditor: { columns: [], original: [], changes: [] }, tableMode: 'data', dataPage: 1, dataPageSize: 25, dataSortBy: '', dataSortDir: '', dataSearch: '', pkColumns: [] };
+var dbState = { databases: [], schemas: [], users: [], views: [], view: 'cards', selDb: null, selTable: null, tableEditor: { columns: [], original: [], changes: [] }, tableMode: 'data', dataPage: 1, dataPageSize: 25, dataSortBy: '', dataSortDir: '', dataSearch: '', pkColumns: [], selectedRows: [], foreignKeys: [], indexes: [] };
 var dbInit = false;
 
 window.initDatabases = async function () {
@@ -224,27 +224,80 @@ async function showTablesView() {
   document.getElementById('dbBreadcrumb').innerHTML = '<a href="#" onclick="showManage()">Databases</a> / ' + esc(dbState.selDb.name) + ' <a href="#" onclick="renderConfView()" style="font-size:11px;color:var(--accent-cyan);margin-left:8px">⚙ Config</a>';
   document.getElementById('dbTablesContent').innerHTML = '<div class="db-loading">Loading tables...</div>';
   try {
-    var tables = await API.databases.tables(dbState.selDb.name);
+    var [tables, views] = await Promise.all([
+      API.databases.tables(dbState.selDb.name),
+      API.databases.views(dbState.selDb.name),
+    ]);
+    dbState.views = views || [];
     renderTables(tables);
   } catch (e) { document.getElementById('dbTablesContent').innerHTML = '<div class="db-error">Failed to load tables: ' + esc(e.message) + ' <a href="#" onclick="showTablesView()">Retry</a></div>'; }
 }
 
+function renderViewsSection() {
+  var views = dbState.views || [];
+  if (!views.length) return '';
+  var html = '<div class="db-views-section"><h4>👁 Views <button class="db-btn db-btn-xs" onclick="dbShowCreateView()" style="margin-left:8px">+ Create View</button></h4>'
+    + '<div class="db-manage-grid">';
+  views.forEach(function(v) {
+    html += '<div class="db-manage-card" onclick="dbOpenView(\'' + esc(v.table_schema) + '\',\'' + esc(v.view_name) + '\')">'
+      + '<span class="db-manage-icon">👁</span>'
+      + '<div class="db-manage-info"><span class="db-manage-name">' + esc(v.table_schema) + '.' + esc(v.view_name) + '</span>'
+      + '<span class="db-manage-meta">VIEW</span></div>'
+      + '<span class="db-manage-arrow">→</span></div>';
+  });
+  html += '</div></div>';
+  return html;
+}
+
+function dbShowCreateView() {
+  var html = '<h3>Create View in ' + esc(dbState.selDb.name) + '</h3>'
+    + '<div class="n-form-group"><label>Schema</label><select id="cvSchema" class="db-form-input">'
+    + dbState.schemas.map(function(s) { return '<option value="' + esc(s.name) + '" ' + (s.name==='public'?'selected':'') + '>' + esc(s.name) + '</option>'; }).join('')
+    + '</select></div>'
+    + '<div class="n-form-group"><label>View Name</label><input id="cvName" class="db-form-input" placeholder="my_view"></div>'
+    + '<div class="n-form-group"><label>SELECT Query</label><textarea id="cvQuery" class="db-form-input" style="min-height:120px;font-family:var(--font-mono);font-size:12px" placeholder="SELECT ... FROM ..."></textarea></div>'
+    + '<div class="db-form-error" id="dbModalError"></div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doCreateView()">Create View</button></div>';
+  document.getElementById('dbModalContent').innerHTML = html;
+  document.getElementById('dbModal').style.display = 'flex';
+  window.doCreateView = async function() {
+    var schema = document.getElementById('cvSchema').value;
+    var viewName = document.getElementById('cvName').value.trim();
+    var query = document.getElementById('cvQuery').value.trim();
+    if (!viewName) return dbModalError('View name required');
+    if (!query) return dbModalError('SELECT query required');
+    try {
+      await API.databases.createView(dbState.selDb.name, { schema, viewName, query });
+      closeDBModal();
+      dbToast('View "' + viewName + '" created');
+      await showTablesView();
+    } catch (e) { dbModalError(e.message); }
+  };
+}
+
+async function dbOpenView(schema, viewName) {
+  openTableEditor(schema, viewName);
+}
+
 function renderTables(tables) {
   var el = document.getElementById('dbTablesContent');
-  if (!tables.length) {
-    el.innerHTML = '<div class="db-empty">No tables yet. <a href="#" onclick="showCreateTable()">Create your first table</a></div>'
-      + '<div style="text-align:center;margin-top:8px"><a href="#" onclick="showManage()" style="color:var(--text3)">← Back to databases</a></div>';
-    return;
+  var html = '<div style="margin-bottom:12px"><button class="db-btn db-btn-primary" onclick="showCreateTable()">+ Create Table</button>'
+    + '<button class="db-btn" onclick="dbShowCreateView()" style="margin-left:6px">👁 Create View</button></div>';
+  if (tables.length) {
+    html += '<h4 style="margin-bottom:8px">📄 Tables</h4>'
+      + '<div class="db-manage-grid">' + tables.map(function(t) {
+        return '<div class="db-manage-card" onclick="openTableEditor(\'' + esc(t.schemaname) + '\',\'' + esc(t.tablename) + '\')">'
+          + '<span class="db-manage-icon">📄</span>'
+          + '<div class="db-manage-info"><span class="db-manage-name">' + esc(t.schemaname) + '.' + esc(t.tablename) + '</span>'
+          + '<span class="db-manage-meta">' + (t.row_count||0) + ' rows · ' + (t.size_formatted||'—') + '</span></div>'
+          + '<span class="db-manage-arrow">→</span></div>';
+      }).join('') + '</div>';
+  } else {
+    html += '<div class="db-empty">No tables yet. <a href="#" onclick="showCreateTable()">Create your first table</a></div>';
   }
-  el.innerHTML = '<div style="margin-bottom:12px"><button class="db-btn db-btn-primary" onclick="showCreateTable()">+ Create Table</button></div>'
-    + '<div class="db-manage-grid">' + tables.map(function(t) {
-      return '<div class="db-manage-card" onclick="openTableEditor(\'' + esc(t.schemaname) + '\',\'' + esc(t.tablename) + '\')">'
-        + '<span class="db-manage-icon">📄</span>'
-        + '<div class="db-manage-info"><span class="db-manage-name">' + esc(t.schemaname) + '.' + esc(t.tablename) + '</span>'
-        + '<span class="db-manage-meta">' + (t.row_count||0) + ' rows · ' + (t.size_formatted||'—') + '</span></div>'
-        + '<span class="db-manage-arrow">→</span></div>';
-    }).join('') + '</div>'
-    + '<div style="text-align:center;margin-top:8px"><a href="#" onclick="showManage()" style="color:var(--text3)">← Back to databases</a></div>';
+  html += renderViewsSection();
+  html += '<div style="text-align:center;margin-top:8px"><a href="#" onclick="showManage()" style="color:var(--text3)">← Back to databases</a></div>';
+  el.innerHTML = html;
 }
 
 /* ─── Create Table Form ─── */
@@ -367,8 +420,20 @@ function switchTableMode(mode) {
   if (mode === 'data') {
     loadTableData();
   } else {
+    loadTableConfigData();
     renderTableEditor();
   }
+}
+
+async function loadTableConfigData() {
+  try {
+    var [fks, idxs] = await Promise.all([
+      API.databases.foreignKeys(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name),
+      API.databases.listIndexes(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name),
+    ]);
+    dbState.foreignKeys = fks || [];
+    dbState.indexes = idxs || [];
+  } catch(e) { dbState.foreignKeys = []; dbState.indexes = []; }
 }
 
 async function loadTableData() {
@@ -422,7 +487,7 @@ function renderTableData() {
   var total = data.total;
   if (!data.columns.length) return '<div class="db-empty">No data found.</div><div style="margin-top:12px;text-align:center"><button class="db-btn" onclick="switchTableMode(\'config\')">⚙ Config Mode</button> <button class="db-btn" onclick="showTablesView()">← Back to tables</button></div>';
 
-  var exportUrl = API.databases.exportTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, 'sql');
+  var hasPk = dbState.pkColumns.length > 0;
   var html = '<div class="db-data-toolbar">'
     + '<div class="db-data-search"><span class="db-data-search-icon">🔍</span><input id="dbDataSearch" class="db-form-input db-data-search-input" placeholder="Search data..." value="' + esc(dbState.dataSearch) + '" oninput="dbSearchInput()"></div>'
     + '<div class="db-data-toolbar-actions">'
@@ -430,11 +495,14 @@ function renderTableData() {
     + '<div class="db-export-dropdown"><a href="' + API.databases.exportTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, 'csv') + '" class="db-export-option">CSV</a>'
     + '<a href="' + API.databases.exportTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, 'json') + '" class="db-export-option">JSON</a>'
     + '<a href="' + API.databases.exportTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, 'sql') + '" class="db-export-option">SQL</a></div></span>'
+    + '<button class="db-btn db-btn-sm" onclick="dbImportCSV()" title="Import CSV">⬆ Import</button>'
     + '<button class="db-btn db-btn-sm" onclick="dbAddRow()" title="Add Row">+ Row</button>'
+    + (hasPk ? '<button class="db-btn db-btn-sm db-btn-danger" id="dbDeleteSelectedBtn" onclick="dbDeleteSelected()" disabled title="Delete selected rows">✕ Sel</button>' : '')
     + '<button class="db-btn db-btn-sm" onclick="switchTableMode(\'config\')">⚙ Config</button>'
     + '<button class="db-btn" onclick="showTablesView()">← Tables</button></div></div>';
 
   html += '<div class="db-data-table-wrap"><table class="db-data-table" id="dbDataTable"><thead><tr>';
+  if (hasPk) html += '<th class="db-data-th-check"><input type="checkbox" id="dbSelectAll" onchange="dbToggleSelectAll(this.checked)"></th>';
   data.columns.forEach(function(col) {
     var sortArrow = '';
     if (dbState.dataSortBy === col) sortArrow = dbState.dataSortDir === 'asc' ? ' ▲' : ' ▼';
@@ -443,10 +511,19 @@ function renderTableData() {
   html += '<th class="db-data-th-actions" style="width:60px">Actions</th>';
   html += '</tr></thead><tbody>';
   if (!data.rows.length) {
-    html += '<tr><td colspan="' + (data.columns.length + 1) + '" class="db-empty-row">' + (dbState.dataSearch ? 'No matching rows' : '0 rows') + '</td></tr>';
+    html += '<tr><td colspan="' + (data.columns.length + 1 + (hasPk ? 1 : 0)) + '" class="db-empty-row">' + (dbState.dataSearch ? 'No matching rows' : '0 rows') + '</td></tr>';
   } else {
+    dbState.selectedRows = [];
     data.rows.forEach(function(row, ri) {
       html += '<tr class="db-data-row" data-idx="' + ri + '">';
+      if (hasPk) {
+        var pkVal = '';
+        for (var i = 0; i < dbState.pkColumns.length; i++) {
+          var pk = dbState.pkColumns[i];
+          if (row[pk] !== undefined && row[pk] !== null) { pkVal = row[pk]; break; }
+        }
+        html += '<td class="db-data-cell-check"><input type="checkbox" class="db-row-check" data-pk="' + esc(String(pkVal)) + '" onchange="dbUpdateSelectAll()"></td>';
+      }
       data.columns.forEach(function(col) {
         var val = row[col];
         html += '<td class="db-data-cell" onclick="dbStartEdit(' + ri + ',\'' + esc(col) + '\',this)" title="Click to edit">'
@@ -599,6 +676,8 @@ function renderTableConfig() {
   var cols = dbState.tableEditor.columns;
   var changes = dbState.tableEditor.changes;
   var meta = dbState.tableMetadata;
+  var fks = dbState.foreignKeys || [];
+  var idxs = dbState.indexes || [];
   var html = '';
 
   // Table comment & table-level actions
@@ -636,7 +715,79 @@ function renderTableConfig() {
     + '<button class="db-btn db-btn-danger" onclick="dropTable()">🗑 Drop Table</button>'
     + '</div>';
   if (changes.length > 0) html += '<div class="db-editor-pending">' + changes.length + ' pending change(s)</div>';
+
+  // Foreign Keys section
+  html += '<div class="db-config-section"><h4>🔗 Foreign Keys</h4>';
+  if (fks.length) {
+    html += '<table class="db-fk-table"><thead><tr><th>Column</th><th>References</th><th>On Update</th><th>On Delete</th><th>Constraint</th></tr></thead><tbody>';
+    fks.forEach(function(fk) {
+      html += '<tr><td>' + esc(fk.column_name) + '</td><td>' + esc(fk.foreign_schema + '.' + fk.foreign_table + '(' + fk.foreign_column + ')') + '</td><td>' + esc(fk.update_rule) + '</td><td>' + esc(fk.delete_rule) + '</td><td>' + esc(fk.constraint_name) + '</td></tr>';
+    });
+    html += '</tbody></table>';
+  } else {
+    html += '<div class="db-meta">No foreign keys defined.</div>';
+  }
+  html += '</div>';
+
+  // Indexes section
+  html += '<div class="db-config-section"><h4>📑 Indexes <button class="db-btn db-btn-xs" onclick="dbShowCreateIndex()" style="margin-left:8px">+ Add Index</button></h4>';
+  if (idxs.length) {
+    html += '<table class="db-fk-table"><thead><tr><th>Name</th><th>Definition</th><th></th></tr></thead><tbody>';
+    idxs.forEach(function(idx) {
+      html += '<tr><td>' + esc(idx.indexname) + '</td><td><code style="font-size:11px;color:var(--text-secondary)">' + esc(idx.indexdef) + '</code></td>'
+        + '<td><button class="db-btn db-btn-xs db-btn-danger" onclick="dbDropIndex(\'' + esc(idx.indexname) + '\')" title="Drop index">✕</button></td></tr>';
+    });
+    html += '</tbody></table>';
+  } else {
+    html += '<div class="db-meta">No indexes defined.</div>';
+  }
+  html += '</div>';
+
   return html;
+}
+
+/* ─── Foreign Key / Index helpers ─── */
+function dbShowCreateIndex() {
+  var html = '<h3>Create Index on ' + esc(dbState.selTable.name) + '</h3>'
+    + '<div class="n-form-group"><label>Column</label><select id="dbIdxColumn" class="db-form-input">'
+    + dbState.tableEditor.columns.map(function(c) { return '<option value="' + esc(c.column_name) + '">' + esc(c.column_name) + '</option>'; }).join('')
+    + '</select></div>'
+    + '<div class="n-form-group"><label>Index Name (optional)</label><input id="dbIdxName" class="db-form-input" placeholder="auto: table_col_idx"></div>'
+    + '<div style="display:flex;gap:12px;margin-bottom:12px">'
+    + '<label style="font-size:12px;color:var(--text-secondary)"><input type="checkbox" id="dbIdxUnique"> Unique</label>'
+    + '<label style="font-size:12px;color:var(--text-secondary)">Method: <select id="dbIdxMethod" class="db-form-input" style="width:auto;display:inline-block;padding:3px 8px"><option value="">Default</option><option value="btree">B-tree</option><option value="hash">Hash</option><option value="gist">GiST</option><option value="gin">GIN</option><option value="brin">BRIN</option></select></label>'
+    + '</div>'
+    + '<div class="db-form-error" id="dbModalError"></div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doCreateIndex()">Create Index</button></div>';
+  document.getElementById('dbModalContent').innerHTML = html;
+  document.getElementById('dbModal').style.display = 'flex';
+  window.doCreateIndex = async function() {
+    var data = {
+      column: document.getElementById('dbIdxColumn').value,
+      indexName: document.getElementById('dbIdxName').value.trim() || undefined,
+      unique: document.getElementById('dbIdxUnique').checked,
+      method: document.getElementById('dbIdxMethod').value || undefined,
+    };
+    if (!data.column) return dbModalError('Column required');
+    try {
+      await API.databases.createIndex(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, data);
+      closeDBModal();
+      dbToast('Index created');
+      await loadTableConfigData();
+      renderTableEditor();
+    } catch (e) { dbModalError(e.message); }
+  };
+}
+
+async function dbDropIndex(indexName) {
+  showConfirmModal('Drop index "' + indexName + '"?', indexName, async function() {
+    try {
+      await API.databases.dropIndex(dbState.selDb.name, dbState.selTable.schema, indexName);
+      dbToast('Index dropped');
+      await loadTableConfigData();
+      renderTableEditor();
+    } catch (e) { dbToast(e.message, 'error'); }
+  });
 }
 
 function typeOptionsSelected(current) {
@@ -748,6 +899,56 @@ async function dbAnalyze() {
     await API.databases.analyzeTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name);
     dbToast('ANALYZE completed');
   } catch (e) { dbToast(e.message, 'error'); }
+}
+
+/* ─── Import CSV ─── */
+async function dbImportCSV() {
+  var html = '<h3>Import Data into ' + esc(dbState.selTable.name) + '</h3>'
+    + '<div class="n-form-group"><label>Format</label><select id="dbImportFormat" class="db-form-input"><option value="csv">CSV</option><option value="sql">SQL INSERT</option></select></div>'
+    + '<div class="n-form-group"><label>Content (paste CSV with header or SQL statements)</label><textarea id="dbImportContent" class="db-form-input" style="min-height:200px;font-family:var(--font-mono);font-size:12px" placeholder="Paste CSV or SQL here..."></textarea></div>'
+    + '<div class="db-form-error" id="dbModalError"></div>'
+    + '<div class="db-form-actions"><button class="fm-btn" onclick="closeDBModal()">Cancel</button><button class="fm-btn fm-btn-primary" onclick="doImportCSV()">Import</button></div>';
+  document.getElementById('dbModalContent').innerHTML = html;
+  document.getElementById('dbModal').style.display = 'flex';
+  window.doImportCSV = async function() {
+    var format = document.getElementById('dbImportFormat').value;
+    var content = document.getElementById('dbImportContent').value.trim();
+    if (!content) return dbModalError('Paste content to import');
+    try {
+      var result = await API.databases.importTable(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, format, content);
+      closeDBModal();
+      dbToast(result.rowsImported !== undefined ? result.rowsImported + ' rows imported' : result.statementsExecuted + ' statements executed');
+      await loadTableData();
+    } catch (e) { dbModalError(e.message); }
+  };
+}
+
+/* ─── Batch Delete ─── */
+function dbToggleSelectAll(checked) {
+  document.querySelectorAll('.db-row-check').forEach(function(cb) { cb.checked = checked; });
+  dbUpdateSelectAll();
+}
+
+function dbUpdateSelectAll() {
+  var checked = document.querySelectorAll('.db-row-check:checked');
+  var btn = document.getElementById('dbDeleteSelectedBtn');
+  if (btn) btn.disabled = checked.length === 0;
+}
+
+async function dbDeleteSelected() {
+  var checked = document.querySelectorAll('.db-row-check:checked');
+  if (!checked.length) return;
+  var pkCol = dbState.pkColumns[0];
+  if (!pkCol) { dbToast('No primary key found', 'error'); return; }
+  var pkVals = [];
+  checked.forEach(function(cb) { pkVals.push(cb.getAttribute('data-pk')); });
+  showConfirmModal('Delete ' + pkVals.length + ' selected row(s)? This cannot be undone.', String(pkVals.length), async function() {
+    try {
+      var result = await API.databases.deleteRows(dbState.selDb.name, dbState.selTable.schema, dbState.selTable.name, pkCol, pkVals);
+      dbToast(result.rowCount + ' row(s) deleted');
+      await loadTableData();
+    } catch (e) { dbToast(e.message, 'error'); }
+  });
 }
 
 /* ─── SQL Query Terminal ─── */
@@ -1108,9 +1309,15 @@ async function executeQuery() {
   }
 }
 
+var dbLastQueryResult = null;
+
 function renderQueryResults(container, result) {
   if (result.columns && result.columns.length) {
-    var html = '<div class="db-query-status">' + result.rowCount + ' row' + (result.rowCount !== 1 ? 's' : '') + ' returned</div>'
+    dbLastQueryResult = result;
+    var html = '<div class="db-query-status">' + result.rowCount + ' row' + (result.rowCount !== 1 ? 's' : '') + ' returned'
+      + ' <span class="db-query-export-actions"><button class="db-btn db-btn-xs" onclick="dbExportQueryResult(\'csv\')">⬇ CSV</button>'
+      + '<button class="db-btn db-btn-xs" onclick="dbExportQueryResult(\'json\')">⬇ JSON</button>'
+      + '<button class="db-btn db-btn-xs" onclick="dbExportQueryResult(\'sql\')">⬇ SQL</button></span></div>'
       + '<div class="db-data-table-wrap"><table class="db-data-table"><thead><tr>';
     result.columns.forEach(function(col) { html += '<th>' + esc(col) + '</th>'; });
     html += '</tr></thead><tbody>';
@@ -1135,6 +1342,47 @@ function renderQueryResults(container, result) {
     if (result.affectedRows !== undefined) msg = result.affectedRows + ' row' + (result.affectedRows !== 1 ? 's' : '') + ' affected';
     container.innerHTML = '<div class="' + cls + '"><span class="db-query-status-icon">' + icon + '</span> ' + esc(msg) + '</div>';
   }
+}
+
+async function dbExportQueryResult(format) {
+  var result = dbLastQueryResult;
+  if (!result || !result.rows || !result.rows.length) { dbToast('No results to export', 'warning'); return; }
+  // Build CSV/JSON/SQL client-side from the result
+  var cols = result.columns;
+  var content, ext, mime;
+  if (format === 'csv') {
+    var header = cols.map(function(c) { return '"' + c.replace(/"/g, '""') + '"'; }).join(',');
+    var data = result.rows.map(function(r) {
+      return cols.map(function(c) {
+        var v = r[c];
+        if (v === null || v === undefined) return '';
+        return '"' + String(v).replace(/"/g, '""') + '"';
+      }).join(',');
+    });
+    content = [header].concat(data).join('\n');
+    ext = 'csv'; mime = 'text/csv';
+  } else if (format === 'json') {
+    content = JSON.stringify(result.rows, null, 2);
+    ext = 'json'; mime = 'application/json';
+  } else {
+    var lines = result.rows.map(function(r) {
+      var vals = cols.map(function(c) {
+        var v = r[c];
+        if (v === null || v === undefined) return 'NULL';
+        if (typeof v === 'number') return String(v);
+        return "'" + String(v).replace(/'/g, "''") + "'";
+      }).join(', ');
+      return 'INSERT INTO result (' + cols.join(', ') + ') VALUES (' + vals + ');';
+    });
+    content = '-- Query Result Export\n-- ' + new Date().toISOString() + '\n\n' + lines.join('\n');
+    ext = 'sql'; mime = 'text/sql';
+  }
+  var blob = new Blob([content], { type: mime });
+  var url = URL.createObjectURL(blob);
+  var a = document.createElement('a');
+  a.href = url; a.download = 'query-result.' + ext;
+  document.body.appendChild(a); a.click();
+  setTimeout(function() { document.body.removeChild(a); URL.revokeObjectURL(url); }, 100);
 }
 
 /* ─── Toast ─── */

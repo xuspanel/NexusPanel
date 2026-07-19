@@ -225,6 +225,133 @@ router.get('/:db/table/:schema/:table/export', async (req, res) => {
   } catch (err) { res.status(500).json({ error: err.message }); }
 });
 
+/* ─── Import CSV/SQL ─── */
+router.post('/:db/table/:schema/:table/import', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid database/schema/table name' });
+    }
+    const { format, content } = req.body;
+    if (!format || !content) return res.status(400).json({ error: 'Format and content required' });
+    if (!['csv', 'sql'].includes(format)) return res.status(400).json({ error: 'Invalid format (csv or sql)' });
+    const result = await db.importTableData(database, schema, table, format, content);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+/* ─── Foreign Keys ─── */
+router.get('/:db/table/:schema/:table/foreign-keys', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const fks = await db.getForeignKeys(database, schema, table);
+    res.json(fks);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+/* ─── Index Management ─── */
+router.get('/:db/table/:schema/:table/indexes', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const idxs = await db.listIndexes(database, schema, table);
+    res.json(idxs);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:db/table/:schema/:table/index', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const { indexName, column, unique, method } = req.body;
+    if (!column) return res.status(400).json({ error: 'Column name required' });
+    const result = await db.createIndex(database, schema, table, indexName, column, unique, method);
+    res.status(201).json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/:db/index/:schema/:indexName', async (req, res) => {
+  try {
+    const { db: database, schema, indexName } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(indexName)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const result = await db.dropIndex(database, schema, indexName);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+/* ─── Batch Delete ─── */
+router.post('/:db/table/:schema/:table/rows/delete', async (req, res) => {
+  try {
+    const { db: database, schema, table } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(table)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const { pkCol, pkVals } = req.body;
+    if (!pkCol || !Array.isArray(pkVals) || !pkVals.length) return res.status(400).json({ error: 'pkCol and pkVals array required' });
+    const result = await db.deleteRows(database, schema, table, pkCol, pkVals);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+/* ─── View Management ─── */
+router.get('/:db/views', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const schema = req.query.schema || '';
+    const views = await db.listViews(database, schema);
+    res.json(views);
+  } catch (err) { res.status(500).json({ error: err.message }); }
+});
+
+router.post('/:db/view', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const { schema, viewName, query } = req.body;
+    if (!viewName || !query) return res.status(400).json({ error: 'View name and query required' });
+    const result = await db.createView(database, schema || 'public', viewName, query);
+    res.status(201).json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+router.delete('/:db/view/:schema/:viewName', async (req, res) => {
+  try {
+    const { db: database, schema, viewName } = req.params;
+    if (!db.validateIdent(database) || !db.validateIdent(schema) || !db.validateIdent(viewName)) {
+      return res.status(400).json({ error: 'Invalid name' });
+    }
+    const result = await db.dropView(database, schema, viewName);
+    res.json(result);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
+/* ─── Query Result Export ─── */
+router.post('/:db/export-query', async (req, res) => {
+  try {
+    const { db: database } = req.params;
+    if (!db.validateIdent(database)) return res.status(400).json({ error: 'Invalid database name' });
+    const { query, format } = req.body;
+    if (!query || !format) return res.status(400).json({ error: 'Query and format required' });
+    if (!['csv', 'json', 'sql'].includes(format)) return res.status(400).json({ error: 'Invalid format' });
+    const result = await db.runQuery(database, query);
+    if (!result.rows.length) return res.status(400).json({ error: 'No rows to export' });
+    const exported = await db.exportQueryResult(result.rows, format);
+    res.setHeader('Content-Type', exported.contentType);
+    res.setHeader('Content-Disposition', `attachment; filename="query-result.${exported.ext}"`);
+    res.send(exported.content);
+  } catch (err) { res.status(400).json({ error: err.message }); }
+});
+
 router.get('/:db/schemas', async (req, res) => {
   try {
     const { db: database } = req.params;
