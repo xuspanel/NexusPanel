@@ -149,15 +149,15 @@ function initProfile() {
   });
 
   document.getElementById('disable2FABtn').addEventListener('click', async () => {
-    const password = document.getElementById('disable2FAPass').value;
+    const value = document.getElementById('disable2FAPass').value.trim();
     const msg = document.getElementById('disable2FAMsg');
-    if (!password) {
-      msg.textContent = 'Enter your password to disable 2FA';
+    if (!value) {
+      msg.textContent = 'Enter your password or 2FA code to disable';
       msg.className = 'profile-msg error';
       return;
     }
     try {
-      await API.disable2FA(password);
+      await API.disable2FA(value);
       msg.textContent = '2FA disabled successfully';
       msg.className = 'profile-msg success';
       document.getElementById('twoFactorEnabled').style.display = 'none';
@@ -193,6 +193,7 @@ API.setup2FA = function() {
 API.verify2FA = function(token) {
   return this.request('POST', '/profile/2fa/verify', { token });
 };
-API.disable2FA = function(password) {
-  return this.request('POST', '/profile/2fa/disable', { password });
+API.disable2FA = function(value) {
+  const body = /^\d{6}$/.test(value) ? { token: value } : { password: value };
+  return this.request('POST', '/profile/2fa/disable', body);
 };

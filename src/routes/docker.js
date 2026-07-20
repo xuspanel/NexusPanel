@@ -1,9 +1,13 @@
 const express = require('express');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminOnly } = require('../middleware/auth');
 const docker = require('../services/docker');
 
 const router = express.Router();
 router.use(authMiddleware);
+router.use((req, res, next) => {
+  if (['POST', 'PUT', 'DELETE'].includes(req.method)) return adminOnly(req, res, next);
+  next();
+});
 
 router.get('/containers', async (req, res) => {
   console.log('Docker containers endpoint hit, user:', req.user?.username);

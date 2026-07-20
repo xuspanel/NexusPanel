@@ -14,8 +14,8 @@ router.get('/status', adminOnly, (req, res) => {
   try { res.json(ftp.getFTPStatus()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/accounts', adminOnly, (req, res) => {
-  try { res.json(ftp.listFTPAccounts()); } catch (e) { res.status(500).json({ error: e.message }); }
+router.get('/accounts', adminOnly, async (req, res) => {
+  try { res.json(await ftp.listFTPAccounts()); } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/accounts/:username', adminOnly, (req, res) => {

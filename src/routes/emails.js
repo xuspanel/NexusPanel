@@ -4,10 +4,14 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { simpleParser } = require('mailparser');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminOnly } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authMiddleware);
+router.use((req, res, next) => {
+  if (['POST', 'PUT', 'DELETE'].includes(req.method)) return adminOnly(req, res, next);
+  next();
+});
 
 const EMAIL_DOMAINS_FILE = path.join(__dirname, '..', '..', 'data', 'email-domains.json');
 
@@ -373,6 +377,7 @@ router.post('/:username/send', async (req, res) => {
 
     const { to, cc, bcc, subject, body, attachments } = req.body;
     if (!to || !subject) return res.status(400).json({ error: 'To and Subject are required' });
+    if (/[\r\n]/.test(to + (cc || '') + (bcc || '') + subject)) return res.status(400).json({ error: 'Invalid characters in email fields' });
 
     const fromAddr = username + '@' + domain.trim();
     const messageId = '<' + Date.now() + '.' + crypto.randomBytes(8).toString('hex') + '@' + domain.trim() + '>';
@@ -443,6 +448,7 @@ router.post('/:username/move', async (req, res) => {
     const homeDir = await getHomeDir(username);
     const { messageId, fromFolder, toFolder } = req.body;
     if (!messageId || !toFolder) return res.status(400).json({ error: 'messageId and toFolder are required' });
+    if (/[\\/]|\.\./.test(messageId)) return res.status(400).json({ error: 'Invalid messageId' });
 
     const fromBase = getMaildirPath(homeDir, fromFolder || 'INBOX');
     const toBase = getMaildirPath(homeDir, toFolder);
@@ -481,6 +487,7 @@ router.post('/:username/delete', async (req, res) => {
     const homeDir = await getHomeDir(username);
     const { messageId, folder } = req.body;
     if (!messageId) return res.status(400).json({ error: 'messageId is required' });
+    if (/[\\/]|\.\./.test(messageId)) return res.status(400).json({ error: 'Invalid messageId' });
 
     const fromBase = getMaildirPath(homeDir, folder || 'INBOX');
     let sourcePath = null;

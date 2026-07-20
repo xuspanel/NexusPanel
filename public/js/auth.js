@@ -1,5 +1,3 @@
-let tempToken = null;
-
 document.addEventListener('DOMContentLoaded', async () => {
   const loginPage = document.getElementById('loginPage');
   const twoFactorPage = document.getElementById('twoFactorPage');
@@ -15,6 +13,9 @@ document.addEventListener('DOMContentLoaded', async () => {
   const sideNav = document.getElementById('sideNav');
   const sideNavOverlay = document.getElementById('sideNavOverlay');
   const navItems = document.querySelectorAll('.side-nav-item');
+
+  function getTempToken() { return sessionStorage.getItem('tempToken'); }
+  function setTempToken(v) { if (v) sessionStorage.setItem('tempToken', v); else sessionStorage.removeItem('tempToken'); }
 
   function closeSideNav() {
     sideNav.classList.remove('open');
@@ -141,7 +142,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     showPage('login');
     document.getElementById('loginPassword').value = '';
     document.getElementById('twoFactorCode').value = '';
-    tempToken = null;
+    setTempToken(null);
     history.replaceState(null, '', '/');
   });
 
@@ -170,12 +171,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
       const res = await API.login(username, password);
       if (res.twoFactorRequired) {
-        tempToken = res.tempToken;
+        setTempToken(res.tempToken);
         showPage('2fa');
         document.getElementById('twoFactorCode').focus();
         return;
       }
-      setNavUser(username, 'admin');
+      setNavUser(username, res.role || 'admin');
       showPage('dashboard');
       switchView('dashboard');
     } catch (err) {
@@ -195,9 +196,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     twoFactorBtn.disabled = true;
 
     try {
-      const res = await API.login2FA(tempToken, code);
-      tempToken = null;
-      setNavUser(res.username || 'admin', 'admin');
+      const res = await API.login2FA(getTempToken(), code);
+      setTempToken(null);
+      setNavUser(res.username || 'admin', res.role || 'admin');
       showPage('dashboard');
       switchView('dashboard');
     } catch (err) {

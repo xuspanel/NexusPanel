@@ -1,8 +1,8 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
 const crypto = require('crypto');
 const AdmZip = require('adm-zip');
+const { runSafe, runSafeSync } = require('../utils/shell');
 
 const BACKUP_ROOT = '/var/backups/nexuspanel';
 const META_FILE = path.join(__dirname, '..', '..', 'data', 'backups.json');
@@ -92,7 +92,9 @@ function backupDir(t) {
 
 function checkDiskSpace() {
   try {
-    const out = execSync("df -B1 " + BACKUP_ROOT + " 2>/dev/null | tail -1", { timeout: 5000 }).toString().trim();
+    const { stdout: dfOut } = runSafeSync('df', ['-B1', BACKUP_ROOT]);
+    const lines = dfOut.trim().split('\n');
+    const out = lines[lines.length - 1] || '';
     const parts = out.split(/\s+/);
     if (parts.length >= 4) {
       const avail = parseInt(parts[3]);
@@ -117,22 +119,19 @@ function admZipSize(zip, outputPath) {
   try { return { size: fs.statSync(outputPath).size }; } catch (_) { return { size: 0 }; }
 }
 
-function escape(s) { return "'" + s.replace(/'/g, "'\\''") + "'"; }
-
 function createDirArchive(sourceDir, outputPath) {
   if (!fs.existsSync(sourceDir)) return { size: 0, error: 'Directory not found: ' + sourceDir };
   try {
     const parent = path.dirname(sourceDir);
     const base = path.basename(sourceDir);
     const excludes = [
-      '*/node_modules/*', '*/.git/*',
-      '*/cache/*', '*/tmp/*',
-      '*/containerd/*', '*/docker/*',
-      '*/log/*', '*/apt/*',
-      '*/Maildir/*',
+      '-x', '*/node_modules/*', '-x', '*/.git/*',
+      '-x', '*/cache/*', '-x', '*/tmp/*',
+      '-x', '*/containerd/*', '-x', '*/docker/*',
+      '-x', '*/log/*', '-x', '*/apt/*',
+      '-x', '*/Maildir/*',
     ];
-    const excludeArgs = excludes.map(e => `-x ${escape(e)}`).join(' ');
-    execSync(`cd ${escape(parent)} && zip -r -q ${escape(outputPath)} ${escape(base)} ${excludeArgs}`, { timeout: 300000 });
+    runSafeSync('zip', ['-r', '-q', outputPath, base, ...excludes], { timeout: 300000, cwd: parent });
   } catch (_) {}
   try { return { size: fs.statSync(outputPath).size }; } catch (_) { return { size: 0, error: 'output not created (possibly too large)' }; }
 }
@@ -153,8 +152,8 @@ function createSQLArchive(dumpContent, outputPath, archiveName) {
 async function backupPostgreSQL(outputPath, timestamp) {
   const sqlName = 'PostgreSQL_Databases_' + timestamp + '.sql';
   try {
-    const dump = execSync('sudo -u postgres pg_dumpall --clean --if-exists 2>/dev/null', { timeout: 600000, maxBuffer: 500 * 1024 * 1024 });
-    const result = createSQLArchive(dump.toString(), outputPath, sqlName);
+    const { stdout: dump } = await runSafe('sudo', ['-u', 'postgres', 'pg_dumpall', '--clean', '--if-exists'], { timeout: 600000, maxBuffer: 500 * 1024 * 1024 });
+    const result = createSQLArchive(dump, outputPath, sqlName);
     return { ...result, name: sqlName };
   } catch (e) {
     const fallback = '-- PostgreSQL dump failed: ' + e.message;
@@ -347,7 +346,11 @@ function deleteBackup(timestamp) {
   meta.splice(idx, 1);
   saveMeta(meta);
   const p = backupDir(timestamp);
-  try { execSync('rm -rf ' + p, { timeout: 30000 }); } catch (_) {}
+  const resolved = path.resolve(p);
+  if (!resolved.startsWith(path.resolve(BACKUP_ROOT) + path.sep)) {
+    throw new Error('Path traversal detected');
+  }
+  try { fs.rmSync(resolved, { recursive: true, force: true }); } catch (_) {}
   return { ok: true };
 }
 

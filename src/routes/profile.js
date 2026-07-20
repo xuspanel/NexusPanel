@@ -69,11 +69,25 @@ router.post('/2fa/verify', (req, res) => {
 });
 
 router.post('/2fa/disable', (req, res) => {
-  const { password } = req.body;
-  if (!password) return res.status(400).json({ error: 'Password required to disable 2FA' });
-  if (!users.verifyPassword(req.user.username, password)) {
-    return res.status(400).json({ error: 'Invalid password' });
+  const { password, token } = req.body;
+  if (!password && !token) return res.status(400).json({ error: 'Password or verification code required to disable 2FA' });
+
+  if (password) {
+    if (!users.verifyPassword(req.user.username, password)) {
+      return res.status(400).json({ error: 'Invalid password' });
+    }
+  } else {
+    const secret = users.getTwoFactorSecret(req.user.username);
+    if (!secret) return res.status(400).json({ error: '2FA not configured' });
+    const verified = speakeasy.totp.verify({
+      secret,
+      encoding: 'base32',
+      token,
+      window: 1,
+    });
+    if (!verified) return res.status(400).json({ error: 'Invalid verification code' });
   }
+
   users.disableTwoFactor(req.user.username);
   res.json({ success: true, message: '2FA disabled' });
 });

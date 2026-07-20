@@ -11,7 +11,7 @@ window.initDomains = async function () {
     }
     await loadDomains();
   } catch (err) {
-    document.getElementById('domainsContent').innerHTML = '<div class="db-error"><span class="db-error-icon">\u26A0\uFE0F</span><span>' + err.message + '</span></div>';
+    document.getElementById('domainsContent').innerHTML = '<div class="db-error"><span class="db-error-icon">\u26A0\uFE0F</span><span>' + escHtml(err.message) + '</span></div>';
   }
 };
 

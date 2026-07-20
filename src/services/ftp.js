@@ -1,20 +1,21 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { execFile, spawn } = require('child_process');
+const { promisify } = require('util');
+const { runSafeSync, validators } = require('../utils/shell');
+
+const execFileAsync = promisify(execFile);
 
 const USERLIST_FILE = '/etc/vsftpd/user_list';
 const FTPUSERS_FILE = '/etc/vsftpd/ftpusers';
 const VSFTPD_LOG = '/var/log/xferlog';
 const USER_CONFIG_DIR = '/etc/vsftpd/user_conf';
 
-function safeExec(cmd) {
-  try {
-    return execSync(cmd, { timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
-  } catch (_) { return ''; }
-}
-
 function userExists(username) {
-  return safeExec('id ' + username + ' 2>/dev/null && echo YES || echo NO').includes('YES');
+  try {
+    execFile.sync('id', ['-u', username], { stdio: 'ignore' });
+    return true;
+  } catch { return false; }
 }
 
 function readLines(filePath) {
@@ -74,22 +75,30 @@ function writeUserConfig(username, config) {
   }
 }
 
-function getAllSystemUsers() {
-  const out = safeExec("getent passwd | awk -F: '$3>=1000 || $3==0 {print $1\":\"$3\":\"$6\":\"$7}'");
-  if (!out) return [];
-  return out.split('\n').filter(Boolean).map(line => {
-    const parts = line.split(':');
-    return {
-      username: parts[0],
-      uid: parseInt(parts[1]) || 0,
-      home: parts[2] || '',
-      shell: parts[3] || '',
-    };
-  });
+async function getAllSystemUsers() {
+  try {
+    const { stdout } = await execFileAsync('getent', ['passwd']);
+    const result = [];
+    stdout.split('\n').filter(Boolean).forEach(line => {
+      const parts = line.split(':');
+      if (parts.length >= 7) {
+        const uid = parseInt(parts[2], 10);
+        if (uid >= 1000 || uid === 0) {
+          result.push({
+            username: parts[0],
+            uid,
+            home: parts[5],
+            shell: parts[6],
+          });
+        }
+      }
+    });
+    return result;
+  } catch { return []; }
 }
 
-function listFTPAccounts() {
-  const systemUsers = getAllSystemUsers();
+async function listFTPAccounts() {
+  const systemUsers = await getAllSystemUsers();
   const allowedSet = new Set(readLines(USERLIST_FILE));
   const deniedSet = new Set(readLines(FTPUSERS_FILE));
 
@@ -125,7 +134,7 @@ function getFTPUserConfig(username) {
   const inUserlist = allowedSet.has(username);
   const inFtpusers = deniedSet.has(username);
   const uc = readUserConfig(username);
-  const home = safeExec('getent passwd ' + username + " 2>/dev/null | cut -d: -f6") || '/home/' + username;
+  const home = '/home/' + username;
   const quota = getFTPQuota(home);
 
   return {
@@ -175,14 +184,17 @@ function disableFTP(username) {
 
 function createFTPUser(username, password, homeBase, maxRate, maxClients, maxPerIP) {
   if (!username || !password) throw new Error('Username and password required');
-  if (!/^[a-zA-Z0-9_.-]+$/.test(username)) throw new Error('Invalid username');
+  if (!validators.username.test(username)) throw new Error('Invalid username');
   if (password.length < 6) throw new Error('Password must be at least 6 characters');
 
   if (userExists(username)) throw new Error('System user already exists');
 
   const home = (homeBase && homeBase !== '/home/' + username) ? homeBase : '/home/' + username;
-  safeExec('useradd -m -d ' + home + ' -s /sbin/nologin -c "FTP User" ' + username);
-  safeExec("echo '" + username + ':' + password + "' | chpasswd");
+  runSafeSync('useradd', ['-m', '-d', home, '-s', '/sbin/nologin', '-c', 'FTP User', username]);
+
+  const proc = spawn('chpasswd', [], { timeout: 5000 });
+  proc.stdin.write(username + ':' + password + '\n');
+  proc.stdin.end();
 
   enableFTP(username);
 
@@ -197,16 +209,19 @@ function createFTPUser(username, password, homeBase, maxRate, maxClients, maxPer
 }
 
 function editFTPUser(username, updates) {
+  if (!validators.username.test(username)) throw new Error('Invalid username');
   if (!userExists(username)) throw new Error('User not found: ' + username);
 
   if (updates.password) {
-    safeExec("echo '" + username + ':' + updates.password + "' | chpasswd");
+    const proc = spawn('chpasswd', [], { timeout: 5000 });
+    proc.stdin.write(username + ':' + updates.password + '\n');
+    proc.stdin.end();
   }
 
   if (updates.home) {
-    const oldHome = safeExec("getent passwd " + username + " 2>/dev/null | cut -d: -f6") || '';
+    const oldHome = '/home/' + username;
     if (updates.home !== oldHome && updates.home) {
-      safeExec('usermod -d ' + updates.home + ' -m ' + username);
+      runSafeSync('usermod', ['-d', updates.home, '-m', username]);
     }
   }
 
@@ -226,9 +241,10 @@ function editFTPUser(username, updates) {
 }
 
 function deleteFTPUser(username) {
+  if (!validators.username.test(username)) throw new Error('Invalid username');
   if (userExists(username)) {
-    safeExec('pkill -9 -u ' + username + ' 2>/dev/null; sleep 0.5');
-    safeExec('/bin/sh -c "userdel -rf ' + username + ' 2>/dev/null"');
+    try { execFile.sync('pkill', ['-9', '-u', username], { stdio: 'ignore' }); } catch {}
+    try { execFile.sync('userdel', ['-rf', username], { timeout: 10000, stdio: 'ignore' }); } catch {}
   }
 
   const allowed = readLines(USERLIST_FILE).filter(u => u !== username);
@@ -247,14 +263,16 @@ function deleteFTPUser(username) {
 function getFTPQuota(homePath) {
   if (!homePath || !fs.existsSync(homePath)) return { size: 0, used: 0 };
   try {
-    const sizeStr = safeExec('du -sb ' + homePath + " 2>/dev/null | cut -f1");
-    const used = parseInt(sizeStr) || 0;
+    const result = runSafeSync('du', ['-sb', homePath]);
+    if (result.status !== 0) return { size: 0, used: 0 };
+    const used = parseInt(result.stdout.split('\t')[0]) || 0;
     return { size: 0, used };
   } catch (_) { return { size: 0, used: 0 }; }
 }
 
 function getFTPStatus() {
-  const isActive = safeExec('systemctl is-active vsftpd 2>/dev/null') === 'active';
+  const result = runSafeSync('systemctl', ['is-active', 'vsftpd']);
+  const isActive = result.status === 0 && result.stdout.trim() === 'active';
   const allowedCount = readLines(USERLIST_FILE).length;
   const deniedCount = readLines(FTPUSERS_FILE).length;
   const config = (() => {
@@ -268,12 +286,15 @@ function getFTPStatus() {
   const chrootLocal = config.includes('chroot_local_user=YES');
   const writeableChroot = config.includes('allow_writeable_chroot=YES');
 
+  const verResult = runSafeSync('vsftpd', ['-v']);
+  const version = (verResult.stderr || verResult.stdout).replace('vsftpd: version ', '').trim() || 'unknown';
+
   return {
     isActive, allowedUsers: allowedCount, deniedUsers: deniedCount,
     passiveRange: passivePorts + '-' + passivePortsMax,
     maxClients: parseInt(maxClients), maxPerIP: parseInt(maxPerIP),
     chrootEnabled: chrootLocal, writeableChroot,
-    version: safeExec('vsftpd -v 2>&1 || echo unknown').replace('vsftpd: version ', ''),
+    version,
   };
 }
 

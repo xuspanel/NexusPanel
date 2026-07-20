@@ -1,13 +1,4 @@
-const { exec } = require('child_process');
-
-function runCmd(cmd, timeout = 15000) {
-  return new Promise((resolve, reject) => {
-    exec(cmd, { maxBuffer: 10 * 1024 * 1024, timeout }, (err, stdout, stderr) => {
-      if (err) return reject(new Error(stderr.trim() || err.message));
-      resolve(stdout.trim());
-    });
-  });
-}
+const { runSafe, runSafeSync, validators } = require('../utils/shell');
 
 function parseJsonLines(text) {
   const lines = text.split('\n').filter(l => l.trim());
@@ -15,52 +6,59 @@ function parseJsonLines(text) {
 }
 
 async function getContainers(all = true) {
-  const flag = all ? '-a' : '';
-  const raw = await runCmd(`docker ps ${flag} --no-trunc --format '{{json .}}' 2>/dev/null`);
-  if (!raw) return [];
-  return parseJsonLines(raw);
+  const flags = all ? ['-a'] : [];
+  const { stdout } = await runSafe('docker', ['ps', ...flags, '--no-trunc', '--format', '{{json .}}'], { timeout: 15000 });
+  if (!stdout) return [];
+  return parseJsonLines(stdout);
 }
 
 async function getImages() {
-  const raw = await runCmd("docker images --no-trunc --format '{{json .}}' 2>/dev/null");
-  if (!raw) return [];
-  return parseJsonLines(raw);
+  const { stdout } = await runSafe('docker', ['images', '--no-trunc', '--format', '{{json .}}'], { timeout: 15000 });
+  if (!stdout) return [];
+  return parseJsonLines(stdout);
 }
 
 async function getInfo() {
-  const raw = await runCmd("docker info --format '{{json .}}' 2>/dev/null");
-  if (!raw) return {};
-  return JSON.parse(raw);
+  const { stdout } = await runSafe('docker', ['info', '--format', '{{json .}}'], { timeout: 10000 });
+  if (!stdout) return {};
+  return JSON.parse(stdout);
 }
 
 async function startContainer(id) {
-  await runCmd(`docker start ${id} 2>/dev/null`);
+  if (!validators.containerId.test(id)) throw new Error('Invalid container ID');
+  await runSafe('docker', ['start', id]);
   return { success: true };
 }
 
 async function stopContainer(id) {
-  await runCmd(`docker stop ${id} 2>/dev/null`);
+  if (!validators.containerId.test(id)) throw new Error('Invalid container ID');
+  await runSafe('docker', ['stop', id]);
   return { success: true };
 }
 
 async function restartContainer(id) {
-  await runCmd(`docker restart ${id} 2>/dev/null`);
+  if (!validators.containerId.test(id)) throw new Error('Invalid container ID');
+  await runSafe('docker', ['restart', id]);
   return { success: true };
 }
 
 async function removeContainer(id) {
-  await runCmd(`docker rm -f ${id} 2>/dev/null`);
+  if (!validators.containerId.test(id)) throw new Error('Invalid container ID');
+  await runSafe('docker', ['rm', '-f', id]);
   return { success: true };
 }
 
 async function removeImage(id) {
-  await runCmd(`docker rmi ${id} 2>/dev/null`);
+  if (!validators.imageName.test(id)) throw new Error('Invalid image name');
+  await runSafe('docker', ['rmi', id]);
   return { success: true };
 }
 
 async function getContainerLogs(id, tail = 200) {
-  const raw = await runCmd(`docker logs --tail ${tail} ${id} 2>&1`, 10000);
-  return raw;
+  if (!validators.containerId.test(id)) throw new Error('Invalid container ID');
+  if (!validators.numeric.test(String(tail))) throw new Error('Invalid tail count');
+  const { stdout } = await runSafe('docker', ['logs', '--tail', String(tail), id], { timeout: 10000 });
+  return stdout;
 }
 
 module.exports = { getContainers, getImages, getInfo, startContainer, stopContainer, restartContainer, removeContainer, removeImage, getContainerLogs };

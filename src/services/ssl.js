@@ -1,6 +1,6 @@
-const { execSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
+const { runSafeSync, validators } = require('../utils/shell');
 
 function list() {
   const certs = [];
@@ -11,9 +11,12 @@ function list() {
     for (const d of domains) {
       const p = path.join(liveDir, d.name);
       try {
-        const cert = fs.readFileSync(path.join(p, 'cert.pem'), 'utf8');
-        const notAfter = execSync("openssl x509 -enddate -noout -in " + path.join(p, 'cert.pem'), { encoding: 'utf8', timeout: 5000 }).replace('notAfter=', '').trim();
-        const issuer = execSync("openssl x509 -issuer -noout -in " + path.join(p, 'cert.pem'), { encoding: 'utf8', timeout: 5000 }).replace('issuer=', '').trim();
+        const notAfterOut = runSafeSync('openssl', ['x509', '-enddate', '-noout', '-in', path.join(p, 'cert.pem')]);
+        if (notAfterOut.status !== 0) continue;
+        const notAfter = notAfterOut.stdout.replace('notAfter=', '').trim();
+        const issuerOut = runSafeSync('openssl', ['x509', '-issuer', '-noout', '-in', path.join(p, 'cert.pem')]);
+        if (issuerOut.status !== 0) continue;
+        const issuer = issuerOut.stdout.replace('issuer=', '').trim();
         const expiry = new Date(notAfter);
         const daysLeft = Math.ceil((expiry - Date.now()) / 86400000);
         certs.push({ domain: d.name, path: p, issuer, notAfter, expiry: expiry.toISOString(), daysLeft });
@@ -24,22 +27,23 @@ function list() {
 }
 
 function issue(domain, opts) {
+  if (!validators.domain.test(domain)) throw new Error('Invalid domain');
   const email = opts?.email || 'admin@localhost';
-  try {
-    execSync('certbot certonly --standalone -d ' + domain + ' --non-interactive --agree-tos -m ' + email + ' 2>&1', { timeout: 120000 });
-    return { ok: true, domain };
-  } catch (e) {
-    return { error: e.stderr || e.message };
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new Error('Invalid email');
+  const result = runSafeSync('certbot', ['certonly', '--standalone', '-d', domain, '--non-interactive', '--agree-tos', '-m', email], { timeout: 120000 });
+  if (result.status !== 0) {
+    return { error: result.stderr || result.stdout || result.error || 'certbot failed' };
   }
+  return { ok: true, domain };
 }
 
 function renew(domain) {
-  try {
-    execSync('certbot renew --cert-name ' + domain + ' --force-renewal 2>&1', { timeout: 60000 });
-    return { ok: true };
-  } catch (e) {
-    return { error: e.stderr || e.message };
+  if (!validators.domain.test(domain)) throw new Error('Invalid domain');
+  const result = runSafeSync('certbot', ['renew', '--cert-name', domain, '--force-renewal'], { timeout: 60000 });
+  if (result.status !== 0) {
+    return { error: result.stderr || result.stdout || result.error || 'certbot renew failed' };
   }
+  return { ok: true };
 }
 
 module.exports = { list, issue, renew };

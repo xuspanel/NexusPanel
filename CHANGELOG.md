@@ -1,5 +1,24 @@
 # Changelog
 
+## [1.10.0] - 2026-07-20
+### Security
+- **Command injection eliminated**: all `exec()`/`execSync()` calls in services (backups, cron, docker, domains, firewall, ftp, processes, services, ssl, users) replaced with `spawn`/`spawnSync` argument arrays via new `runSafe`/`runSafeSync` utilities in `src/utils/shell.js`. No user input is ever interpolated into shell strings
+- **Path traversal prevented**: `safeResolve()` path jail restricts all file operations to allowed roots (`/`, `/bin`, `/boot`, `/etc`, `/home`, `/var`, etc.) and denies sensitive paths (`/etc/shadow`, `/etc/ssh/`, `/etc/pam.d/`). Zip-slip prevention via `resolveSafeChild()` for both zip and tar archives. `/` resolves to `/var/www` by default
+- **XSS eliminated**: new `escapeHtml`/`escapeAttr` functions in `public/js/sanitize.js` (loaded first). All `innerHTML` injections in filemanager.js, emails.js, domains.js, ftp.js, users.js now escape user-controlled content. Backend escapes `err.message` before sending HTML responses
+- **Auth hardening**: `JWT_SECRET` validated at startup (process exits if unset). Invalid tokens logged instead of silently caught. Login rate-limited (10 attempts/15 min window). Logout properly clears cookie with matching options. Cookie set with explicit `path: '/'`
+- **Admin-only enforcement**: `adminOnly` middleware applied to POST/PUT/DELETE on all 13 privileged route files (backups, cron, dashboard, databases, docker, emails, firewall, logs, phpfpm, processes, services, ssl, updates). File manager routes (`/api/files/*`) also require admin. Local `adminOnly` duplicate in backups.js removed
+- **CSRF protection**: origin validation on all state-changing requests (POST/PUT/DELETE/PATCH) rejects mismatched origins
+- **Terminal environment sanitized`: `SAFE_ENV_KEYS` allowlist prevents leaking `JWT_SECRET`, `ADMIN_PASS`, and other sensitive env vars into pty sessions
+- **CRLF injection blocked**: email `to`, `cc`, `bcc`, `subject` headers rejected if they contain `\r` or `\n`
+- **Path traversal in backups/emails routes**: timestamp validated against `/^\d{13}$/`; `messageId` sanitized against `/[\\/]|\.\./`
+- **CSP hardened**: removed `'unsafe-eval'` from script-src
+- **2FA disable verification**: accepts either `password` (bcrypt) or `token` (TOTP verify); frontend auto-detects 6-digit input and sends as `token`
+
+### Fixed
+- **License service**: removed hardcoded HMAC secret fallback (`getSharedSecret` throws if `LICENSE_SECRET` unset); fixed cache bypass bug (returned `true` instead of `false`); simplified dead ternary; silent `catch {}` blocks now log errors
+- **.env.example/config.example.json**: strengthened `JWT_SECRET`/`ADMIN_PASS` defaults; set `cors_origin` to `same-origin`
+- **Hardcoded server domain removed**: `emails.js` used `const SERVER = 's2u.me'` — replaced with `window.location.hostname`
+
 ## [1.9.6] - 2026-07-19
 ### Fixed
 - **Table data search root cause**: the previous fix never reached production because the live process is managed by `systemd`. The `nexuspanel.service` has now been restarted with the corrected code.

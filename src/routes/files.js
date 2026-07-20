@@ -2,11 +2,12 @@ const express = require('express');
 const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminOnly } = require('../middleware/auth');
 const fm = require('../services/filemanager');
 
 const router = express.Router();
 router.use(authMiddleware);
+router.use(adminOnly);
 
 const upload = multer({
   dest: '/tmp/nexus-uploads',

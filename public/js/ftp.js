@@ -9,7 +9,7 @@ window.initFTP = async function () {
     }
     await loadFTP();
   } catch (err) {
-    document.getElementById('ftpContent').innerHTML = '<div class="db-error"><span class="db-error-icon">⚠️</span><span>' + err.message + '</span></div>';
+    document.getElementById('ftpContent').innerHTML = '<div class="db-error"><span class="db-error-icon">⚠️</span><span>' + escapeHtml(err.message) + '</span></div>';
   }
 };
 

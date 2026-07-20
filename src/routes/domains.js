@@ -1,14 +1,9 @@
 const express = require('express');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminOnly } = require('../middleware/auth');
 const domains = require('../services/domains');
 
 const router = express.Router();
 router.use(authMiddleware);
-
-function adminOnly(req, res, next) {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
-  next();
-}
 
 router.use(adminOnly);
 

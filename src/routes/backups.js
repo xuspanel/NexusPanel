@@ -1,23 +1,12 @@
 const express = require('express');
 const fs = require('fs');
 const path = require('path');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminOnly } = require('../middleware/auth');
 const backups = require('../services/backups');
 const scheduler = require('../services/backup-scheduler');
 
-function adminOnly(req, res, next) {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
-  next();
-}
-
 const router = express.Router();
 router.use(authMiddleware);
-
-function adminOnly(req, res, next) {
-  if (req.user?.role !== 'admin') return res.status(403).json({ error: 'Admin access required' });
-  next();
-}
-
 router.use(adminOnly);
 
 router.get('/defs', (req, res) => {
@@ -71,8 +60,11 @@ router.get('/:timestamp', (req, res) => {
   }
 });
 
+const TIMESTAMP_RE = /^\d{13}$/;
+
 router.get('/:timestamp/download', (req, res) => {
   try {
+    if (!TIMESTAMP_RE.test(req.params.timestamp)) return res.status(400).json({ error: 'Invalid timestamp' });
     const info = backups.getBackupInfo(req.params.timestamp);
     const AdmZip = require('adm-zip');
     const zip = new AdmZip();
@@ -95,6 +87,7 @@ router.get('/:timestamp/download', (req, res) => {
 
 router.get('/:timestamp/download/:filename', (req, res) => {
   try {
+    if (!TIMESTAMP_RE.test(req.params.timestamp)) return res.status(400).json({ error: 'Invalid timestamp' });
     const { path: filePath, size } = backups.resolveDownload(req.params.timestamp, req.params.filename);
     const stat = fs.statSync(filePath);
     res.setHeader('Content-Type', 'application/zip');
@@ -110,6 +103,7 @@ router.get('/:timestamp/download/:filename', (req, res) => {
 
 router.delete('/:timestamp', (req, res) => {
   try {
+    if (!TIMESTAMP_RE.test(req.params.timestamp)) return res.status(400).json({ error: 'Invalid timestamp' });
     res.json(backups.deleteBackup(req.params.timestamp));
   } catch (e) {
     res.status(400).json({ error: e.message });

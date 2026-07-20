@@ -1,9 +1,13 @@
 const express = require('express');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminOnly } = require('../middleware/auth');
 const db = require('../services/databases');
 
 const router = express.Router();
 router.use(authMiddleware);
+router.use((req, res, next) => {
+  if (['POST', 'PUT', 'DELETE'].includes(req.method)) return adminOnly(req, res, next);
+  next();
+});
 
 router.get('/users', async (req, res) => {
   try {

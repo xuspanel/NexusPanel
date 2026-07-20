@@ -7,7 +7,41 @@ const users = require('../services/users');
 
 const router = express.Router();
 
+const loginAttempts = new Map();
+
+function loginRateLimiter(ip) {
+  const now = Date.now();
+  const windowMs = 15 * 60 * 1000;
+  const maxAttempts = 10;
+
+  let record = loginAttempts.get(ip);
+  if (!record || (now - record.windowStart) > windowMs) {
+    record = { count: 0, windowStart: now };
+    loginAttempts.set(ip, record);
+  }
+
+  record.count++;
+  if (record.count > maxAttempts) {
+    return false;
+  }
+  return true;
+}
+
+setInterval(() => {
+  const cutoff = Date.now() - 15 * 60 * 1000;
+  for (const [ip, record] of loginAttempts) {
+    if (record.windowStart < cutoff) loginAttempts.delete(ip);
+  }
+}, 60 * 1000);
+
+const COOKIE_OPTIONS = { httpOnly: true, secure: false, sameSite: 'strict', path: '/' };
+
 router.post('/login', (req, res) => {
+  const ip = req.ip || req.connection.remoteAddress;
+  if (!loginRateLimiter(ip)) {
+    console.warn('[AUTH] Rate limit exceeded for', ip);
+    return res.status(429).json({ error: 'Too many login attempts. Try again later.' });
+  }
   const { username, password } = req.body;
   if (!username || !password) {
     return res.status(400).json({ error: 'Username and password required' });
@@ -32,11 +66,9 @@ router.post('/login', (req, res) => {
     process.env.JWT_SECRET,
     { expiresIn: '2h' }
   );
-  const secure = req.protocol === 'https' && req.secure;
-  res.cookie('token', token, {
-    httpOnly: true, secure, sameSite: 'strict', maxAge: 2 * 60 * 60 * 1000,
-  });
-  res.json({ success: true, username });
+  const cookieOpts = { ...COOKIE_OPTIONS, secure: req.protocol === 'https' && req.secure, maxAge: 2 * 60 * 60 * 1000 };
+  res.cookie('token', token, cookieOpts);
+  res.json({ success: true, username, role: user.role });
 });
 
 router.post('/login/2fa', (req, res) => {
@@ -64,19 +96,17 @@ router.post('/login/2fa', (req, res) => {
       process.env.JWT_SECRET,
       { expiresIn: '2h' }
     );
-    const secure = req.protocol === 'https' && req.secure;
-    res.cookie('token', token, {
-      httpOnly: true, secure, sameSite: 'strict', maxAge: 2 * 60 * 60 * 1000,
-    });
-    res.json({ success: true, username: decoded.username });
+    const cookieOpts = { ...COOKIE_OPTIONS, secure: req.protocol === 'https' && req.secure, maxAge: 2 * 60 * 60 * 1000 };
+    res.cookie('token', token, cookieOpts);
+    res.json({ success: true, username: decoded.username, role: decoded.role });
   } catch {
     return res.status(401).json({ error: 'Temp token expired or invalid' });
   }
 });
 
 router.post('/logout', (req, res) => {
-  const secure = req.protocol === 'https' && req.secure;
-  res.clearCookie('token', { httpOnly: true, secure, sameSite: 'strict' });
+  const cookieOpts = { ...COOKIE_OPTIONS, secure: req.protocol === 'https' && req.secure };
+  res.clearCookie('token', cookieOpts);
   res.json({ success: true });
 });
 

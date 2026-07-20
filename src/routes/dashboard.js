@@ -1,6 +1,6 @@
 const express = require('express');
 const { exec } = require('child_process');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminOnly } = require('../middleware/auth');
 const { getStats, isRebooting } = require('../services/system');
 
 const router = express.Router();
@@ -16,7 +16,7 @@ router.get('/stats', async (req, res) => {
   }
 });
 
-router.post('/reboot', (req, res) => {
+router.post('/reboot', adminOnly, (req, res) => {
   try {
     res.json({ message: 'Reboot initiated', rebooting: true });
     exec('sudo /sbin/shutdown -r +1 "NexusPanel initiated reboot"', {

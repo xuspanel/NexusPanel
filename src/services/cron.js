@@ -1,11 +1,20 @@
-const { execSync } = require('child_process');
+const { execFileSync } = require('child_process');
 const fs = require('fs');
 
-function list(owner) {
+function runCrontab(args) {
   try {
-    const raw = execSync('crontab -l -u ' + owner + ' 2>/dev/null', { encoding: 'utf8', timeout: 5000 });
-    return parse(raw);
-  } catch { return []; }
+    const stdout = execFileSync('crontab', args, { timeout: 5000, encoding: 'utf8', stdio: ['pipe', 'pipe', 'pipe'] });
+    return { stdout, stderr: '', status: 0 };
+  } catch (e) {
+    return { stdout: e.stdout || '', stderr: e.stderr || '', status: e.status || 1 };
+  }
+}
+
+function list(owner) {
+  const safeOwner = owner.replace(/[^a-zA-Z0-9_.-]/g, '');
+  const result = runCrontab(['-l', '-u', safeOwner]);
+  if (result.status !== 0) return [];
+  return parse(result.stdout);
 }
 
 function parse(raw) {
@@ -34,11 +43,12 @@ function format(entries) {
 }
 
 function save(owner, entries) {
+  const safeOwner = owner.replace(/[^a-zA-Z0-9_.-]/g, '');
   const content = format(entries);
-  const tmp = '/tmp/cron_' + owner + '_tmp';
+  const tmp = '/tmp/cron_' + safeOwner + '_tmp';
   fs.writeFileSync(tmp, content);
-  execSync('crontab -u ' + owner + ' ' + tmp + ' 2>/dev/null', { timeout: 5000 });
-  fs.unlinkSync(tmp);
+  runCrontab(['-u', safeOwner, tmp]);
+  try { fs.unlinkSync(tmp); } catch {}
 }
 
 function add(owner, entry) {
@@ -63,10 +73,13 @@ function remove(owner, index) {
 
 function getOwners() {
   try {
-    const raw = execSync("cut -d: -f1 /etc/passwd", { encoding: 'utf8', timeout: 3000 });
+    const raw = execFileSync('cut', ['-d:', '-f1', '/etc/passwd'], { encoding: 'utf8', timeout: 3000 });
     const users = raw.trim().split('\n');
     return users.filter(u => {
-      try { execSync('crontab -l -u ' + u + ' 2>/dev/null', { timeout: 2000 }); return true; } catch { return false; }
+      try {
+        execFileSync('crontab', ['-l', '-u', u], { timeout: 2000, stdio: ['ignore', 'pipe', 'pipe'] });
+        return true;
+      } catch { return false; }
     });
   } catch { return []; }
 }

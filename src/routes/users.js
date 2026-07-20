@@ -1,39 +1,29 @@
 const express = require('express');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminOnly } = require('../middleware/auth');
 const users = require('../services/users');
 
 const router = express.Router();
 
-function adminOnly(req, res, next) {
-  if (req.user?.role !== 'admin') {
-    return res.status(403).json({ error: 'Admin access required' });
-  }
-  next();
-}
-
-// List all VPS system users
-router.get('/list', adminOnly, (req, res) => {
+router.get('/list', adminOnly, async (req, res) => {
   try {
-    const systemUsers = users.listSystemUsers();
+    const systemUsers = await users.listSystemUsers();
     res.json(systemUsers);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get single user details
 router.get('/:username', adminOnly, (req, res) => {
   try {
-    const u = users.getSystemUser(req.params.username);
+    const u = users.getPanelUser(req.params.username);
     if (!u) return res.status(404).json({ error: 'User not found' });
-    res.json(u);
+    res.json({ username: req.params.username, ...u });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-// Create a VPS user
-router.post('/create', adminOnly, (req, res) => {
+router.post('/create', adminOnly, async (req, res) => {
   try {
     const { username, password, shell, groups, sudo, createPanel, panelRole, email, homeBase, gecos } = req.body;
 
@@ -47,7 +37,7 @@ router.post('/create', adminOnly, (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    const result = users.createSystemUser(username, password, {
+    const result = await users.createSystemUser(username, password, {
       shell: shell || '/bin/bash',
       groups: groups || [],
       sudo: sudo === true,
@@ -59,15 +49,16 @@ router.post('/create', adminOnly, (req, res) => {
     });
 
     if (createPanel !== false && email) {
-      const localPart = username;
       try {
-        const homeDir = '/home/' + localPart;
-        const mailCmds = [
-          'mkdir -p ' + homeDir + '/Maildir/cur ' + homeDir + '/Maildir/new ' + homeDir + '/Maildir/tmp',
-          'chown -R ' + localPart + ':' + localPart + ' ' + homeDir + '/Maildir',
-          'chmod -R 700 ' + homeDir + '/Maildir',
-        ];
-        require('child_process').execSync(mailCmds.join(' && '), { timeout: 5000, stdio: 'ignore' });
+        const homeDir = '/home/' + username;
+        const fs = require('fs');
+        const path = require('path');
+        for (const dir of ['Maildir/cur', 'Maildir/new', 'Maildir/tmp']) {
+          fs.mkdirSync(path.join(homeDir, dir), { recursive: true });
+        }
+        const { execFileSync } = require('child_process');
+        execFileSync('chown', ['-R', username + ':' + username, path.join(homeDir, 'Maildir')], { timeout: 5000, stdio: 'ignore' });
+        execFileSync('chmod', ['-R', '700', path.join(homeDir, 'Maildir')], { timeout: 5000, stdio: 'ignore' });
       } catch (_) {}
     }
 
@@ -77,8 +68,7 @@ router.post('/create', adminOnly, (req, res) => {
   }
 });
 
-// Update a VPS user
-router.put('/:username', adminOnly, (req, res) => {
+router.put('/:username', adminOnly, async (req, res) => {
   try {
     const { password, shell, groups, sudo, lock, unlock, panelRole, email } = req.body;
 
@@ -92,29 +82,31 @@ router.put('/:username', adminOnly, (req, res) => {
     if (panelRole !== undefined) opts.panelRole = panelRole;
     if (email !== undefined) opts.email = email;
 
-    const result = users.updateSystemUser(req.params.username, opts);
+    const result = await users.updateSystemUser(req.params.username, opts);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// Delete a VPS user
-router.delete('/:username', adminOnly, (req, res) => {
+router.delete('/:username', adminOnly, async (req, res) => {
   try {
-    const result = users.deleteSystemUser(req.params.username);
+    const result = await users.deleteSystemUser(req.params.username);
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-// Get available groups and shells (for form options)
-router.get('/meta/options', adminOnly, (req, res) => {
-  res.json({
-    groups: users.getAvailableGroups(),
-    shells: users.getAvailableShells(),
-  });
+router.get('/meta/options', adminOnly, async (req, res) => {
+  try {
+    res.json({
+      groups: await users.getAvailableGroups(),
+      shells: users.getAvailableShells(),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
 });
 
 module.exports = router;

@@ -104,14 +104,19 @@ function fmRenderEntries() {
     const icon = getIcon(e);
     const color = getColor(e);
     const selected = fmState.selected.has(e.path);
-    return `<div class="fm-entry${selected ? ' selected' : ''}${e.isHidden ? ' hidden' : ''}" data-path="${e.path}" data-name="${e.name}" data-type="${e.type}">
+    const safeName = escapeHtml(e.name);
+    const safePath = escapeHtml(e.path);
+    const safeSize = escapeHtml(e.type === 'directory' ? '—' : e.sizeFormatted);
+    const safeDate = escapeHtml(e.modifiedFormatted);
+    const safePerms = escapeHtml(e.permissions);
+    return `<div class="fm-entry${selected ? ' selected' : ''}${e.isHidden ? ' hidden' : ''}" data-path="${safePath}" data-name="${safeName}" data-type="${e.type}">
       <span class="fm-entry-icon" style="color:${color}">${icon}</span>
       <div class="fm-entry-info">
-        <div class="fm-entry-name" title="${e.name}${e.isSymlink ? ' (symlink)' : ''}">${e.name}</div>
+        <div class="fm-entry-name" title="${safeName}${e.isSymlink ? ' (symlink)' : ''}">${safeName}</div>
         <div class="fm-entry-meta">
-          <span class="fm-entry-size">${e.type === 'directory' ? '—' : e.sizeFormatted}</span>
-          <span class="fm-entry-date">${e.modifiedFormatted}</span>
-          <span class="fm-entry-perms">${e.permissions}</span>
+          <span class="fm-entry-size">${safeSize}</span>
+          <span class="fm-entry-date">${safeDate}</span>
+          <span class="fm-entry-perms">${safePerms}</span>
         </div>
       </div>
     </div>`;

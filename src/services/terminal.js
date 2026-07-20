@@ -63,6 +63,22 @@ function deletePreset(id) {
   return { ok: true };
 }
 
+const SAFE_ENV_KEYS = new Set([
+  'HOME', 'USER', 'LOGNAME', 'SHELL', 'TERM', 'PATH', 'LANG', 'LC_ALL',
+  'EDITOR', 'PAGER', 'DISPLAY', 'XAUTHORITY',
+  'HOSTNAME', 'HOST', 'TZ', 'PWD', 'OLDPWD',
+]);
+
+function sanitizeEnv(extra) {
+  const clean = {};
+  for (const key of SAFE_ENV_KEYS) {
+    if (process.env[key] !== undefined) clean[key] = process.env[key];
+  }
+  clean.PATH = process.env.PATH || '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+  clean.TERM = 'xterm-256color';
+  return { ...clean, ...extra };
+}
+
 function createTerminalSession(cols, rows, env) {
   const shell = process.env.SHELL || (os.platform() === 'win32' ? 'powershell.exe' : 'bash');
   const session = pty.spawn(shell, [], {
@@ -70,7 +86,7 @@ function createTerminalSession(cols, rows, env) {
     cols: cols || 80,
     rows: rows || 24,
     cwd: process.env.HOME || '/root',
-    env: { ...process.env, TERM: 'xterm-256color', ...env },
+    env: sanitizeEnv(env),
   });
 
   return session;

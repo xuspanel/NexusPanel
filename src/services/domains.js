@@ -1,21 +1,12 @@
 const fs = require('fs');
 const path = require('path');
-const { execSync } = require('child_process');
+const { runSafeSync, validators } = require('../utils/shell');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const DOMAINS_FILE = path.join(DATA_DIR, 'domains.json');
 const NGINX_CONF_DIR = '/etc/nginx/conf.d';
 const WWW_DIR = '/var/www';
 const NGINX_LOG_DIR = '/var/log/nginx';
-
-function safeExec(cmd) {
-  try {
-    return execSync(cmd, { timeout: 120000, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
-  } catch (e) {
-    const out = (e.stdout ? e.stdout.toString().trim() : '') + '\n' + (e.stderr ? e.stderr.toString().trim() : '');
-    return out.trim() || e.message;
-  }
-}
 
 function loadDomains() {
   try {
@@ -32,13 +23,15 @@ function saveDomains(data) {
 }
 
 function nginxTestAndReload() {
-  const test = safeExec('nginx -t 2>&1');
-  if (test.includes('test failed') || test.includes('[emerg]')) {
-    throw new Error('nginx config test failed:\n' + test);
+  const test = runSafeSync('nginx', ['-t']);
+  const testOutput = (test.stdout + test.stderr);
+  if (test.status !== 0 || testOutput.includes('test failed') || testOutput.includes('[emerg]')) {
+    throw new Error('nginx config test failed:\n' + (testOutput || test.error));
   }
-  const reload = safeExec('nginx -s reload 2>&1');
-  if (reload.includes('failed') || reload.includes('error')) {
-    throw new Error('nginx reload failed:\n' + reload);
+  const reload = runSafeSync('nginx', ['-s', 'reload']);
+  const reloadOutput = (reload.stdout + reload.stderr);
+  if (reload.status !== 0 || reloadOutput.includes('failed') || reloadOutput.includes('error')) {
+    throw new Error('nginx reload failed:\n' + (reloadOutput || reload.error));
   }
   return true;
 }
@@ -238,21 +231,32 @@ function createDomainWWW(domain) {
 }
 
 function removeDomainWWW(domain) {
+  if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
   const dir = path.join(WWW_DIR, domain);
-  try { if (fs.existsSync(dir)) safeExec('rm -rf ' + dir); } catch (_) {}
+  try {
+    const resolved = path.resolve(dir);
+    if (resolved.startsWith(path.resolve(WWW_DIR) + path.sep) || resolved === path.resolve(WWW_DIR)) {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  } catch (_) {}
 }
 
 function installCertbotSSL(domain) {
+  if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
   const adminEmail = 'admin@meedo51.com';
-  const result = safeExec("certbot --nginx -d " + domain + " --non-interactive --agree-tos -m " + adminEmail + " 2>&1");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) throw new Error('Invalid email');
+  const result = runSafeSync('certbot', ['--nginx', '-d', domain, '--non-interactive', '--agree-tos', '-m', adminEmail], { timeout: 120000 });
+  const output = (result.stdout || '') + (result.stderr || '');
   const certPath = '/etc/letsencrypt/live/' + domain + '/fullchain.pem';
   const success = fs.existsSync(certPath);
-  return { success, output: result };
+  return { success, output };
 }
 
 function deleteCertbotSSL(domain) {
-  const result = safeExec("certbot delete --cert-name " + domain + " --non-interactive 2>&1");
-  return { output: result };
+  if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
+  const result = runSafeSync('certbot', ['delete', '--cert-name', domain, '--non-interactive'], { timeout: 30000 });
+  const output = (result.stdout || '') + (result.stderr || '');
+  return { output };
 }
 
 function listDomains() {

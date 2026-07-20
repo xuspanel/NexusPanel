@@ -1,4 +1,13 @@
 require('dotenv').config();
+
+const REQUIRED_ENV = ['JWT_SECRET', 'ADMIN_PASS'];
+for (const key of REQUIRED_ENV) {
+  if (!process.env[key] || process.env[key].startsWith('change-me') || process.env[key].startsWith('replace-with')) {
+    console.error(`[STARTUP] FATAL: ${key} is not set or still has a default value. Set it in .env`);
+    process.exit(1);
+  }
+}
+
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const path = require('path');
@@ -21,6 +30,16 @@ app.use(securityHeaders);
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use(cookieParser());
+
+app.use('/api', (req, res, next) => {
+  if (['POST', 'PUT', 'DELETE', 'PATCH'].includes(req.method)) {
+    const origin = req.headers.origin || req.headers.referer || '';
+    if (origin && !origin.startsWith('http://127.0.0.1:') && !origin.startsWith('http://localhost:') && !origin.startsWith('https://')) {
+      return res.status(403).json({ error: 'CSRF: invalid origin' });
+    }
+  }
+  next();
+});
 
 const audit = require('./src/services/audit');
 app.use('/api', (req, res, next) => {

@@ -70,7 +70,7 @@
   "security": {
     "rate_limit_window": 900000,
     "rate_limit_max": 100,
-    "cors_origin": "*",
+    "cors_origin": "same-origin",
     "content_security_policy": "default-src 'self'",
     "hsts_max_age": 31536000,
     "enable_helmet": true

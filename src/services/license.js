@@ -6,7 +6,10 @@ const CACHE_FILE = path.join(__dirname, '..', '..', 'data', 'license-cache.json'
 let revalidationTimer = null;
 
 function getSharedSecret() {
-  return process.env.LICENSE_SECRET || 'nxlicensing_default_hmac_secret_2026';
+  if (!process.env.LICENSE_SECRET) {
+    throw new Error('LICENSE_SECRET is not set — cannot verify license signatures');
+  }
+  return process.env.LICENSE_SECRET;
 }
 
 function loadCache() {
@@ -19,7 +22,9 @@ function saveCache(data) {
     const dir = path.dirname(CACHE_FILE);
     if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(CACHE_FILE, JSON.stringify(data, null, 2));
-  } catch {}
+  } catch (err) {
+    console.error('[License] Failed to save cache:', err.message);
+  }
 }
 
 function verifySignature(data) {
@@ -51,7 +56,7 @@ async function validateWithServer(key, domain) {
     if (data.valid) {
       saveCache({
         valid: true,
-        features: data.license?.max_domains ? ['*'] : ['*'],
+        features: ['*'],
         key: key,
         boundDomain: domain || null,
         reason: null,
@@ -125,7 +130,7 @@ async function bootstrapLicense() {
 
 function checkLicense() {
   const cache = loadCache();
-  if (!cache) return true;
+  if (!cache) return false;
 
   if (cache.valid) {
     if (Date.now() < cache.next_check) return true;
@@ -144,7 +149,9 @@ async function triggerRevalidation() {
   revalidationPending = true;
   try {
     await validateWithServer(process.env.LICENSE_KEY, process.env.LICENSE_DOMAIN);
-  } catch {}
+  } catch (err) {
+    console.error('[License] Revalidation error:', err.message);
+  }
   revalidationPending = false;
 }
 

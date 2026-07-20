@@ -11,7 +11,7 @@ window.initUsers = async function () {
     formOptions = await API.users.options();
     await loadUsers();
   } catch (err) {
-    document.getElementById('usersContent').innerHTML = '<div class="db-error"><span class="db-error-icon">⚠️</span><span>' + err.message + '</span></div>';
+    document.getElementById('usersContent').innerHTML = '<div class="db-error"><span class="db-error-icon">⚠️</span><span>' + escHtml(err.message) + '</span></div>';
   }
 };
 

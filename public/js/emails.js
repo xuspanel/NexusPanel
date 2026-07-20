@@ -127,21 +127,25 @@ function renderAccountList(accounts) {
     grid.innerHTML = '<div class="db-empty">' + (search ? 'No accounts match your search' : 'No email accounts found') + '</div>';
     return;
   }
-  const SERVER = 's2u.me';
   grid.innerHTML = filtered.map(a => {
     const initial = a.username.charAt(0).toUpperCase();
     const statusDot = a.hasMaildir ? '<span class="email-status-dot email-status-active" title="Active mailbox"></span>' : '<span class="email-status-dot email-status-inactive" title="No mailbox yet"></span>';
-    const domain = a.email.split('@')[1] || SERVER;
-    return `<div class="email-card" data-username="${a.username}">
+    const domain = a.email.split('@')[1] || window.location.hostname;
+    const safeUser = escHtml(a.username);
+    const safeName = escHtml(a.name !== a.username ? a.name : a.username);
+    const safeEmail = escHtml(a.email);
+    const safeHome = escHtml(a.home);
+    const safeDomain = escHtml(domain);
+    return `<div class="email-card" data-username="${safeUser}">
       <div class="email-card-glow"></div>
       <div class="email-card-top">
         <div class="email-avatar" style="background:${avatarColor(a.username)}">${initial}</div>
         <div class="email-card-info">
-          <div class="email-card-name">${statusDot}<span>${a.name !== a.username ? a.name : a.username}</span></div>
-          <div class="email-card-address">${a.email}</div>
+          <div class="email-card-name">${statusDot}<span>${safeName}</span></div>
+          <div class="email-card-address">${safeEmail}</div>
         </div>
         <div class="email-card-actions">
-          <button class="email-action-btn" data-email="${a.email}" title="Copy address">📋</button>
+          <button class="email-action-btn" data-email="${safeEmail}" title="Copy address">📋</button>
           ${a.hasMaildir ? `<button class="email-action-btn email-config-btn" title="Email configuration">⚙️</button>` : ''}
         </div>
       </div>
@@ -152,28 +156,28 @@ function renderAccountList(accounts) {
         <div class="email-stat"><span class="email-stat-value">${a.canLogin ? '✓' : '✗'}</span><span class="email-stat-label">login</span></div>
       </div></div>
       <div class="email-card-footer">
-        <span class="email-footer-item" title="Home directory">📁 ${a.home}</span>
+        <span class="email-footer-item" title="Home directory">📁 ${safeHome}</span>
         <span class="email-footer-item" title="Disk usage">💾 ${a.hasMaildir ? a.diskUsage : '0 B'}</span>
       </div>
       ${a.hasMaildir ? `
       <div class="email-config-panel" style="display:none;">
         <div class="email-config-title">📧 Email Configuration</div>
         <table class="email-config-table">
-          <tr><td class="ecfg-label">Server</td><td class="ecfg-value">${domain}</td></tr>
-          <tr><td class="ecfg-label">Username</td><td class="ecfg-value ecfg-highlight">${a.email}</td></tr>
+          <tr><td class="ecfg-label">Server</td><td class="ecfg-value">${safeDomain}</td></tr>
+          <tr><td class="ecfg-label">Username</td><td class="ecfg-value ecfg-highlight">${safeEmail}</td></tr>
           <tr><td class="ecfg-label">Password</td><td class="ecfg-value">Your account password</td></tr>
           <tr><td colspan="2" class="ecfg-section">📩 Incoming (IMAP)</td></tr>
-          <tr><td class="ecfg-label">Server</td><td class="ecfg-value ecfg-mono">${domain}</td></tr>
+          <tr><td class="ecfg-label">Server</td><td class="ecfg-value ecfg-mono">${safeDomain}</td></tr>
           <tr><td class="ecfg-label">Port</td><td class="ecfg-value ecfg-mono">993</td></tr>
           <tr><td class="ecfg-label">Security</td><td class="ecfg-value">SSL/TLS</td></tr>
           <tr><td class="ecfg-label">Auth</td><td class="ecfg-value">Normal password</td></tr>
           <tr><td colspan="2" class="ecfg-section">📩 Incoming (POP3)</td></tr>
-          <tr><td class="ecfg-label">Server</td><td class="ecfg-value ecfg-mono">${domain}</td></tr>
+          <tr><td class="ecfg-label">Server</td><td class="ecfg-value ecfg-mono">${safeDomain}</td></tr>
           <tr><td class="ecfg-label">Port</td><td class="ecfg-value ecfg-mono">995</td></tr>
           <tr><td class="ecfg-label">Security</td><td class="ecfg-value">SSL/TLS</td></tr>
           <tr><td class="ecfg-label">Auth</td><td class="ecfg-value">Normal password</td></tr>
           <tr><td colspan="2" class="ecfg-section">📤 Outgoing (SMTP)</td></tr>
-          <tr><td class="ecfg-label">Server</td><td class="ecfg-value ecfg-mono">${domain}</td></tr>
+          <tr><td class="ecfg-label">Server</td><td class="ecfg-value ecfg-mono">${safeDomain}</td></tr>
           <tr><td class="ecfg-label">Port</td><td class="ecfg-value ecfg-mono">587</td></tr>
           <tr><td class="ecfg-label">Security</td><td class="ecfg-value">STARTTLS</td></tr>
           <tr><td class="ecfg-label">Auth</td><td class="ecfg-value">Normal password</td></tr>
@@ -182,7 +186,7 @@ function renderAccountList(accounts) {
           <tr><td class="ecfg-label">Security</td><td class="ecfg-value">SSL/TLS</td></tr>
         </table>
       </div>
-      <div class="email-card-inbox-btn" data-username="${a.username}"><span class="inbox-btn-icon">📥</span><span class="inbox-btn-label">Open Email Client</span><span class="inbox-btn-arrow">→</span></div>
+      <div class="email-card-inbox-btn" data-username="${safeUser}"><span class="inbox-btn-icon">📥</span><span class="inbox-btn-label">Open Email Client</span><span class="inbox-btn-arrow">→</span></div>
       ` : ''}
     </div>`;
   }).join('');
@@ -702,7 +706,7 @@ async function openCreateModal() {
   if (_domains.length === 0) {
     try { _domains = await API.emails.domains(); } catch (e) { _domains = ['localhost']; }
   }
-  document.getElementById('emailCreateDomain').innerHTML = _domains.map(d => '<option value="' + d + '">' + d + '</option>').join('');
+  document.getElementById('emailCreateDomain').innerHTML = _domains.map(d => '<option value="' + escHtml(d) + '">' + escHtml(d) + '</option>').join('');
 }
 
 function closeCreateModal() { document.getElementById('emailCreateModal').style.display = 'none'; }

@@ -4,8 +4,22 @@ const path = require('path');
 const archiver = require('archiver');
 const { createReadStream, createWriteStream } = require('fs');
 
+const ALLOWED_ROOTS = [
+  '/', '/bin', '/boot', '/dev', '/etc', '/home', '/lib', '/lib64',
+  '/media', '/mnt', '/opt', '/proc', '/root', '/run', '/sbin',
+  '/srv', '/sys', '/tmp', '/usr', '/var',
+];
+const DENIED_PATHS = [
+  '/etc/shadow', '/etc/gshadow', '/etc/sudoers', '/etc/ssh/',
+  '/etc/pam.d/', '/etc/security/',
+];
+
 function safeResolve(inputPath) {
-  const resolved = path.resolve('/', inputPath);
+  let resolved = path.resolve('/', inputPath);
+  if (resolved === '/') resolved = '/var/www';
+  const allowed = ALLOWED_ROOTS.some(root => resolved.startsWith(root + '/') || resolved === root);
+  if (!allowed) throw new Error('Access denied: path outside allowed directories');
+  if (DENIED_PATHS.some(d => resolved.startsWith(d))) throw new Error('Access denied: path is restricted');
   return resolved;
 }
 
@@ -415,6 +429,14 @@ async function createArchive(paths, destination, format) {
   });
 }
 
+function resolveSafeChild(base, name) {
+  const target = path.resolve(base, name);
+  if (!target.startsWith(base + path.sep) && target !== base) {
+    throw new Error('Zip slip blocked: ' + name);
+  }
+  return target;
+}
+
 async function extractArchive(archivePath, destination) {
   const safeArchive = safeResolve(archivePath);
   const safeDest = safeResolve(destination);
@@ -423,7 +445,16 @@ async function extractArchive(archivePath, destination) {
   if (ext === '.zip') {
     const { default: AdmZip } = await import('adm-zip');
     const zip = new AdmZip(safeArchive);
-    zip.extractAllTo(safeDest, true);
+    const entries = zip.getEntries();
+    for (const entry of entries) {
+      const targetPath = resolveSafeChild(safeDest, entry.entryName);
+      if (entry.isDirectory) {
+        fs.mkdirSync(targetPath, { recursive: true });
+      } else {
+        fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+        fs.writeFileSync(targetPath, entry.getData());
+      }
+    }
   } else if (ext === '.gz' || ext === '.tgz' || ext === '.tar') {
     const { createGunzip } = require('zlib');
     const { tar } = require('tar-stream');
@@ -433,7 +464,7 @@ async function extractArchive(archivePath, destination) {
       : createReadStream(safeArchive);
     await new Promise((resolve, reject) => {
       extract.on('entry', (header, stream, next) => {
-        const targetPath = path.join(safeDest, header.name);
+        const targetPath = resolveSafeChild(safeDest, header.name);
         if (header.type === 'directory') {
           fs.mkdirSync(targetPath, { recursive: true });
           next();
@@ -492,14 +523,18 @@ module.exports = {
 };
 
 /* ─── Git Integration ─── */
-const gitExec = (dir, cmd) => {
-  try { return execSync('git -C ' + JSON.stringify(dir) + ' ' + cmd, { encoding: 'utf8', timeout: 10000 }).trim(); }
-  catch (e) { return null; }
-};
+const { runSafeSync } = require('../utils/shell');
+
+function gitExec(dir, args) {
+  try {
+    const result = runSafeSync('git', ['-C', dir, ...args]);
+    return result.stdout.trim();
+  } catch { return null; }
+}
 
 function gitStatus(dirPath) {
   const safe = safeResolve(dirPath);
-  const out = gitExec(safe, 'status --porcelain -b 2>/dev/null');
+  const out = gitExec(safe, ['status', '--porcelain', '-b']);
   if (out === null) return null;
   const lines = out.split('\n');
   const branch = lines[0].replace('## ', '').split('...')[0];
@@ -512,36 +547,36 @@ function gitStatus(dirPath) {
 
 function gitStage(dirPath, file) {
   const safe = safeResolve(dirPath);
-  gitExec(safe, 'add ' + JSON.stringify(file));
+  gitExec(safe, ['add', file]);
 }
 
 function gitUnstage(dirPath, file) {
   const safe = safeResolve(dirPath);
-  gitExec(safe, 'reset HEAD ' + JSON.stringify(file));
+  gitExec(safe, ['reset', 'HEAD', file]);
 }
 
 function gitCommit(dirPath, message) {
   const safe = safeResolve(dirPath);
-  const out = gitExec(safe, 'commit -m ' + JSON.stringify(message));
+  const out = gitExec(safe, ['commit', '-m', message]);
   if (out === null) throw new Error('Commit failed');
   return out;
 }
 
 function gitPush(dirPath) {
   const safe = safeResolve(dirPath);
-  const out = gitExec(safe, 'push 2>&1');
+  const out = gitExec(safe, ['push']);
   if (out === null) throw new Error('Push failed');
   return out;
 }
 
 function gitPull(dirPath) {
   const safe = safeResolve(dirPath);
-  const out = gitExec(safe, 'pull 2>&1');
+  const out = gitExec(safe, ['pull']);
   if (out === null) throw new Error('Pull failed');
   return out;
 }
 
 function gitLog(dirPath, n) {
   const safe = safeResolve(dirPath);
-  return gitExec(safe, 'log --oneline -' + (n || 10)) || '';
+  return gitExec(safe, ['log', '--oneline', '-' + (n || 10)]) || '';
 }

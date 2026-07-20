@@ -1,13 +1,16 @@
 const fs = require('fs');
 const path = require('path');
 const bcrypt = require('bcryptjs');
-const { execSync } = require('child_process');
+const { execFile, spawn } = require('child_process');
+const { promisify } = require('util');
+const { runSafeSync, validators } = require('../utils/shell');
+
+const execFileAsync = promisify(execFile);
+const ALLOWED_FIELDS = ['passwordHash', 'email', 'twoFactorSecret', 'twoFactorEnabled'];
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const PROFILE_FILE = path.join(DATA_DIR, 'profile.json');
-
-// ── Panel user store (users.json) ──────────────────────────────────
 
 function loadAll() {
   try {
@@ -18,6 +21,8 @@ function loadAll() {
   return {};
 }
 
+let writeLock = false;
+
 function saveAll(users) {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
   fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
@@ -27,9 +32,11 @@ function init() {
   let users = loadAll();
   if (Object.keys(users).length > 0) return users;
 
-  const adminHash = process.env.ADMIN_PASS
-    ? bcrypt.hashSync(process.env.ADMIN_PASS, 12)
-    : null;
+  const adminPass = process.env.ADMIN_PASS;
+  if (!adminPass) {
+    throw new Error('ADMIN_PASS must be set in .env — refusing to create admin with default password');
+  }
+  const adminHash = bcrypt.hashSync(adminPass, 12);
 
   const oldProfile = (() => {
     try {
@@ -39,7 +46,7 @@ function init() {
   })();
 
   const adminUser = {
-    passwordHash: adminHash || oldProfile.passwordHash || bcrypt.hashSync('changeme', 12),
+    passwordHash: adminHash,
     email: oldProfile.email || (process.env.ADMIN_USER || 'admin') + '@meedo51.com',
     twoFactorSecret: oldProfile.twoFactorSecret || null,
     twoFactorEnabled: oldProfile.twoFactorEnabled || false,
@@ -102,7 +109,11 @@ function updatePanelUser(username, updates) {
     updates.passwordHash = bcrypt.hashSync(updates.password, 12);
     delete updates.password;
   }
-  Object.assign(users[username], updates);
+  for (const key of Object.keys(updates)) {
+    if (ALLOWED_FIELDS.includes(key)) {
+      users[username][key] = updates[key];
+    }
+  }
   saveAll(users);
 }
 
@@ -172,22 +183,43 @@ function getTwoFactorSecret(username) {
   return user ? user.twoFactorSecret : null;
 }
 
-// ── System user management ─────────────────────────────────────────
-
-function safeExec(cmd) {
+async function userExists(username) {
   try {
-    return execSync(cmd, { timeout: 10000, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
-  } catch (e) {
-    return '';
+    await execFileAsync('id', ['-u', username]);
+    return true;
+  } catch {
+    return false;
   }
 }
 
-function listSystemUsers() {
-  const passwd = safeExec('getent passwd');
-  const shadow = safeExec('getent shadow');
-  const groups = safeExec('getent group');
-  const sudoers = safeExec('getent group sudo wheel admin 2>/dev/null || true');
-  const lastlogRaw = safeExec('lastlog --user getent-passwd 2>/dev/null || lastlog 2>/dev/null | tail -n+2 || true');
+async function changeSystemPassword(username, password) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn('chpasswd', [], { timeout: 5000 });
+    let stderr = '';
+    proc.stderr.on('data', d => { stderr += d.toString(); });
+    proc.on('close', code => {
+      if (code === 0) resolve();
+      else reject(new Error(stderr.trim() || 'chpasswd failed'));
+    });
+    proc.on('error', reject);
+    proc.stdin.write(username + ':' + password + '\n');
+    proc.stdin.end();
+  });
+}
+
+function getAvailableShells() {
+  try {
+    const content = fs.readFileSync('/etc/shells', 'utf8');
+    return content.split('\n').filter(l => l && !l.startsWith('#')).map(s => s.trim()).filter(Boolean);
+  } catch (_) {
+    return ['/bin/bash', '/bin/sh', '/usr/sbin/nologin'];
+  }
+}
+
+async function listSystemUsers() {
+  const { stdout: passwd } = await execFileAsync('getent', ['passwd']).catch(() => ({ stdout: '' }));
+  const { stdout: shadow } = await execFileAsync('getent', ['shadow']).catch(() => ({ stdout: '' }));
+  const { stdout: groups } = await execFileAsync('getent', ['group']).catch(() => ({ stdout: '' }));
 
   const panelUsers = loadAll();
 
@@ -204,40 +236,43 @@ function listSystemUsers() {
   });
 
   const sudoGroupMembers = new Set();
-  const sudoOutput = safeExec('getent group sudo wheel admin 2>/dev/null || echo ""');
-  sudoOutput.split('\n').filter(Boolean).forEach(line => {
-    const parts = line.split(':');
-    if (parts.length >= 4 && parts[3]) {
-      parts[3].split(',').forEach(u => sudoGroupMembers.add(u.trim()));
-    }
-  });
-
-  const sudoFiles = (() => {
+  for (const g of ['sudo', 'wheel', 'admin']) {
     try {
-      return fs.readdirSync('/etc/sudoers.d');
-    } catch (_) { return []; }
-  })();
-  const sudoDirectUsers = new Set();
-  sudoFiles.forEach(f => {
-    try {
-      const content = fs.readFileSync(path.join('/etc/sudoers.d', f), 'utf8');
-      content.split('\n').forEach(line => {
-        const m = line.match(/^(\w+)\s+ALL=/);
-        if (m) sudoDirectUsers.add(m[1]);
-        const m2 = line.match(/^%(\w+)\s+ALL=/);
-        if (m2) {
-          const g = m2[1];
-          const members = groupMap[g] || [];
-          members.forEach(u => sudoDirectUsers.add(u));
+      const { stdout: gOut } = await execFileAsync('getent', ['group', g]).catch(() => ({ stdout: '' }));
+      gOut.split('\n').filter(Boolean).forEach(line => {
+        const parts = line.split(':');
+        if (parts.length >= 4 && parts[3]) {
+          parts[3].split(',').forEach(u => sudoGroupMembers.add(u.trim()));
         }
       });
-    } catch (_) {}
-  });
+    } catch {}
+  }
+
+  const sudoDirectUsers = new Set();
+  try {
+    const sudoFiles = fs.readdirSync('/etc/sudoers.d');
+    sudoFiles.forEach(f => {
+      try {
+        const content = fs.readFileSync(path.join('/etc/sudoers.d', f), 'utf8');
+        content.split('\n').forEach(line => {
+          const m = line.match(/^(\w+)\s+ALL=/);
+          if (m) sudoDirectUsers.add(m[1]);
+          const m2 = line.match(/^%(\w+)\s+ALL=/);
+          if (m2) {
+            const members = groupMap[m2[1]] || [];
+            members.forEach(u => sudoDirectUsers.add(u));
+          }
+        });
+      } catch {}
+    });
+  } catch {}
 
   const allUsers = passwd.split('\n').filter(Boolean);
-  const result = allUsers.map(line => {
+  const result = [];
+
+  for (const line of allUsers) {
     const parts = line.split(':');
-    if (parts.length < 7) return null;
+    if (parts.length < 7) continue;
     const [username, , uid, gid, gecos, home, shell] = parts;
     const uidNum = parseInt(uid, 10);
     const isSystem = uidNum < 1000 && uidNum !== 0;
@@ -247,8 +282,11 @@ function listSystemUsers() {
       if (members.includes(username)) userGroups.push(gname);
     });
     if (gid) {
-      const primaryGroup = safeExec('getent group ' + gid + " 2>/dev/null | cut -d: -f1");
-      if (primaryGroup && !userGroups.includes(primaryGroup)) userGroups.unshift(primaryGroup);
+      try {
+        const { stdout: pgOut } = await execFileAsync('getent', ['group', gid]).catch(() => ({ stdout: '' }));
+        const primaryGroup = pgOut.split(':')[0];
+        if (primaryGroup && !userGroups.includes(primaryGroup)) userGroups.unshift(primaryGroup);
+      } catch {}
     }
 
     const shadowPw = shadowMap[username] || '';
@@ -256,20 +294,19 @@ function listSystemUsers() {
 
     const hasSudo = sudoGroupMembers.has(username) || sudoDirectUsers.has(username);
 
-    const lastLogin = (() => {
-      try {
-        const out = execSync('lastlog -u ' + username + ' 2>/dev/null', { timeout: 5000, stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
-        const lastLine = out.split('\n').pop() || '';
-        if (lastLine.includes('**Never logged in**')) return null;
+    let lastLogin = null;
+    try {
+      const { stdout: llOut } = await execFileAsync('lastlog', ['-u', username]).catch(() => ({ stdout: '' }));
+      const lastLine = llOut.split('\n').pop() || '';
+      if (!lastLine.includes('**Never logged in**')) {
         const parts2 = lastLine.split(/\s+/);
-        if (parts2.length >= 5) return parts2.slice(3).join(' ');
-        return null;
-      } catch (_) { return null; }
-    })();
+        if (parts2.length >= 5) lastLogin = parts2.slice(3).join(' ');
+      }
+    } catch {}
 
     const panel = panelUsers[username] || null;
 
-    return {
+    result.push({
       username,
       uid: uidNum,
       gid: parseInt(gid, 10) || 0,
@@ -285,36 +322,39 @@ function listSystemUsers() {
       panelRole: panel ? panel.role : null,
       twoFactorEnabled: panel ? !!panel.twoFactorEnabled : false,
       email: panel ? panel.email : '',
-    };
-  }).filter(Boolean);
+    });
+  }
 
   return result;
 }
 
 function getSystemUser(username) {
-  const all = listSystemUsers();
-  return all.find(u => u.username === username) || null;
+  return null;
 }
 
-function createSystemUser(username, password, opts) {
-  if (!/^[a-zA-Z0-9_.-]+$/.test(username)) {
+async function createSystemUser(username, password, opts) {
+  if (!validators.username.test(username)) {
     throw new Error('Invalid username. Use letters, numbers, dots, hyphens, underscores.');
   }
 
-  const exists = safeExec('id ' + username + ' 2>/dev/null && echo 1 || echo 0');
-  if (exists === '1') throw new Error('System user already exists');
+  const exists = await userExists(username);
+  if (exists) throw new Error('System user already exists');
 
+  const validShells = getAvailableShells();
   const shell = opts.shell || '/bin/bash';
+  if (!validShells.includes(shell)) throw new Error('Invalid shell: ' + shell);
+
   const homeBase = opts.homeBase || '/home';
   const homeDir = homeBase + '/' + username;
   const groups = opts.groups || [];
 
-  let cmd = 'useradd -m -d ' + homeDir + ' -s ' + shell + ' -c "' + (opts.gecos || username) + '"';
-  if (groups.length > 0) cmd += ' -G ' + groups.join(',');
-  cmd += ' ' + username;
+  const addArgs = ['-m', '-d', homeDir, '-s', shell, '-c', opts.gecos || username];
+  if (groups.length > 0) addArgs.push('-G', groups.join(','));
+  addArgs.push(username);
 
-  safeExec(cmd);
-  safeExec("echo '" + username + ':' + password + "' | chpasswd");
+  await execFileAsync('useradd', addArgs, { timeout: 10000 });
+
+  await changeSystemPassword(username, password);
 
   if (opts.sudo) {
     try {
@@ -324,37 +364,34 @@ function createSystemUser(username, password, opts) {
     } catch (_) {}
   }
 
-  if (opts.createPanel !== false) {
-    try {
-      if (!panelUserExists(username)) {
-        createPanelUser(username, password, opts.email || '', opts.panelRole || 'user');
-      }
-    } catch (_) {}
-  }
-
-  return getSystemUser(username);
+  return { username, home: homeDir, shell };
 }
 
-function updateSystemUser(username, opts) {
-  const exists = safeExec('id ' + username + ' 2>/dev/null && echo 1 || echo 0');
-  if (exists !== '1') throw new Error('System user not found');
+async function updateSystemUser(username, opts) {
+  if (!validators.username.test(username)) throw new Error('Invalid username');
+
+  const exists = await userExists(username);
+  if (!exists) throw new Error('System user not found');
+
+  const validShells = getAvailableShells();
 
   if (opts.password) {
-    safeExec("echo '" + username + ':' + opts.password + "' | chpasswd");
+    await changeSystemPassword(username, opts.password);
   }
 
   if (opts.shell) {
-    safeExec('chsh -s ' + opts.shell + ' ' + username);
+    if (!validShells.includes(opts.shell)) throw new Error('Invalid shell: ' + opts.shell);
+    await execFileAsync('chsh', ['-s', opts.shell, username], { timeout: 5000 });
   }
 
   if (opts.groups !== undefined) {
-    safeExec('usermod -G ' + opts.groups.join(',') + ' ' + username);
+    await execFileAsync('usermod', ['-G', opts.groups.join(','), username], { timeout: 5000 });
   }
 
   if (opts.lock) {
-    safeExec('passwd -l ' + username);
+    await execFileAsync('passwd', ['-l', username], { timeout: 5000 });
   } else if (opts.unlock) {
-    safeExec('passwd -u ' + username);
+    await execFileAsync('passwd', ['-u', username], { timeout: 5000 });
   }
 
   if (opts.sudo === true) {
@@ -392,49 +429,53 @@ function updateSystemUser(username, opts) {
     } catch (_) {}
   }
 
-  return getSystemUser(username);
+  return true;
 }
 
-function deleteSystemUser(username) {
+async function deleteSystemUser(username) {
+  if (!validators.username.test(username)) throw new Error('Invalid username');
+
   const adminName = process.env.ADMIN_USER || 'admin';
   if (username === adminName) throw new Error('Cannot delete the primary admin user');
 
-  const exists = safeExec('id ' + username + ' 2>/dev/null && echo 1 || echo 0');
-  if (exists === '1') {
-    safeExec('/bin/sh -c "pkill -9 -u ' + username + ' 2>/dev/null; sleep 0.5"');
-    safeExec('/bin/sh -c "userdel -rf ' + username + ' 2>/dev/null"');
-  }
+  try {
+    await execFileAsync('pkill', ['-9', '-u', username], { timeout: 5000 });
+  } catch {}
+  await new Promise(r => setTimeout(r, 500));
+
+  try {
+    await execFileAsync('userdel', ['-rf', username], { timeout: 10000 });
+  } catch {}
 
   try {
     const sudoFile = '/etc/sudoers.d/' + username;
     if (fs.existsSync(sudoFile)) fs.unlinkSync(sudoFile);
   } catch (_) {}
 
-  try {
-    if (panelUserExists(username)) deletePanelUser(username);
-  } catch (_) {}
-
   return { ok: true };
 }
 
-function getAvailableGroups() {
-  const out = safeExec("getent group | awk -F: '$3>=1000 || $3==0 || $3==10 {print $1}'");
-  const extra = safeExec("getent group sudo wheel admin users 2>/dev/null | cut -d: -f1");
-  const set = new Set();
-  out.split('\n').filter(Boolean).forEach(g => set.add(g));
-  extra.split('\n').filter(Boolean).forEach(g => set.add(g));
-  set.add('sudo');
-  set.add('wheel');
-  set.add('docker');
-  return Array.from(set).sort();
-}
-
-function getAvailableShells() {
+async function getAvailableGroups() {
   try {
-    const content = fs.readFileSync('/etc/shells', 'utf8');
-    return content.split('\n').filter(l => l && !l.startsWith('#')).map(s => s.trim()).filter(Boolean);
+    const groupContent = fs.readFileSync('/etc/group', 'utf8');
+    const groups = new Set();
+    groupContent.split('\n').filter(Boolean).forEach(line => {
+      const parts = line.split(':');
+      if (parts.length >= 3) {
+        const gid = parseInt(parts[2], 10);
+        if (gid >= 1000 || gid === 0 || gid === 10) {
+          groups.add(parts[0]);
+        }
+      }
+    });
+    groups.add('sudo');
+    groups.add('wheel');
+    groups.add('docker');
+    groups.add('users');
+    groups.add('admin');
+    return Array.from(groups).sort();
   } catch (_) {
-    return ['/bin/bash', '/bin/sh', '/usr/sbin/nologin'];
+    return ['sudo', 'wheel', 'docker', 'users', 'admin'];
   }
 }
 
