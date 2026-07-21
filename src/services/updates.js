@@ -116,17 +116,28 @@ async function checkPanelVersion(force) {
   const cachePath = path.join(__dirname, '..', '..', 'data', 'panel-version-cache.json');
   let cache = {};
   try { cache = JSON.parse(fs.readFileSync(cachePath, 'utf8')); } catch {}
-  if (!force && cache.lastCheck && (now - cache.lastCheck) < 86400000) return cache;
   const localVersion = getLocalVersion();
+  /* Invalidate cache when local version changes (panel was updated) */
+  if (cache.localVersion && cache.localVersion !== localVersion) {
+    cache = {};
+  }
+  if (!force && cache.lastCheck && typeof cache.lastCheck === 'number' && (now - cache.lastCheck) < 86400000) {
+    return cache;
+  }
   try {
     const remoteVersion = await fetchRemoteVersion();
     const updateAvailable = compareVersions(remoteVersion, localVersion) > 0;
-    const result = { localVersion, remoteVersion, updateAvailable, changelog: getChangelog(), lastCheck: new Date(now).toISOString() };
+    const result = { localVersion, remoteVersion, updateAvailable, changelog: getChangelog(), lastCheck: now };
     fs.writeFileSync(cachePath, JSON.stringify(result), 'utf8');
     return result;
   } catch (e) {
-    if (cache.localVersion) return cache;
-    return { localVersion, remoteVersion: '0.0.0', updateAvailable: false, changelog: [], lastCheck: new Date(now).toISOString() };
+    /* Fetch failed — use cached remote version to still detect updates */
+    if (cache.remoteVersion && typeof cache.remoteVersion === 'string') {
+      const updateAvailable = compareVersions(cache.remoteVersion, localVersion) > 0;
+      const result = { localVersion, remoteVersion: cache.remoteVersion, updateAvailable, changelog: getChangelog(), lastCheck: now };
+      return result;
+    }
+    return { localVersion, remoteVersion: '0.0.0', updateAvailable: false, changelog: [], lastCheck: now };
   }
 }
 
