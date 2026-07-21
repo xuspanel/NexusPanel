@@ -199,6 +199,7 @@ const API = {
     extract: (d) => API.request('POST', '/files/extract', d),
     permissions: (d) => API.request('PUT', '/files/permissions', d),
     details: (p) => API.request('GET', '/files/details?path=' + encodeURIComponent(p)),
+    diff: (d) => API.request('POST', '/files/diff', d),
     gitStatus: (p) => API.request('GET', '/files/git/status?path=' + encodeURIComponent(p || '/')),
     gitStage: (p, f) => API.request('POST', '/files/git/stage', { path: p, file: f }),
     gitUnstage: (p, f) => API.request('POST', '/files/git/unstage', { path: p, file: f }),

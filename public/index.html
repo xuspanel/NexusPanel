@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NexusPanel — VPS Control Center</title>
   <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('nx-theme') || 'dark');</script>
-  <link rel="stylesheet" href="/css/style.css?v=1.9.6">
+  <link rel="stylesheet" href="/css/style.css?v=1.11.0">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>">
   <link rel="stylesheet" href="/libs/xterm.css?v=1.6.1">
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js" crossorigin="anonymous"></script>
@@ -13,11 +13,11 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.36.2/ext-language_tools.js" crossorigin="anonymous"></script>
   <script defer src="/js/sanitize.js?v=1.9.6"></script>
   <script defer src="/js/theme.js?v=1.1.0"></script>
-  <script defer src="/js/api.js?v=1.9.6"></script>
+  <script defer src="/js/api.js?v=1.11.0"></script>
   <script defer src="/js/auth.js?v=1.1.0"></script>
   <script defer src="/js/dashboard.js?v=1.1.0"></script>
   <script defer src="/js/profile.js?v=1.1.0"></script>
-  <script defer src="/js/filemanager.js?v=1.1.0"></script>
+  <script defer src="/js/filemanager.js?v=1.11.0"></script>
   <script defer src="/js/databases.js?v=1.9.6"></script>
   <script defer src="/js/emails.js?v=1.1.0"></script>
   <script defer src="/js/docker.js?v=1.1.0"></script>
@@ -1295,8 +1295,10 @@
           <span id="fmBatchActions" class="fm-batch-actions" style="display:none;">
             <button class="fm-btn fm-btn-sm" id="fmBatchBtnCopy" title="Copy selected">📋</button>
             <button class="fm-btn fm-btn-sm" id="fmBatchBtnMove" title="Move selected">✂️</button>
+            <button class="fm-btn fm-btn-sm" id="fmBatchBtnRename" title="Rename selected">✏</button>
             <button class="fm-btn fm-btn-sm" id="fmBatchBtnArchive" title="Archive selected">📦</button>
             <button class="fm-btn fm-btn-sm fm-btn-danger" id="fmBatchBtnDelete" title="Delete selected">🗑</button>
+            <button class="fm-btn fm-btn-sm fm-btn-icon" id="fmBatchBtnDiff" title="Compare selected" style="margin-left:4px">⇄</button>
           </span>
           <label class="fm-toggle-label" title="Show hidden files">
             <span class="fm-toggle-text">.</span>
@@ -1338,9 +1340,20 @@
           <div class="fm-sidebar-item" data-path="/srv"><span class="fm-sidebar-icon">🌐</span> /srv</div>
           <div class="fm-sidebar-item" data-path="/mnt"><span class="fm-sidebar-icon">💾</span> /mnt</div>
           <div class="fm-sidebar-item" data-path="/media"><span class="fm-sidebar-icon">📀</span> /media</div>
+          <div class="fm-sidebar-divider"></div>
+          <div class="fm-sidebar-section-header" id="fmTreeToggle">🌳 Directory Tree <span class="fm-sidebar-toggle-icon">▸</span></div>
+          <div class="fm-sidebar-tree" id="fmTreeContainer"></div>
         </div>
         <div class="fm-main" id="fmMain">
-          <div class="fm-loading" id="fmLoading">Loading...</div>
+          <div class="fm-loading" id="fmLoading">
+            <div class="fm-loading-skeleton">
+              <div class="fm-loading-row"><div class="skeleton skeleton-fm-icon"></div><div class="skeleton skeleton-fm-text"></div></div>
+              <div class="fm-loading-row"><div class="skeleton skeleton-fm-icon"></div><div class="skeleton skeleton-fm-text"></div></div>
+              <div class="fm-loading-row"><div class="skeleton skeleton-fm-icon"></div><div class="skeleton skeleton-fm-text"></div></div>
+              <div class="fm-loading-row"><div class="skeleton skeleton-fm-icon"></div><div class="skeleton skeleton-fm-text"></div></div>
+              <div class="fm-loading-row"><div class="skeleton skeleton-fm-icon"></div><div class="skeleton skeleton-fm-text"></div></div>
+            </div>
+          </div>
           <div class="fm-entries" id="fmEntries"></div>
           <div class="fm-empty" id="fmEmpty" style="display:none;">
             <div class="fm-empty-icon">📂</div>
@@ -1656,6 +1669,9 @@
     <div class="fm-context-item" data-action="rename">✏ Rename</div>
     <div class="fm-context-item" data-action="duplicate">📋 Duplicate</div>
     <div class="fm-context-item" data-action="copy">📄 Copy path</div>
+    <div class="fm-context-item" data-action="clipboard-copy">📋 Copy to clipboard</div>
+    <div class="fm-context-item" data-action="clipboard-cut">✂️ Cut to clipboard</div>
+    <div class="fm-context-item" id="fmCtxPaste" data-action="clipboard-paste" style="display:none">📋 Paste from clipboard</div>
     <div class="fm-context-divider"></div>
     <div class="fm-context-item" data-action="copyto">🔗 Copy to...</div>
     <div class="fm-context-item" data-action="moveto">✂️ Move to...</div>

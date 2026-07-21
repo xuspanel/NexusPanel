@@ -4,7 +4,7 @@ const path = require('path');
 const archiver = require('archiver');
 const { createReadStream, createWriteStream } = require('fs');
 
-const ALLOWED_ROOTS = [
+const ADMIN_ROOTS = [
   '/', '/bin', '/boot', '/dev', '/etc', '/home', '/lib', '/lib64',
   '/media', '/mnt', '/opt', '/proc', '/root', '/run', '/sbin',
   '/srv', '/sys', '/tmp', '/usr', '/var',
@@ -14,10 +14,19 @@ const DENIED_PATHS = [
   '/etc/pam.d/', '/etc/security/',
 ];
 
-function safeResolve(inputPath) {
+function safeResolve(inputPath, user) {
   let resolved = path.resolve('/', inputPath);
-  if (resolved === '/') resolved = '/var/www';
-  const allowed = ALLOWED_ROOTS.some(root => resolved.startsWith(root + '/') || resolved === root);
+  if (resolved === '/') {
+    if (user && user.role !== 'admin') {
+      resolved = '/home/' + (user.username || 'user');
+    } else {
+      resolved = '/var/www';
+    }
+  }
+  const roots = (user && user.role !== 'admin')
+    ? ['/home/' + (user.username || 'user')]
+    : ADMIN_ROOTS;
+  const allowed = roots.some(root => resolved.startsWith(root + '/') || resolved === root);
   if (!allowed) throw new Error('Access denied: path outside allowed directories');
   if (DENIED_PATHS.some(d => resolved.startsWith(d))) throw new Error('Access denied: path is restricted');
   return resolved;
@@ -49,8 +58,8 @@ function formatDate(date) {
   return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: d.getFullYear() !== now.getFullYear() ? 'numeric' : undefined });
 }
 
-async function listDirectory(dirPath) {
-  const safePath = safeResolve(dirPath);
+async function listDirectory(dirPath, user) {
+  const safePath = safeResolve(dirPath, user);
   const entries = await fsp.readdir(safePath, { withFileTypes: true });
   const result = [];
   for (const entry of entries) {
@@ -85,18 +94,19 @@ async function listDirectory(dirPath) {
   };
 }
 
-async function readFile(filePath) {
-  const safePath = safeResolve(filePath);
+async function readFile(filePath, user) {
+  const safePath = safeResolve(filePath, user);
   const stat = await fsp.stat(safePath);
   if (stat.isDirectory()) throw new Error('Cannot read a directory');
+  if (stat.size > 10 * 1024 * 1024) throw new Error('File too large to edit (max 10MB)');
   const content = await fsp.readFile(safePath, 'utf-8');
   const ext = path.extname(safePath).slice(1).toLowerCase();
   return { content, language: ext, size: stat.size };
 }
 
-async function createEntry(parentPath, name, type, content) {
+async function createEntry(parentPath, name, type, content, user) {
   if (!name || name.includes('/') || name.includes('\0')) throw new Error('Invalid name');
-  const safePath = safeResolve(path.join(parentPath, name));
+  const safePath = safeResolve(path.join(parentPath, name), user);
   if (type === 'directory') {
     await fsp.mkdir(safePath, { recursive: true });
   } else {
@@ -105,176 +115,17 @@ async function createEntry(parentPath, name, type, content) {
   return { path: safePath };
 }
 
-async function renameEntry(oldPath, newName) {
+async function renameEntry(oldPath, newName, user) {
   if (!newName || newName.includes('/') || newName.includes('\0')) throw new Error('Invalid name');
-  const safeOld = safeResolve(oldPath);
-  const safeNew = safeResolve(path.join(path.dirname(safeOld), newName));
+  const safeOld = safeResolve(oldPath, user);
+  const safeNew = safeResolve(path.join(path.dirname(safeOld), newName), user);
   await fsp.rename(safeOld, safeNew);
   return { path: safeNew };
 }
 
-async function copyEntry(source, destination) {
-  if (!source || !destination) throw new Error('Source and destination required');
-  const safeSource = safeResolve(source);
-  const safeDest = safeResolve(destination);
-  
-  const stat = await fsp.stat(safeSource);
-  
-  if (stat.isDirectory()) {
-    await fsp.mkdir(safeDest, { recursive: true });
-    const entries = await fsp.readdir(safeSource, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(safeSource, entry.name);
-      const destPath = path.join(safeDest, entry.name);
-      if (entry.isDirectory()) {
-        await copyEntry(srcPath, destPath);
-      } else {
-        await fsp.copyFile(srcPath, destPath);
-      }
-    }
-  } else {
-    await fsp.mkdir(path.dirname(safeDest), { recursive: true });
-    await fsp.copyFile(safeSource, safeDest);
-  }
-  return { path: safeDest };
-}
-
-async function copyEntry(source, destination) {
-  if (!source || !destination) throw new Error('Source and destination required');
-  const safeSource = safeResolve(source);
-  const safeDest = safeResolve(destination);
-  
-  const stat = await fsp.stat(safeSource);
-  
-  if (stat.isDirectory()) {
-    await fsp.mkdir(safeDest, { recursive: true });
-    const entries = await fsp.readdir(safeSource, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(safeSource, entry.name);
-      const destPath = path.join(safeDest, entry.name);
-      await copyEntry(srcPath, destPath);
-    }
-  } else {
-    await fsp.mkdir(path.dirname(safeDest), { recursive: true });
-    await fsp.copyFile(safeSource, safeDest);
-  }
-  return { path: safeDest };
-}
-
-async function moveEntry(source, destination) {
-  if (!source || !destination) throw new Error('Source and destination required');
-  const safeSource = safeResolve(source);
-  const safeDest = safeResolve(destination);
-  
-  const stat = await fsp.stat(safeSource);
-  
-  if (stat.isDirectory()) {
-    await fsp.mkdir(safeDest, { recursive: true });
-    const entries = await fsp.readdir(safeSource, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(safeSource, entry.name);
-      const destPath = path.join(safeDest, entry.name);
-      await moveEntry(srcPath, destPath);
-    }
-    await fsp.rmdir(safeSource, { recursive: true });
-  } else {
-    await fsp.mkdir(path.dirname(safeDest), { recursive: true });
-    await fsp.rename(safeSource, safeDest);
-  }
-  return { path: safeDest };
-}
-
-async function moveEntryWithOverwrite(source, destination, overwrite) {
-  const safeSource = safeResolve(source);
-  const safeDest = safeResolve(destination);
-  
-  if (fs.existsSync(safeDest) && !overwrite) {
-    throw new Error('Destination already exists. Use overwrite=true to replace.');
-  }
-  
-  if (fs.existsSync(safeDest) && overwrite) {
-    await fsp.rm(safeDest);
-  }
-  
-  const stat = await fsp.stat(safeSource);
-  
-  if (stat.isDirectory()) {
-    await fsp.mkdir(safeDest, { recursive: true });
-    const entries = await fsp.readdir(safeSource, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(safeSource, entry.name);
-      const destPath = path.join(safeDest, entry.name);
-      await moveEntryWithOverwrite(srcPath, destPath, overwrite);
-    }
-    await fsp.rmdir(safeSource, { recursive: true });
-  } else {
-    await fsp.mkdir(path.dirname(safeDest), { recursive: true });
-    await fsp.rename(safeSource, safeDest);
-  }
-  return { path: safeDest };
-}
-
-async function copyEntryWithOverwrite(source, destination, overwrite) {
-  const safeSource = safeResolve(source);
-  const safeDest = safeResolve(destination);
-  
-  if (fs.existsSync(safeDest) && !overwrite) {
-    throw new Error('Destination already exists. Use overwrite=true to replace.');
-  }
-  
-  if (fs.existsSync(safeDest) && overwrite) {
-    await fsp.rm(safeDest);
-  }
-  
-  const stat = await fsp.stat(safeSource);
-  
-  if (stat.isDirectory()) {
-    await fsp.mkdir(safeDest, { recursive: true });
-    const entries = await fsp.readdir(safeSource, { withFileTypes: true });
-    for (const entry of entries) {
-      const srcPath = path.join(safeSource, entry.name);
-      const destPath = path.join(safeDest, entry.name);
-      await copyEntry(srcPath, destPath);
-    }
-  } else {
-    await fsp.mkdir(path.dirname(safeDest), { recursive: true });
-    await fsp.copyFile(safeSource, safeDest);
-  }
-  
-  return { path: safeDest };
-}
-
-async function duplicateEntry(source) {
-  const safeSource = safeResolve(source);
-  const stat = await fsp.stat(safeSource);
-  const name = path.basename(safeSource);
-  const parent = path.dirname(safeSource);
-  const newName = name + ' (copy)';
-  const destPath = path.join(parent, newName);
-  
-  if (stat.isDirectory()) {
-    await copyEntry(source, destPath);
-  } else {
-    await fsp.copyFile(safeSource, destPath);
-  }
-  
-  return { path: destPath };
-}
-
-async function deleteEntry(targetPath) {
-  const safePath = safeResolve(targetPath);
-  const stat = await fsp.stat(safePath);
-  if (stat.isDirectory()) {
-    await fsp.rm(safePath, { recursive: true, force: true });
-  } else {
-    await fsp.unlink(safePath);
-  }
-  return { success: true };
-}
-
-async function copyEntry(source, destination) {
-  const safeSrc = safeResolve(source);
-  const safeDest = safeResolve(destination);
+async function copyEntry(source, destination, user) {
+  const safeSrc = safeResolve(source, user);
+  const safeDest = safeResolve(destination, user);
   const stat = await fsp.stat(safeSrc);
   if (stat.isDirectory()) {
     await fsp.cp(safeSrc, safeDest, { recursive: true });
@@ -284,15 +135,15 @@ async function copyEntry(source, destination) {
   return { path: safeDest };
 }
 
-async function moveEntry(source, destination) {
-  const safeSrc = safeResolve(source);
-  const safeDest = safeResolve(destination);
+async function moveEntry(source, destination, user) {
+  const safeSrc = safeResolve(source, user);
+  const safeDest = safeResolve(destination, user);
   try {
     await fsp.rename(safeSrc, safeDest);
   } catch (err) {
     if (err.code === 'EXDEV') {
-      await copyEntry(source, destination);
-      await deleteEntry(source);
+      await copyEntry(source, destination, user);
+      await deleteEntry(source, user);
     } else {
       throw err;
     }
@@ -300,8 +151,8 @@ async function moveEntry(source, destination) {
   return { path: safeDest };
 }
 
-async function duplicateEntry(targetPath) {
-  const safePath = safeResolve(targetPath);
+async function duplicateEntry(targetPath, user) {
+  const safePath = safeResolve(targetPath, user);
   const dir = path.dirname(safePath);
   const ext = path.extname(safePath);
   const base = path.basename(safePath, ext);
@@ -318,13 +169,13 @@ async function duplicateEntry(targetPath) {
       break;
     }
   }
-  await copyEntry(safePath, newPath);
+  await copyEntry(safePath, newPath, user);
   return { path: newPath, name: newName };
 }
 
-async function copyEntryWithOverwrite(source, destination, overwrite) {
-  const safeSource = safeResolve(source);
-  const safeDest = safeResolve(destination);
+async function copyEntryWithOverwrite(source, destination, overwrite, user) {
+  const safeSource = safeResolve(source, user);
+  const safeDest = safeResolve(destination, user);
   
   if (fs.existsSync(safeDest) && !overwrite) {
     throw new Error('Destination already exists. Use overwrite=true to replace.');
@@ -346,7 +197,7 @@ async function copyEntryWithOverwrite(source, destination, overwrite) {
     for (const entry of entries) {
       const srcPath = path.join(safeSource, entry.name);
       const destPath = path.join(safeDest, entry.name);
-      await copyEntryWithOverwrite(srcPath, destPath, overwrite);
+      await copyEntryWithOverwrite(srcPath, destPath, overwrite, user);
     }
   } else {
     await fsp.mkdir(path.dirname(safeDest), { recursive: true });
@@ -356,8 +207,43 @@ async function copyEntryWithOverwrite(source, destination, overwrite) {
   return { path: safeDest };
 }
 
-async function searchFiles(rootPath, query, includePatterns, excludePatterns) {
-  const safeRoot = safeResolve(rootPath);
+async function moveEntryWithOverwrite(source, destination, overwrite, user) {
+  const safeSource = safeResolve(source, user);
+  const safeDest = safeResolve(destination, user);
+
+  if (fs.existsSync(safeDest) && !overwrite) {
+    throw new Error('Destination already exists. Use overwrite=true to replace.');
+  }
+
+  if (fs.existsSync(safeDest) && overwrite) {
+    if (fs.lstatSync(safeDest).isDirectory()) {
+      await fsp.rm(safeDest, { recursive: true });
+    } else {
+      await fsp.unlink(safeDest);
+    }
+  }
+
+  const stat = await fsp.stat(safeSource);
+  if (stat.isDirectory()) {
+    await fsp.mkdir(safeDest, { recursive: true });
+    const entries = await fsp.readdir(safeSource, { withFileTypes: true });
+    for (const entry of entries) {
+      const srcPath = path.join(safeSource, entry.name);
+      const destPath = path.join(safeDest, entry.name);
+      await moveEntryWithOverwrite(srcPath, destPath, overwrite, user);
+    }
+    await fsp.rm(safeSource, { recursive: true });
+  } else {
+    await fsp.mkdir(path.dirname(safeDest), { recursive: true });
+    await fsp.copyFile(safeSource, safeDest);
+    await fsp.unlink(safeSource);
+  }
+
+  return { path: safeDest };
+}
+
+async function searchFiles(rootPath, query, includePatterns, excludePatterns, user) {
+  const safeRoot = safeResolve(rootPath, user);
   const results = [];
   function matchesAny(name, patterns) {
     if (!patterns || patterns.length === 0) return true;
@@ -401,8 +287,8 @@ async function searchFiles(rootPath, query, includePatterns, excludePatterns) {
   return results;
 }
 
-async function createArchive(paths, destination, format) {
-  const safeDest = safeResolve(destination);
+async function createArchive(paths, destination, format, user) {
+  const safeDest = safeResolve(destination, user);
   return new Promise((resolve, reject) => {
     const output = createWriteStream(safeDest);
     let archive;
@@ -417,7 +303,7 @@ async function createArchive(paths, destination, format) {
     archive.on('error', reject);
     archive.pipe(output);
     for (const p of paths) {
-      const safePath = safeResolve(p);
+      const safePath = safeResolve(p, user);
       const stat = fs.statSync(safePath);
       if (stat.isDirectory()) {
         archive.directory(safePath, path.basename(safePath));
@@ -437,9 +323,9 @@ function resolveSafeChild(base, name) {
   return target;
 }
 
-async function extractArchive(archivePath, destination) {
-  const safeArchive = safeResolve(archivePath);
-  const safeDest = safeResolve(destination);
+async function extractArchive(archivePath, destination, user) {
+  const safeArchive = safeResolve(archivePath, user);
+  const safeDest = safeResolve(destination, user);
   await fsp.mkdir(safeDest, { recursive: true });
   const ext = path.extname(safeArchive).toLowerCase();
   if (ext === '.zip') {
@@ -486,16 +372,16 @@ async function extractArchive(archivePath, destination) {
   return { path: safeDest };
 }
 
-async function changePermissions(targetPath, modeStr) {
-  const safePath = safeResolve(targetPath);
+async function changePermissions(targetPath, modeStr, user) {
+  const safePath = safeResolve(targetPath, user);
   const mode = parseInt(modeStr, 8);
   if (isNaN(mode) || mode < 0 || mode > 777) throw new Error('Invalid mode');
   await fsp.chmod(safePath, mode);
   return { success: true };
 }
 
-async function getDetails(targetPath) {
-  const safePath = safeResolve(targetPath);
+async function getDetails(targetPath, user) {
+  const safePath = safeResolve(targetPath, user);
   const stat = await fsp.stat(safePath);
   return {
     name: path.basename(safePath),
@@ -532,8 +418,8 @@ function gitExec(dir, args) {
   } catch { return null; }
 }
 
-function gitStatus(dirPath) {
-  const safe = safeResolve(dirPath);
+function gitStatus(dirPath, user) {
+  const safe = safeResolve(dirPath, user);
   const out = gitExec(safe, ['status', '--porcelain', '-b']);
   if (out === null) return null;
   const lines = out.split('\n');
@@ -545,38 +431,38 @@ function gitStatus(dirPath) {
   return { branch, files, isRepo: true };
 }
 
-function gitStage(dirPath, file) {
-  const safe = safeResolve(dirPath);
+function gitStage(dirPath, file, user) {
+  const safe = safeResolve(dirPath, user);
   gitExec(safe, ['add', file]);
 }
 
-function gitUnstage(dirPath, file) {
-  const safe = safeResolve(dirPath);
+function gitUnstage(dirPath, file, user) {
+  const safe = safeResolve(dirPath, user);
   gitExec(safe, ['reset', 'HEAD', file]);
 }
 
-function gitCommit(dirPath, message) {
-  const safe = safeResolve(dirPath);
+function gitCommit(dirPath, message, user) {
+  const safe = safeResolve(dirPath, user);
   const out = gitExec(safe, ['commit', '-m', message]);
   if (out === null) throw new Error('Commit failed');
   return out;
 }
 
-function gitPush(dirPath) {
-  const safe = safeResolve(dirPath);
+function gitPush(dirPath, user) {
+  const safe = safeResolve(dirPath, user);
   const out = gitExec(safe, ['push']);
   if (out === null) throw new Error('Push failed');
   return out;
 }
 
-function gitPull(dirPath) {
-  const safe = safeResolve(dirPath);
+function gitPull(dirPath, user) {
+  const safe = safeResolve(dirPath, user);
   const out = gitExec(safe, ['pull']);
   if (out === null) throw new Error('Pull failed');
   return out;
 }
 
-function gitLog(dirPath, n) {
-  const safe = safeResolve(dirPath);
+function gitLog(dirPath, n, user) {
+  const safe = safeResolve(dirPath, user);
   return gitExec(safe, ['log', '--oneline', '-' + (n || 10)]) || '';
 }

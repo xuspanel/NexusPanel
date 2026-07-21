@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.11.0] - 2026-07-21
+### Added
+- **Batch rename**: find/replace, prefix/suffix, case change, live preview with conflict detection
+- **File diff view**: `POST /files/diff` route with O(m*n) LCS algorithm, frontend modal with color-coded unified diff hunks (green/red for add/remove, gray for context)
+- **Directory tree sidebar**: collapsible "Directory Tree" section with lazy-loading children on expand
+- **File upload progress bar**: real-time upload percentage tracking
+- **File upload drag-and-drop**: drag files from desktop onto the file manager to upload
+- **`escapeAttr()` for all `value=""` attributes**: 8 modal input fields now properly escaped
+- **Event delegation for search results**: click via `fmEntries` listener instead of stale inline handlers
+- **Event delegation for path suggestions**: click via `fmPathSuggestions` listener
+- **Event delegation for git stage/unstage**: `data-git-stage`/`data-git-unstage` attributes replace inline `onclick`
+- **Audit logging**: `file.diff` and `file.upload` actions now logged
+
+### Fixed
+- **Upload path traversal (CRITICAL)**: `file.originalname` now sanitized with `path.basename()` and strict character whitelist — prevents writing to arbitrary paths
+- **XSS via git stage/unstage (HIGH)**: inline `onclick` handlers with `escapeHtml()` in JS-string context replaced with event delegation via `data-` attributes + `encodeURIComponent`/`decodeURIComponent`
+- **Preview close button non-functional**: `querySelector('.fm-modal-close')` returned wrong element; now uses `getElementById('fmPreviewClose')`
+- **Unescaped `f.status` in git HTML**: `f.status` now passed through `escapeHtml()`
+- **Content-Disposition CRLF injection**: `\r` and `\n` now stripped from download filename
+- **`/files/diff` no size guard**: 10MB size limit added (matching `/read` route behavior)
+- **`/files/diff` missing try/catch**: outer error handler added
+- **Dead `execFile` import** removed from `src/routes/files.js`
+- **`fsp` referenced before `const`**: `require('fs/promises')` moved before its first use
+- **`closeFmModal` overlays `baseModal` only**: removed margin-top interference from `.fm-form-row` in modal forms
+- **`showFmError` → `fmShowToast` in git refresh**: undefined function reference fixed
+- **Editor content not saved after save**: `fmEditorContent` updated with fresh value after each save
+- **Search query not reset on navigation**: search input and `fmState.searchQuery` cleared when leaving search mode
+- **`Shift+Ctrl+C/X/V` shortcuts dead**: these key combos now checked before plain `Ctrl+C/X/V`
+- **Fullscreen toggle icon never changes**: exit state now shows `✕` instead of same `⛶`
+- **Unused `main` variable** removed from `fmLoadDirectory()`
+- **Empty `catch {}` blocks**: `console.warn` added for debugging
+
+### Security
+- **Upload path traversal** (see Fixed)
+- **XSS via git stage/unstage** (see Fixed)
+- **Content-Disposition CRLF injection** (see Fixed)
+- **`unlink` on file in `/move` route no longer silent**: now wrapped in try/catch with error log
+
+### Changed
+- Cache-busting bumped to `v=1.11.0` for `filemanager.js`, `api.js`, `style.css`
+- CSS `!important` usage verified: only 1 remaining FM-related override (justified)
+- Light theme gaps filled: `.fm-editor-overlay`, `.fm-preview-overlay`, `.fm-toast` variants added
+- Loading "Loading..." text replaced with animated skeleton rows
+- Search results and path suggestions converted to event delegation pattern
+
 ## [1.10.0] - 2026-07-20
 ### Security
 - **Command injection eliminated**: all `exec()`/`execSync()` calls in services (backups, cron, docker, domains, firewall, ftp, processes, services, ssl, users) replaced with `spawn`/`spawnSync` argument arrays via new `runSafe`/`runSafeSync` utilities in `src/utils/shell.js`. No user input is ever interpolated into shell strings

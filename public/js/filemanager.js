@@ -9,6 +9,7 @@ let fmState = {
   contextPath: null,
   contextName: null,
   editorPath: null,
+  editorOriginalContent: null,
   fmInitialized: false,
   clipboard: null,
 };
@@ -50,6 +51,7 @@ function getColor(entry) {
 
 async function fmNavigate(path) {
   if (!path || path === fmState.currentPath) return;
+  fmState.searchQuery = '';
   fmState.currentPath = path;
   if (fmState.history[fmState.historyIndex] !== path) {
     fmState.history = fmState.history.slice(0, fmState.historyIndex + 1);
@@ -60,7 +62,6 @@ async function fmNavigate(path) {
 }
 
 async function fmLoadDirectory() {
-  const main = document.getElementById('fmMain');
   const entries = document.getElementById('fmEntries');
   const empty = document.getElementById('fmEmpty');
   const loading = document.getElementById('fmLoading');
@@ -122,14 +123,24 @@ function fmRenderEntries() {
     </div>`;
   }).join('');
 
-  container.querySelectorAll('.fm-entry').forEach(el => {
-    el.addEventListener('click', (ev) => fmEntryClick(ev, el));
-    el.addEventListener('dblclick', () => fmEntryOpen(el));
-    el.addEventListener('contextmenu', (ev) => {
-      ev.preventDefault();
-      fmShowContextMenu(ev, el.dataset.path, el.dataset.name);
+  if (!container._fmDelegation) {
+    container._fmDelegation = true;
+    container.addEventListener('click', (ev) => {
+      const el = ev.target.closest('.fm-entry');
+      if (el) fmEntryClick(ev, el);
     });
-  });
+    container.addEventListener('dblclick', (ev) => {
+      const el = ev.target.closest('.fm-entry');
+      if (el) fmEntryOpen(el);
+    });
+    container.addEventListener('contextmenu', (ev) => {
+      const el = ev.target.closest('.fm-entry');
+      if (el) {
+        ev.preventDefault();
+        fmShowContextMenu(ev, el.dataset.path, el.dataset.name);
+      }
+    });
+  }
 }
 
 function fmEntryClick(ev, el) {
@@ -197,6 +208,132 @@ function fmUpdateSidebar(path) {
   document.querySelectorAll('.fm-sidebar-item').forEach(el => {
     el.classList.toggle('active', el.dataset.path === path);
   });
+  fmUpdateTreeActive(path);
+}
+
+/* ─── Directory Tree ─── */
+let fmTreeLoaded = false;
+
+function fmToggleTree() {
+  const container = document.getElementById('fmTreeContainer');
+  const header = document.getElementById('fmTreeToggle');
+  header.classList.toggle('open');
+  container.classList.toggle('open');
+  if (!fmTreeLoaded && container.classList.contains('open')) {
+    fmTreeLoaded = true;
+    fmLoadTreeChildren('/', container);
+  }
+}
+
+async function fmLoadTreeChildren(dirPath, parentEl) {
+  try {
+    const result = await API.file.list(dirPath);
+    const entries = result.entries.filter(e => e.type === 'directory').sort((a, b) => a.name.localeCompare(b.name));
+    for (const entry of entries) {
+      const childPath = (dirPath === '/' ? '/' : dirPath + '/') + entry.name;
+      const item = document.createElement('div');
+      item.className = 'fm-tree-item';
+      item.dataset.path = childPath;
+
+      const arrow = document.createElement('span');
+      arrow.className = 'fm-tree-arrow placeholder';
+      arrow.textContent = '▸';
+      item.appendChild(arrow);
+
+      const icon = document.createElement('span');
+      icon.className = 'fm-tree-icon';
+      icon.textContent = '📁';
+      item.appendChild(icon);
+
+      const label = document.createElement('span');
+      label.className = 'fm-tree-label';
+      label.textContent = entry.name;
+      item.appendChild(label);
+
+      item.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fmNavigate(childPath);
+      });
+
+      parentEl.appendChild(item);
+    }
+
+    /* lazy-load child on first expand */
+    parentEl.querySelectorAll('.fm-tree-item').forEach(item => {
+      const arrow = item.querySelector('.fm-tree-arrow');
+      if (!arrow) return;
+      arrow.className = 'fm-tree-arrow';
+      arrow.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fmTreeToggleItem(item);
+      });
+    });
+
+    fmUpdateTreeActive(fmState.currentPath);
+  } catch (e) { console.warn('fmLoadTreeChildren:', e); }
+}
+
+function fmTreeToggleItem(item) {
+  const children = item.dataset.childrenId;
+  let childContainer;
+
+  if (children) {
+    childContainer = document.getElementById(children);
+    childContainer.classList.toggle('open');
+    item.querySelector('.fm-tree-arrow').classList.toggle('expanded');
+    return;
+  }
+
+  const path = item.dataset.path;
+  if (!path) return;
+
+  const id = 'fmTreeChildren_' + path.replace(/[^a-zA-Z0-9]/g, '_');
+  const arrow = item.querySelector('.fm-tree-arrow');
+
+  if (document.getElementById(id)) {
+    childContainer = document.getElementById(id);
+    childContainer.classList.toggle('open');
+    arrow.classList.toggle('expanded');
+    return;
+  }
+
+  childContainer = document.createElement('div');
+  childContainer.className = 'fm-tree-children';
+  childContainer.id = id;
+  item.dataset.childrenId = id;
+  item.parentNode.insertBefore(childContainer, item.nextSibling);
+
+  arrow.classList.add('expanded');
+  childContainer.classList.add('open');
+
+  /* lazy-load */
+  fmLoadTreeChildren(path, childContainer);
+}
+
+function fmUpdateTreeActive(path) {
+  document.querySelectorAll('.fm-tree-item').forEach(el => {
+    el.classList.toggle('active', el.dataset.path === path);
+  });
+
+  /* expand ancestors */
+  const parts = path.split('/').filter(Boolean);
+  let acc = '';
+  for (const p of parts) {
+    acc += '/' + p;
+    document.querySelectorAll('.fm-tree-item').forEach(el => {
+      if (el.dataset.path === acc) {
+        const arrow = el.querySelector('.fm-tree-arrow');
+        if (arrow && !arrow.classList.contains('placeholder')) {
+          arrow.classList.add('expanded');
+          const cid = el.dataset.childrenId;
+          if (cid) {
+            const cc = document.getElementById(cid);
+            if (cc) cc.classList.add('open');
+          }
+        }
+      }
+    });
+  }
 }
 
 function fmShowToast(msg, type) {
@@ -223,7 +360,7 @@ function fmShowCopyTo(path, name) {
   openFmModal('📋 Copy to...', `
     <div class="fm-form-group">
       <label class="fm-form-label">Destination</label>
-      <input class="fm-form-input" id="fmCopyDest" value="${path}" placeholder="/new/path">
+      <input class="fm-form-input" id="fmCopyDest" value="${escapeAttr(path)}" placeholder="/new/path">
     </div>
     <div class="fm-form-group">
       <label class="fm-form-label">Overwrite existing? <input type="checkbox" id="fmCopyOverwrite"></label>
@@ -248,7 +385,7 @@ function fmShowMoveTo(path, name) {
   openFmModal('✂️ Move to...', `
     <div class="fm-form-group">
       <label class="fm-form-label">Destination</label>
-      <input class="fm-form-input" id="fmMoveDest" value="${path}" placeholder="/new/path">
+      <input class="fm-form-input" id="fmMoveDest" value="${escapeAttr(path)}" placeholder="/new/path">
     </div>
     <div class="fm-form-group">
       <label class="fm-form-label">Overwrite existing? <input type="checkbox" id="fmMoveOverwrite"></label>
@@ -331,7 +468,7 @@ async function fmShowRename(path, currentName) {
   openFmModal('✏ Rename', `
     <div class="fm-form-group">
       <label class="fm-form-label">New name</label>
-      <input class="fm-form-input" id="fmRenameInput" value="${currentName}" autofocus>
+      <input class="fm-form-input" id="fmRenameInput" value="${escapeAttr(currentName)}" autofocus>
       <div class="fm-form-error" id="fmRenameError"></div>
     </div>
     <div class="fm-form-actions">
@@ -358,7 +495,7 @@ async function fmShowRename(path, currentName) {
 
 /* ─── Delete Confirmation ─── */
 async function fmShowDelete(paths) {
-  const names = paths.map(p => p.split('/').pop()).join(', ');
+  const names = paths.map(p => escapeHtml(p.split('/').pop())).join(', ');
   openFmModal('🗑 Confirm Delete', `
     <p style="color:var(--text-secondary);margin-bottom:16px;">Are you sure you want to delete <strong style="color:var(--accent-red)">${names}</strong>?</p>
     <div class="fm-form-actions">
@@ -480,8 +617,8 @@ async function fmShowDetails(path) {
     <div class="fm-details-grid">
       ${lines.filter(l => l.value !== '—' || l.label === 'Name').map(l => `
         <div class="fm-details-row">
-          <span class="fm-details-label">${l.label}</span>
-          <span class="fm-details-value">${l.value}</span>
+          <span class="fm-details-label">${escapeHtml(l.label)}</span>
+          <span class="fm-details-value">${escapeHtml(l.value)}</span>
         </div>
       `).join('')}
     </div>
@@ -497,7 +634,7 @@ async function fmShowArchive(paths) {
   openFmModal('📦 Create Archive', `
     <div class="fm-form-group">
       <label class="fm-form-label">Archive name</label>
-      <input class="fm-form-input" id="fmArchiveName" value="${defaultName}" autofocus>
+      <input class="fm-form-input" id="fmArchiveName" value="${escapeAttr(defaultName)}" autofocus>
     </div>
     <div class="fm-form-group">
       <label class="fm-form-label">Format</label>
@@ -530,7 +667,7 @@ async function fmShowExtract(path) {
   openFmModal('🗜 Extract Archive', `
     <div class="fm-form-group">
       <label class="fm-form-label">Extract to</label>
-      <input class="fm-form-input" id="fmExtractDest" value="${defaultDest}" autofocus>
+      <input class="fm-form-input" id="fmExtractDest" value="${escapeAttr(defaultDest)}" autofocus>
     </div>
     <div class="fm-form-actions">
       <button class="fm-btn fm-btn-cancel">Cancel</button>
@@ -669,6 +806,7 @@ async function fmOpenEditor(filePath) {
     document.getElementById('fmEditorPath').textContent = filePath;
     document.getElementById('fmEditorStatus').textContent = '';
     fmState.editorPath = filePath;
+    fmState.editorOriginalContent = result.content;
 
     const lang = detectLang(name);
     const langBadge = document.getElementById('fmEditorLang');
@@ -696,6 +834,7 @@ document.getElementById('fmEditorSave').addEventListener('click', async () => {
     const parent = path.substring(0, path.lastIndexOf('/'));
     const name = path.split('/').pop();
     await API.file.create({ parentPath: parent, name, type: 'file', content });
+    fmState.editorOriginalContent = content;
     status.textContent = '✅ Saved';
     setTimeout(() => { if (fmAceEditor) fmAceEditor.focus(); }, 100);
   } catch (e) {
@@ -717,22 +856,30 @@ document.getElementById('fmEditorFullscreen').addEventListener('click', () => {
   const isFs = editor.classList.toggle('fullscreen');
   overlay.classList.toggle('fullscreen', isFs);
   btn.classList.toggle('active', isFs);
-  btn.textContent = isFs ? '⛶' : '⛶';
+  btn.textContent = isFs ? '⛶' : '✕';
   if (fmAceEditor) setTimeout(() => fmAceEditor.resize(), 100);
 });
 
 document.getElementById('fmEditorClose').addEventListener('click', () => {
+  fmCloseEditor();
+});
+
+function fmCloseEditor() {
+  const content = getEditorContent();
+  if (fmState.editorOriginalContent !== null && content !== fmState.editorOriginalContent) {
+    if (!confirm('You have unsaved changes. Close without saving?')) return;
+  }
   document.getElementById('fmEditorOverlay').style.display = 'none';
   destroyEditor();
   fmState.editorPath = null;
-});
+  fmState.editorOriginalContent = null;
+}
 
 document.addEventListener('keydown', (e) => {
   if (e.key === 'Escape') {
     if (document.getElementById('fmEditorOverlay').style.display === 'flex') {
-      document.getElementById('fmEditorOverlay').style.display = 'none';
-      destroyEditor();
-      fmState.editorPath = null;
+      fmCloseEditor();
+      return;
     }
     if (document.getElementById('fmModalOverlay').style.display === 'flex') closeFmModal();
     if (document.getElementById('fmPreviewOverlay').style.display === 'flex') closeFmPreview();
@@ -750,7 +897,7 @@ document.addEventListener('keydown', (e) => {
 function fmPreviewImage(path, name) {
   document.getElementById('fmPreviewOverlay').style.display = 'flex';
   document.getElementById('fmPreviewName').textContent = name;
-  document.getElementById('fmPreviewBody').innerHTML = `<img src="${API.getDownloadUrl(path)}" alt="${name}">`;
+  document.getElementById('fmPreviewBody').innerHTML = `<img src="${API.getDownloadUrl(path)}" alt="${escapeAttr(name)}">`;
 }
 
 function fmPreviewPdf(path, name) {
@@ -760,7 +907,7 @@ function fmPreviewPdf(path, name) {
 }
 
 function closeFmPreview(ev) {
-  if (ev && ev.target !== document.getElementById('fmPreviewOverlay') && ev.target !== document.querySelector('.fm-modal-close')) {
+  if (ev && ev.target !== document.getElementById('fmPreviewOverlay') && ev.target !== document.getElementById('fmPreviewClose')) {
     if (ev.target.closest('.fm-preview')) return;
   }
   document.getElementById('fmPreviewOverlay').style.display = 'none';
@@ -791,6 +938,7 @@ function fmShowContextMenu(ev, path, name) {
 
   const isSpace = !path;
   const type = path ? (document.querySelector(`.fm-entry[data-path="${CSS.escape(path)}"]`)?.dataset.type || 'file') : 'file';
+  const hasClipboard = fmState.clipboard && fmState.clipboard.paths.length > 0;
   menu.querySelectorAll('.fm-context-item').forEach(item => {
     const action = item.dataset.action;
     item.style.display = '';
@@ -809,6 +957,9 @@ function fmShowContextMenu(ev, path, name) {
       if (action === 'download') {
         item.style.display = type === 'directory' ? 'none' : '';
       }
+    }
+    if (action === 'clipboard-paste') {
+      item.style.display = hasClipboard ? '' : 'none';
     }
   });
   const divider = document.getElementById('fmCtxDividerEmpty');
@@ -870,6 +1021,15 @@ document.querySelectorAll('.fm-context-item').forEach(item => {
         break;
       case 'details':
         fmShowDetails(path || fmState.currentPath);
+        break;
+      case 'clipboard-copy':
+        fmClipboardCopy([path]);
+        break;
+      case 'clipboard-cut':
+        fmClipboardCut([path]);
+        break;
+      case 'clipboard-paste':
+        fmClipboardPaste();
         break;
     }
   });
@@ -1029,19 +1189,13 @@ document.getElementById('fmPathInput').addEventListener('input', (e) => {
         .map(e => (parent === '/' ? '/' : parent + '/') + e.name);
       const el = document.getElementById('fmPathSuggestions');
       if (suggestions.length > 0) {
-        el.innerHTML = suggestions.map(s => `<div class="fm-path-suggestion">${s}</div>`).join('');
+        el.innerHTML = suggestions.map(s => `<div class="fm-path-suggestion">${escapeHtml(s)}</div>`).join('');
         el.classList.add('active');
-        el.querySelectorAll('.fm-path-suggestion').forEach(sug => {
-          sug.addEventListener('click', () => {
-            document.getElementById('fmPathInput').value = sug.textContent;
-            el.classList.remove('active');
-            document.getElementById('fmPathInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
-          });
-        });
+        /* Delegated click on fmPathSuggestions handles navigation — see initFileManager */
       } else {
         el.classList.remove('active');
       }
-    } catch {}
+    } catch (e) { console.warn('fmPathSearch:', e); }
   }, 300);
 });
 
@@ -1071,6 +1225,32 @@ document.getElementById('fmHiddenToggle').addEventListener('click', () => {
 });
 
 document.getElementById('fmCreateBtn').addEventListener('click', fmShowCreate);
+
+/* ─── Batch Action Buttons ─── */
+document.getElementById('fmBatchBtnCopy')?.addEventListener('click', () => {
+  const sel = getSelectedPaths();
+  if (sel.length) fmShowCopyToBatch(sel);
+});
+document.getElementById('fmBatchBtnMove')?.addEventListener('click', () => {
+  const sel = getSelectedPaths();
+  if (sel.length) fmShowMoveToBatch(sel);
+});
+document.getElementById('fmBatchBtnArchive')?.addEventListener('click', () => {
+  const sel = getSelectedPaths();
+  if (sel.length) fmShowArchive(sel);
+});
+document.getElementById('fmBatchBtnDelete')?.addEventListener('click', () => {
+  const sel = getSelectedPaths();
+  if (sel.length) fmShowDelete(sel);
+});
+document.getElementById('fmBatchBtnDiff')?.addEventListener('click', () => {
+  const sel = getSelectedPaths();
+  fmShowDiff(sel);
+});
+document.getElementById('fmBatchBtnRename')?.addEventListener('click', () => {
+  const sel = getSelectedPaths();
+  if (sel.length) fmShowBatchRename(sel);
+});
 
 /* ─── Search ─── */
 let searchTimer = null;
@@ -1161,31 +1341,13 @@ document.getElementById('fmSearchInput').addEventListener('input', (e) => {
         resultsEl.innerHTML = '<div class="fm-search-empty">No matches found</div>';
       } else {
         resultsEl.innerHTML = results.slice(0, 100).map(r => `
-          <div class="fm-search-result" data-path="${r.path}" data-type="${r.type}">
+          <div class="fm-search-result" data-path="${escapeAttr(r.path)}" data-type="${escapeAttr(r.type)}">
             <span class="fm-search-result-icon">${r.type === 'directory' ? '📁' : '📄'}</span>
-            <span class="fm-search-result-name">${r.name}</span>
-            <span class="fm-search-result-path">${r.path}</span>
+            <span class="fm-search-result-name">${escapeHtml(r.name)}</span>
+            <span class="fm-search-result-path">${escapeHtml(r.path)}</span>
           </div>
         `).join('');
-        resultsEl.querySelectorAll('.fm-search-result').forEach(el => {
-          el.addEventListener('click', () => {
-            const path = el.dataset.path;
-            const type = el.dataset.type;
-            if (type === 'directory') {
-              fmSearchOpen = false;
-              document.getElementById('fmSearchPanel').style.display = 'none';
-              document.getElementById('fmSearchToggle').classList.remove('active');
-              fmNavigate(path);
-            } else {
-              fmSearchOpen = false;
-              document.getElementById('fmSearchPanel').style.display = 'none';
-              document.getElementById('fmSearchToggle').classList.remove('active');
-              const parent = path.substring(0, path.lastIndexOf('/')) || '/';
-              fmNavigate(parent);
-              setTimeout(() => fmOpenEditor(path), 300);
-            }
-          });
-        });
+        /* Delegated click on fmSearchResults handles navigation — see initFileManager */
       }
       document.getElementById('fmSearchStats').textContent = results.length + ' matches found';
     }
@@ -1201,6 +1363,7 @@ document.getElementById('fmSearchScope').addEventListener('change', () => {
 document.querySelectorAll('.fm-sidebar-item').forEach(item => {
   item.addEventListener('click', () => fmNavigate(item.dataset.path));
 });
+document.getElementById('fmTreeToggle').addEventListener('click', fmToggleTree);
 
 /* ─── Modal Close Listeners ── */
 document.getElementById('fmModalOverlay').addEventListener('click', closeFmModal);
@@ -1222,16 +1385,44 @@ async function initFileManager() {
   }
   fmState.fmInitialized = true;
   document.getElementById('fmHiddenToggle').classList.toggle('active', fmState.showHidden);
+
+  /* Delegated click on search results */
+  document.getElementById('fmSearchResults').addEventListener('click', (e) => {
+    const el = e.target.closest('.fm-search-result');
+    if (!el) return;
+    const path = el.dataset.path;
+    const type = el.dataset.type;
+    if (!path) return;
+    fmSearchOpen = false;
+    document.getElementById('fmSearchPanel').style.display = 'none';
+    document.getElementById('fmSearchToggle').classList.remove('active');
+    if (type === 'directory') {
+      fmNavigate(path);
+    } else {
+      const parent = path.substring(0, path.lastIndexOf('/')) || '/';
+      fmNavigate(parent);
+      setTimeout(() => fmOpenEditor(path), 300);
+    }
+  });
+
+  /* Delegated click on path suggestions */
+  document.getElementById('fmPathSuggestions').addEventListener('click', (e) => {
+    const el = e.target.closest('.fm-path-suggestion');
+    if (!el) return;
+    document.getElementById('fmPathInput').value = el.textContent;
+    document.getElementById('fmPathSuggestions').classList.remove('active');
+    document.getElementById('fmPathInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
+  });
+
   await fmLoadDirectory();
 }
 
 /* ── Batch Move To ── */
 function fmShowMoveToBatch(paths) {
-  const names = paths.map(p => p.split('/').pop()).join(', ');
   openFmModal('✂️ Move ' + paths.length + ' items', `
     <div class="fm-form-group">
       <label class="fm-form-label">Move ${paths.length} items to:</label>
-      <input class="fm-form-input" id="fmMoveDest" value="${fmState.currentPath}" placeholder="/destination">
+      <input class="fm-form-input" id="fmMoveDest" value="${escapeAttr(fmState.currentPath)}" placeholder="/destination">
     </div>
     <div class="fm-form-group">
       <label class="fm-form-label">Overwrite existing? <input type="checkbox" id="fmMoveOverwrite"></label>
@@ -1257,11 +1448,10 @@ function fmShowMoveToBatch(paths) {
 
 /* ── Batch Copy To ── */
 function fmShowCopyToBatch(paths) {
-  const names = paths.map(p => p.split('/').pop()).join(', ');
   openFmModal('📋 Copy ' + paths.length + ' items', `
     <div class="fm-form-group">
       <label class="fm-form-label">Copy ${paths.length} items to:</label>
-      <input class="fm-form-input" id="fmCopyDest" value="${fmState.currentPath}" placeholder="/destination">
+      <input class="fm-form-input" id="fmCopyDest" value="${escapeAttr(fmState.currentPath)}" placeholder="/destination">
     </div>
     <div class="fm-form-group">
       <label class="fm-form-label">Overwrite existing? <input type="checkbox" id="fmCopyOverwrite"></label>
@@ -1285,6 +1475,233 @@ function fmShowCopyToBatch(paths) {
   });
 }
 
+/* ── Batch Rename ── */
+function fmShowBatchRename(paths) {
+  const names = paths.map(p => p.split('/').pop());
+  const previewId = 'fmBatchRenamePreview';
+
+  function computeNewName(name, opts) {
+    let result = name;
+    if (opts.findText && opts.replaceText !== undefined) {
+      result = result.split(opts.findText).join(opts.replaceText);
+    }
+    if (opts.prefix) result = opts.prefix + result;
+    if (opts.suffix) {
+      const dot = result.lastIndexOf('.');
+      if (dot > 0) result = result.slice(0, dot) + opts.suffix + result.slice(dot);
+      else result = result + opts.suffix;
+    }
+    if (opts.caseMode === 'lower') result = result.toLowerCase();
+    if (opts.caseMode === 'upper') result = result.toUpperCase();
+    return result;
+  }
+
+  function renderPreview() {
+    const opts = {
+      findText: document.getElementById('fmBatchFind')?.value || '',
+      replaceText: document.getElementById('fmBatchReplace')?.value || '',
+      prefix: document.getElementById('fmBatchPrefix')?.value || '',
+      suffix: document.getElementById('fmBatchSuffix')?.value || '',
+      caseMode: document.getElementById('fmBatchCase')?.value || '',
+    };
+    const previewEl = document.getElementById(previewId);
+    if (!previewEl) return;
+    const seen = new Set();
+    previewEl.innerHTML = names.map(name => {
+      const newName = computeNewName(name, opts);
+      const changed = newName !== name;
+      const conflict = seen.has(newName);
+      if (changed) seen.add(newName);
+      const cls = conflict ? 'fm-rename-conflict' : (changed ? 'fm-rename-changed' : '');
+      return `<div class="fm-rename-row ${cls}">
+        <span class="fm-rename-old">${escapeHtml(name)}</span>
+        <span class="fm-rename-arrow">→</span>
+        <span class="fm-rename-new">${escapeHtml(newName || '—')}</span>
+        ${conflict ? '<span class="fm-rename-warn">⚠ duplicate</span>' : ''}
+      </div>`;
+    }).join('');
+  }
+
+  openFmModal('✏ Batch Rename', `
+    <div class="fm-rename-opts">
+      <div class="fm-rename-field">
+        <label class="fm-form-label">Find</label>
+        <input class="fm-form-input" id="fmBatchFind" placeholder="text to find" oninput="fmBatchRenamePreview()">
+      </div>
+      <div class="fm-rename-field">
+        <label class="fm-form-label">Replace</label>
+        <input class="fm-form-input" id="fmBatchReplace" placeholder="replacement text" oninput="fmBatchRenamePreview()">
+      </div>
+      <div class="fm-rename-row2">
+        <div class="fm-rename-field">
+          <label class="fm-form-label">Prefix</label>
+          <input class="fm-form-input" id="fmBatchPrefix" placeholder="prefix" oninput="fmBatchRenamePreview()">
+        </div>
+        <div class="fm-rename-field">
+          <label class="fm-form-label">Suffix</label>
+          <input class="fm-form-input" id="fmBatchSuffix" placeholder="suffix (before ext)" oninput="fmBatchRenamePreview()">
+        </div>
+      </div>
+      <div class="fm-rename-field">
+        <label class="fm-form-label">Case</label>
+        <select class="fm-form-select" id="fmBatchCase" onchange="fmBatchRenamePreview()">
+          <option value="">No change</option>
+          <option value="lower">Lowercase</option>
+          <option value="upper">Uppercase</option>
+        </select>
+      </div>
+    </div>
+    <div class="fm-rename-count">${names.length} item(s) selected</div>
+    <div class="fm-rename-preview" id="${previewId}"></div>
+    <div class="fm-form-actions">
+      <button class="fm-btn fm-btn-cancel">Cancel</button>
+      <button class="fm-btn fm-btn-primary" id="fmBatchRenameSubmit">✏ Rename All</button>
+    </div>
+  `);
+
+  window.fmBatchRenamePreview = renderPreview;
+  renderPreview();
+
+  document.getElementById('fmBatchRenameSubmit').addEventListener('click', async () => {
+    const opts = {
+      findText: document.getElementById('fmBatchFind').value,
+      replaceText: document.getElementById('fmBatchReplace').value,
+      prefix: document.getElementById('fmBatchPrefix').value,
+      suffix: document.getElementById('fmBatchSuffix').value,
+      caseMode: document.getElementById('fmBatchCase').value,
+    };
+    const results = { renamed: 0, skipped: 0, errors: [] };
+    const usedNames = new Set();
+
+    for (const p of paths) {
+      const name = p.split('/').pop();
+      const newName = computeNewName(name, opts);
+      if (!newName || newName === name) { results.skipped++; continue; }
+      if (usedNames.has(newName)) { results.skipped++; continue; }
+      usedNames.add(newName);
+      const parent = p.substring(0, p.lastIndexOf('/')) || '/';
+      try {
+        await API.file.rename({ path: p, newName });
+        results.renamed++;
+      } catch (e) {
+        results.errors.push(`${escapeHtml(name)}: ${escapeHtml(e.message)}`);
+      }
+    }
+
+    closeFmModal();
+    await fmLoadDirectory();
+    const msg = `Renamed ${results.renamed} item(s)` +
+      (results.skipped > 0 ? `, ${results.skipped} skipped` : '') +
+      (results.errors.length > 0 ? `, ${results.errors.length} error(s)` : '');
+    fmShowToast(msg, results.errors.length > 0 ? 'error' : 'success');
+  });
+}
+
+/* ── Diff View ── */
+async function fmShowDiff(paths) {
+  if (paths.length !== 2) {
+    fmShowToast('Select exactly 2 files to compare', 'error');
+    return;
+  }
+  const pathA = paths[0], pathB = paths[1];
+  /* Verify both are files (not directories) */
+  const entries = document.querySelectorAll('.fm-entry');
+  const types = {};
+  entries.forEach(el => { types[el.dataset.path] = el.dataset.type; });
+  if (types[pathA] === 'directory' || types[pathB] === 'directory') {
+    fmShowToast('Cannot compare directories', 'error');
+    return;
+  }
+
+  try {
+    const result = await API.file.diff({ source: pathA, target: pathB });
+    const { source, target, hunks } = result;
+
+    let html = `<div class="fm-diff-header"><span>${escapeHtml(source)}</span><span class="fm-diff-vs">vs</span><span>${escapeHtml(target)}</span></div>`;
+
+    if (!hunks || hunks.length === 0) {
+      html += '<div class="fm-diff-empty">Files are identical</div>';
+    } else {
+      let oldLine = 1, newLine = 1;
+      for (const hunk of hunks) {
+        if (hunk.type === 'equal') {
+          for (const line of hunk.lines) {
+            html += `<div class="fm-diff-line fm-diff-equal"><span class="fm-diff-num">${oldLine++}</span><span class="fm-diff-num">${newLine++}</span><span class="fm-diff-text">${escapeHtml(line)}</span></div>`;
+          }
+        } else if (hunk.type === 'add') {
+          for (const line of hunk.lines) {
+            html += `<div class="fm-diff-line fm-diff-add"><span class="fm-diff-num"></span><span class="fm-diff-num">${newLine++}</span><span class="fm-diff-text">+ ${escapeHtml(line)}</span></div>`;
+          }
+        } else if (hunk.type === 'remove') {
+          for (const line of hunk.lines) {
+            html += `<div class="fm-diff-line fm-diff-remove"><span class="fm-diff-num">${oldLine++}</span><span class="fm-diff-num"></span><span class="fm-diff-text">- ${escapeHtml(line)}</span></div>`;
+          }
+        } else if (hunk.type === 'replace') {
+          for (const line of hunk.removed) {
+            html += `<div class="fm-diff-line fm-diff-remove"><span class="fm-diff-num">${oldLine++}</span><span class="fm-diff-num"></span><span class="fm-diff-text">- ${escapeHtml(line)}</span></div>`;
+          }
+          for (const line of hunk.added) {
+            html += `<div class="fm-diff-line fm-diff-add"><span class="fm-diff-num"></span><span class="fm-diff-num">${newLine++}</span><span class="fm-diff-text">+ ${escapeHtml(line)}</span></div>`;
+          }
+        }
+      }
+    }
+
+    openFmModal('⇄ File Comparison', `
+      <div class="fm-diff-container">${html}</div>
+      <div class="fm-form-actions">
+        <button class="fm-btn fm-btn-cancel">Close</button>
+      </div>
+    `);
+  } catch (e) {
+    fmShowToast(e.message || 'Diff failed', 'error');
+  }
+}
+
+/* ── Clipboard (Cut/Copy/Paste) ── */
+function fmClipboardCopy(paths) {
+  fmState.clipboard = { action: 'copy', paths: Array.from(paths) };
+  document.getElementById('fmCtxPaste').style.display = '';
+  fmShowToast(`Copied ${paths.length} item(s) to clipboard`, 'success');
+}
+
+function fmClipboardCut(paths) {
+  fmState.clipboard = { action: 'cut', paths: Array.from(paths) };
+  document.getElementById('fmCtxPaste').style.display = '';
+  fmShowToast(`Cut ${paths.length} item(s) to clipboard`, 'success');
+}
+
+async function fmClipboardPaste() {
+  if (!fmState.clipboard || !fmState.clipboard.paths.length) return;
+  const { action, paths } = fmState.clipboard;
+  const dest = fmState.currentPath;
+  const results = [];
+  for (const src of paths) {
+    const name = src.split('/').pop();
+    const target = dest.replace(/\/$/, '') + '/' + name;
+    try {
+      if (action === 'copy') {
+        await API.file.copyto({ source: src, destination: target, overwrite: false });
+      } else {
+        await API.file.moveto({ source: src, destination: target, overwrite: false });
+      }
+      results.push({ src, ok: true });
+    } catch (e) {
+      results.push({ src, ok: false, error: e.message });
+    }
+  }
+    fmState.clipboard = null;
+    document.getElementById('fmCtxPaste').style.display = 'none';
+    try { await fmLoadDirectory(); } catch (e) { console.warn('fmClipboardPaste: reload failed', e); }
+  const ok = results.filter(r => r.ok).length;
+  const fail = results.filter(r => !r.ok).length;
+  if (fail > 0) {
+    fmShowToast(`${action === 'copy' ? 'Copied' : 'Moved'} ${ok}, ${fail} failed`, 'error');
+  } else {
+    fmShowToast(`${action === 'copy' ? 'Copied' : 'Moved'} ${ok} item(s)`, 'success');
+  }
+}
+
 /* ── Keyboard Shortcuts ── */
 document.addEventListener('keydown', (e) => {
   if (document.getElementById('fmEditorOverlay')?.style.display === 'flex') return;
@@ -1297,15 +1714,24 @@ document.addEventListener('keydown', (e) => {
   const sel = getSelectedPaths();
   const first = sel.length > 0 ? sel[0] : null;
 
-  if (mod && e.key === 'd') { e.preventDefault(); if (sel.length) fmShowDelete(sel); }
+  if (mod && e.key === 'c' && e.shiftKey) { e.preventDefault(); if (sel.length) fmClipboardCopy(sel); }
+  else if (mod && e.key === 'x' && e.shiftKey) { e.preventDefault(); if (sel.length) fmClipboardCut(sel); }
+  else if (mod && e.key === 'v' && e.shiftKey) { e.preventDefault(); fmClipboardPaste(); }
+  else if (mod && e.key === 'd') { e.preventDefault(); if (sel.length) fmShowDelete(sel); }
   else if (mod && e.key === 'a') { e.preventDefault(); selectAll(); }
   else if (mod && e.key === 'e') { e.preventDefault(); if (first) fmOpenEditor(first); }
+  else   if (mod && e.key === 'r' && e.shiftKey) { e.preventDefault(); if (sel.length) fmShowBatchRename(sel); }
   else if (mod && e.key === 'r') { e.preventDefault(); if (first) fmShowRename(first, first.split('/').pop()); }
   else if (mod && e.key === 'o') { e.preventDefault(); if (first) { const el = document.querySelector(`.fm-entry[data-path="${CSS.escape(first)}"]`); if (el) fmEntryOpen(el); } }
   else if (mod && e.key === 'm') { e.preventDefault(); if (sel.length) fmShowMoveToBatch(sel); }
   else if (mod && e.key === 'c') { e.preventDefault(); if (sel.length) fmShowCopyToBatch(sel); }
-  else if (mod && e.key === 't') { e.preventDefault(); fmShowCreate(); }
+  else   if (mod && e.key === 't') { e.preventDefault(); fmShowCreate(); }
   else if (mod && e.key === 'n') { e.preventDefault(); fmShowCreateFolder(); }
+  else if (e.key === 'ArrowUp') { e.preventDefault(); moveSelectionUp(); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); moveSelectionDown(); }
+  else if (e.key === 'Delete') { e.preventDefault(); if (sel.length) fmShowDelete(sel); }
+  else if (e.key === 'F2') { e.preventDefault(); if (first) fmShowRename(first, first.split('/').pop()); }
+  else if (e.key === 'F5') { e.preventDefault(); fmLoadDirectory(); }
 });
 
 function selectAll() {
@@ -1330,6 +1756,16 @@ function moveSelectionDown() {
   const last = sel[sel.length - 1];
   const idx = entries.findIndex(el => el.dataset.path === last);
   if (idx >= 0 && idx < entries.length - 1) entries[idx + 1].click();
+}
+
+function moveSelectionUp() {
+  const entries = Array.from(document.querySelectorAll('.fm-entry'));
+  if (entries.length === 0) return;
+  const sel = getSelectedPaths();
+  if (sel.length === 0) { entries[entries.length - 1].click(); return; }
+  const first = sel[0];
+  const idx = entries.findIndex(el => el.dataset.path === first);
+  if (idx > 0) entries[idx - 1].click();
 }
 
 function fmShowCreateFolder() {
@@ -1361,6 +1797,12 @@ window.closeFmPreview = closeFmPreview;
 var fmGitOpen = false;
 async function fmInitGit() {
   try {
+    document.getElementById('fmGitFiles').addEventListener('click', function (ev) {
+      var btn = ev.target.closest('[data-git-stage]');
+      if (btn) { fmGitStage(decodeURIComponent(btn.getAttribute('data-git-stage'))); return; }
+      btn = ev.target.closest('[data-git-unstage]');
+      if (btn) { fmGitUnstage(decodeURIComponent(btn.getAttribute('data-git-unstage'))); }
+    });
     var status = await API.file.gitStatus(fmState.currentPath);
     var btn = document.getElementById('fmGitBtn');
     if (status && status.isRepo) {
@@ -1368,7 +1810,7 @@ async function fmInitGit() {
     } else {
       if (btn) btn.style.color = '';
     }
-  } catch (e) {}
+  } catch (e) { console.warn('fmInitGit:', e); }
 }
 
 async function fmToggleGit() {
@@ -1403,15 +1845,16 @@ async function fmGitRefresh() {
       filesEl.innerHTML = status.files.map(function (f) {
         var cls = f.status.includes('?') ? 'untracked' : f.status.includes('M') ? 'modified' : f.status.includes('D') ? 'deleted' : f.status.includes('A') ? 'added' : '';
         var staged = f.status.includes('M') && f.status.length === 2 && f.status[0] === 'M';
+        var fileEnc = encodeURIComponent(f.file);
         return '<div class="fm-git-file ' + cls + '">'
-          + '<span class="fm-git-file-status">' + f.status + '</span>'
-          + '<span class="fm-git-file-name">' + escHtml(f.file) + '</span>'
+          + '<span class="fm-git-file-status">' + escapeHtml(f.status) + '</span>'
+          + '<span class="fm-git-file-name">' + escapeHtml(f.file) + '</span>'
           + '<div class="fm-git-file-actions">'
-          + (!staged ? '<button class="fm-btn fm-btn-sm" onclick="fmGitStage(\'' + escHtml(f.file) + '\')">+ Stage</button>' : '<button class="fm-btn fm-btn-sm" onclick="fmGitUnstage(\'' + escHtml(f.file) + '\')">− Unstage</button>')
+          + (!staged ? '<button class="fm-btn fm-btn-sm" data-git-stage="' + fileEnc + '">+ Stage</button>' : '<button class="fm-btn fm-btn-sm" data-git-unstage="' + fileEnc + '">− Unstage</button>')
           + '</div></div>';
       }).join('');
     }
-  } catch (e) { showFmError(e.message); }
+  } catch (e) { fmShowToast(e.message, 'error'); }
 }
 
 async function fmGitStage(file) {
