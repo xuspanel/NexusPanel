@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.13.0] - 2026-07-22
+### Added
+- **FTP Service Control**: Start/stop/restart vsftpd service from the UI
+- **FTP Connection Test**: Test FTP connectivity with host/port/credentials before saving
+- **FTP Activity Logs**: Full log viewer with search, parsing vsftpd.log and xferlog formats
+- **FTP Bandwidth Monitoring**: Total in/out stats and recent transfer history
+- **FTP Config Editor**: Direct vsftpd.conf editing with backup on save
+- **FTP Passive Port Configuration**: Edit passive port range from the UI
+- **FTP SSL Certificate Management**: View existing cert info, generate self-signed certificates
+- **FTP Quota Management**: Set disk quotas via setquota, view detailed quota info
+- **FTP User Pagination**: Paginated account list for large user bases
+- **FTP User Search**: Filter accounts by username, home directory, or local root
+- **FTP Bulk Operations**: Enable/disable/delete multiple users at once with checkbox selection
+- **FTP Write/Download Controls**: Per-user write_enable and download_enable permissions
+- **FTP Audit Logging**: All FTP operations (create/delete/enable/disable/config changes) logged to audit system
+- **FTP Bulk Bar**: Visual selection toolbar with count, bulk enable/disable/delete buttons
+- **FTP Service Control Buttons**: Start/Stop/Restart buttons below status cards
+
+### Fixed
+- **XSS in FTP onclick handlers (CRITICAL)**: Replaced inline onclick with event delegation using data- attributes — prevents code injection via malicious usernames
+- **HTML table header/column mismatch**: Headers now match rendered columns (added Rate Limit, Clients, select-all checkbox)
+- **pkill killing all user processes**: Changed from `pkill -9 -u username` (kills everything) to `pkill -9 -f vsftpd.*username` (kills only FTP sessions)
+- **userdel -rf force-deletes home**: Changed from `-rf` to `-r` to allow graceful removal
+- **FTP service log not read**: Now reads /var/log/vsftpd.log first (more detailed), falls back to xferlog
+- **Duplicate formatSize/escHtml functions**: Removed — uses global versions from style.css
+- **Unused ftpData global variable**: Replaced with proper ftpState object
+- **FTP create route not RESTful**: Changed `POST /accounts/create` to `POST /accounts`
+
+### Changed
+- Backend service rewritten with file locking, audit integration, service control, connection testing, config editor, SSL management, bandwidth monitoring
+- Backend routes expanded from 9 to 25+ endpoints with proper REST conventions
+- Frontend API expanded from 9 to 20+ methods
+- Frontend JS rewritten with event delegation pattern, search, pagination, bulk operations, loading states
+- Frontend HTML updated with toolbar buttons, search bar, bulk bar, pagination, 7 new modals
+- Frontend CSS expanded with 60+ new style rules for all new UI components
+
 ## [1.12.0] - 2026-07-22
 ### Added
 - **Docker Screen implementation**: complete Docker management interface

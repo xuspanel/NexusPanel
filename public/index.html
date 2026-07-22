@@ -1251,11 +1251,18 @@
         </div>
         <div class="db-header-right">
           <button class="db-btn db-btn-primary" id="ftpAddBtn">+ Add User</button>
+          <button class="db-btn db-btn-icon" id="ftpTestBtn" title="Test Connection">🔗</button>
+          <button class="db-btn db-btn-icon" id="ftpLogsBtn" title="Activity Logs">📋</button>
+          <button class="db-btn db-btn-icon" id="ftpBwBtn" title="Bandwidth">📊</button>
+          <button class="db-btn db-btn-icon" id="ftpSSLBtn" title="SSL Certificate">🔒</button>
+          <button class="db-btn db-btn-icon" id="ftpPassiveBtn" title="Passive Ports">🌐</button>
+          <button class="db-btn db-btn-icon" id="ftpConfigBtn" title="vsftpd Config">⚙</button>
           <button class="db-btn db-btn-icon" id="ftpRefreshBtn" title="Refresh">↻</button>
         </div>
       </div>
 
       <div id="ftpStatusCards" class="ftp-status-grid"></div>
+      <div id="ftpServiceCtrl" class="ftp-service-ctrl"></div>
 
       <div id="ftpLoading" class="db-loading">
         <div class="db-loading-spinner"></div>
@@ -1269,14 +1276,28 @@
       </div>
 
       <div id="ftpContent" style="display:none;">
+        <div class="ftp-search-bar">
+          <input type="text" id="ftpSearchInput" class="form-input" placeholder="Search users..." style="max-width:260px">
+        </div>
+
+        <div id="ftpBulkBar" class="ftp-bulk-bar" style="display:none;">
+          <span id="ftpBulkCount">0 selected</span>
+          <button class="fm-btn fm-btn-sm fm-btn-primary" data-ftp-action="bulkEnable">🔓 Enable All</button>
+          <button class="fm-btn fm-btn-sm" data-ftp-action="bulkDisable">🔒 Disable All</button>
+          <button class="fm-btn fm-btn-sm fm-btn-danger" data-ftp-action="bulkDelete">🗑 Delete All</button>
+          <button class="fm-btn fm-btn-sm" data-ftp-action="clearSelection">✕ Clear</button>
+        </div>
+
         <div class="users-table-wrap">
           <table class="users-table">
             <thead>
               <tr>
+                <th style="width:36px"><label class="form-checkbox ftp-select-check"><input type="checkbox" data-ftp-action="selectAll"><span class="form-checkbox-mark"></span></label></th>
                 <th>Username</th>
-                <th>UID</th>
                 <th>Home</th>
                 <th>Disk Usage</th>
+                <th>Rate Limit</th>
+                <th>Clients</th>
                 <th>Status</th>
                 <th>Actions</th>
               </tr>
@@ -1284,6 +1305,8 @@
             <tbody id="ftpTableBody"></tbody>
           </table>
         </div>
+
+        <div id="ftpPagination" class="ftp-pagination"></div>
       </div>
     </main>
 
@@ -2260,7 +2283,7 @@
   </div>
 
   <!-- FTP User Form Modal -->
-  <div id="ftpFormModal" class="modal-overlay ftp-form-modal" style="display:none;">
+  <div id="ftpFormModal" class="modal-overlay ftp-modal-overlay" style="display:none;">
     <div class="modal" style="max-width:540px;">
       <div class="modal-header">
         <span class="modal-icon">📡</span>
@@ -2271,7 +2294,6 @@
         <div class="modal-body">
           <div id="ftpFormError" class="form-error" style="display:none;"></div>
           <div id="ftpFormSuccess" class="form-success" style="display:none;"></div>
-
           <div class="form-row">
             <div class="form-group">
               <label class="form-label">Username</label>
@@ -2292,7 +2314,7 @@
           </div>
           <div class="form-row" style="display:flex;gap:12px;">
             <div class="form-group" style="flex:1;">
-              <label class="form-label">Max Rate (bytes/s, 0=unlimited)</label>
+              <label class="form-label">Max Rate (bytes/s)</label>
               <input type="number" id="ftpFormMaxRate" class="form-input" value="0" min="0">
             </div>
             <div class="form-group" style="flex:1;">
@@ -2305,12 +2327,10 @@
               <label class="form-label">Max Per IP</label>
               <input type="number" id="ftpFormMaxPerIP" class="form-input" value="2" min="1" max="10">
             </div>
-            <div class="form-group" style="flex:1;display:flex;align-items:center;padding-top:24px;">
-              <label class="form-checkbox" id="ftpEnabledRow" style="display:none;">
-                <input type="checkbox" id="ftpFormEnabled" checked>
-                <span class="form-checkbox-mark"></span>
-                <span class="form-checkbox-label">Enabled</span>
-              </label>
+            <div class="form-group" style="flex:1;display:flex;flex-direction:column;gap:8px;padding-top:4px;">
+              <label class="form-checkbox"><input type="checkbox" id="ftpFormWriteEnable" checked><span class="form-checkbox-mark"></span><span class="form-checkbox-label">Write</span></label>
+              <label class="form-checkbox"><input type="checkbox" id="ftpFormDownloadEnable" checked><span class="form-checkbox-mark"></span><span class="form-checkbox-label">Download</span></label>
+              <label class="form-checkbox" id="ftpEnabledRow" style="display:none;"><input type="checkbox" id="ftpFormEnabled" checked><span class="form-checkbox-mark"></span><span class="form-checkbox-label">Enabled</span></label>
             </div>
           </div>
         </div>
@@ -2319,6 +2339,145 @@
           <button type="submit" class="fm-btn fm-btn-primary" id="ftpFormSubmit">Save</button>
         </div>
       </form>
+    </div>
+  </div>
+
+  <!-- FTP Config Editor Modal -->
+  <div id="ftpConfigModal" class="modal-overlay ftp-modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-header">
+        <span class="modal-icon">⚙</span>
+        <span class="modal-title">vsftpd Configuration</span>
+        <button class="modal-close" id="ftpConfigClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="ftp-config-warning">⚠️ Restart vsftpd after saving for changes to take effect.</p>
+        <textarea id="ftpConfigEditor" class="ftp-config-editor" spellcheck="false" rows="20"></textarea>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="fm-btn fm-btn-secondary" id="ftpConfigClose2">Cancel</button>
+        <button type="button" class="fm-btn fm-btn-primary" id="ftpConfigSave">Save & Restart</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FTP SSL Modal -->
+  <div id="ftpSSLModal" class="modal-overlay ftp-modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:540px;">
+      <div class="modal-header">
+        <span class="modal-icon">🔒</span>
+        <span class="modal-title">SSL Certificate</span>
+        <button class="modal-close" id="ftpSSLClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div id="ftpSSLInfo"></div>
+        <div class="form-row" style="margin-top:16px;">
+          <div class="form-group">
+            <label class="form-label">Generate Self-Signed Certificate</label>
+            <div style="display:flex;gap:8px;">
+              <input type="text" id="ftpSSLDomain" class="form-input" placeholder="Domain (e.g. ftp.example.com)" style="flex:1">
+              <button type="button" class="fm-btn fm-btn-primary" id="ftpSSLGenerate">Generate</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- FTP Connection Test Modal -->
+  <div id="ftpTestModal" class="modal-overlay ftp-modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:480px;">
+      <div class="modal-header">
+        <span class="modal-icon">🔗</span>
+        <span class="modal-title">Test FTP Connection</span>
+        <button class="modal-close" id="ftpTestClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row" style="display:flex;gap:12px;">
+          <div class="form-group" style="flex:2;">
+            <label class="form-label">Host</label>
+            <input type="text" id="ftpTestHost" class="form-input" value="127.0.0.1">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Port</label>
+            <input type="number" id="ftpTestPort" class="form-input" value="21">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Username (optional)</label>
+            <input type="text" id="ftpTestUser" class="form-input" placeholder="Anonymous test">
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Password (optional)</label>
+            <input type="password" id="ftpTestPass" class="form-input">
+          </div>
+        </div>
+        <div id="ftpTestResult" class="ftp-test-result" style="display:none;"></div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="fm-btn fm-btn-secondary" id="ftpTestCancel">Cancel</button>
+        <button type="button" class="fm-btn fm-btn-primary" id="ftpTestRun">Test Connection</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FTP Passive Ports Modal -->
+  <div id="ftpPassiveModal" class="modal-overlay ftp-modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:420px;">
+      <div class="modal-header">
+        <span class="modal-icon">🌐</span>
+        <span class="modal-title">Passive Port Range</span>
+        <button class="modal-close" id="ftpPassiveClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-row" style="display:flex;gap:12px;">
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Min Port</label>
+            <input type="number" id="ftpPassiveMin" class="form-input" value="40000" min="1024" max="65535">
+          </div>
+          <div class="form-group" style="flex:1;">
+            <label class="form-label">Max Port</label>
+            <input type="number" id="ftpPassiveMax" class="form-input" value="40010" min="1024" max="65535">
+          </div>
+        </div>
+        <p class="ftp-config-warning">Restart vsftpd after saving.</p>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="fm-btn fm-btn-secondary" id="ftpPassiveCancel">Cancel</button>
+        <button type="button" class="fm-btn fm-btn-primary" id="ftpPassiveSave">Save</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- FTP Bandwidth Modal -->
+  <div id="ftpBandwidthModal" class="modal-overlay ftp-modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:600px;">
+      <div class="modal-header">
+        <span class="modal-icon">📊</span>
+        <span class="modal-title">Bandwidth &amp; Transfers</span>
+        <button class="modal-close" id="ftpBwClose">✕</button>
+      </div>
+      <div class="modal-body" id="ftpBandwidthBody"></div>
+    </div>
+  </div>
+
+  <!-- FTP Activity Logs Modal -->
+  <div id="ftpLogsModal" class="modal-overlay ftp-modal-overlay" style="display:none;">
+    <div class="modal" style="max-width:700px;">
+      <div class="modal-header">
+        <span class="modal-icon">📋</span>
+        <span class="modal-title">Activity Logs</span>
+        <button class="modal-close" id="ftpLogsClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <div style="margin-bottom:12px;">
+          <input type="text" id="ftpLogsSearch" class="form-input" placeholder="Search logs..." style="width:100%">
+        </div>
+        <div id="ftpLogsBody"></div>
+      </div>
     </div>
   </div>
 
