@@ -149,16 +149,17 @@ dockerWss.on('connection', (ws, req) => dockerWs.handleConnection(ws, req));
 
 wss.on('connection', (ws, req) => {
   const panes = new Map();
-
   const token = parseCookies(req.headers.cookie || '').token;
   if (!token) {
-    ws.close(4001, 'No auth cookie');
+    ws.send(JSON.stringify({ type: 'error', error: 'Session expired. Please refresh the page.' }));
+    setTimeout(() => { try { ws.close(4001, 'No auth cookie'); } catch(_){} }, 100);
     return;
   }
   try {
     req.user = jwt.verify(token, process.env.JWT_SECRET);
   } catch (_) {
-    ws.close(4001, 'Invalid token');
+    ws.send(JSON.stringify({ type: 'error', error: 'Invalid session. Please refresh the page.' }));
+    setTimeout(() => { try { ws.close(4001, 'Invalid token'); } catch(_){} }, 100);
     return;
   }
 
