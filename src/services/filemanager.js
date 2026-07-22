@@ -287,6 +287,17 @@ async function searchFiles(rootPath, query, includePatterns, excludePatterns, us
   return results;
 }
 
+async function deleteEntry(targetPath, user) {
+  const safePath = safeResolve(targetPath, user);
+  const stat = await fsp.stat(safePath);
+  if (stat.isDirectory()) {
+    await fsp.rm(safePath, { recursive: true, force: true });
+  } else {
+    await fsp.unlink(safePath);
+  }
+  return { success: true };
+}
+
 async function createArchive(paths, destination, format, user) {
   const safeDest = safeResolve(destination, user);
   return new Promise((resolve, reject) => {

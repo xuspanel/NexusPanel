@@ -18,6 +18,7 @@ const { authMiddleware } = require('./src/middleware/auth');
 const { securityHeaders, loginLimiter, apiLimiter } = require('./src/middleware/security');
 const users = require('./src/services/users');
 const terminal = require('./src/services/terminal');
+const dockerWs = require('./src/services/docker-ws');
 
 const app = express();
 const server = http.createServer(app);
@@ -142,6 +143,9 @@ app.use((err, req, res, next) => {
 
 const wss = new WebSocketServer({ server, path: '/ws/terminal' });
 let sessIdCounter = 0;
+
+const dockerWss = new WebSocketServer({ server, path: '/ws/docker' });
+dockerWss.on('connection', (ws, req) => dockerWs.handleConnection(ws, req));
 
 wss.on('connection', (ws, req) => {
   const panes = new Map();

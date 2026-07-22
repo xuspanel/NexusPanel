@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.12.0] - 2026-07-22
+### Added
+- **Docker Screen implementation**: complete Docker management interface
+  - **Backend service** (`src/services/docker.js`): Dockerode-based with 25+ functions — containers CRUD, images CRUD, inspect/stats/logs, pull with progress callback, prune (containers/images/volumes), createContainer (ports/volumes/env/memory/cpus), listNetworks, inspectNetwork, removeNetwork, listComposeProjects, containerArchive, readContainerFile
+  - **Backend routes** (`src/routes/docker.js`): All REST endpoints including containers, images, networks, compose, create, prune, filesystem
+  - **Backend WebSocket** (`src/services/docker-ws.js`): Handles exec, logs, exec-input, exec-output, exec-resize, exec-end, exec-error, pull, pull-progress, pull-complete, pull-error, logs-data, logs-end
+  - **Frontend API** (`public/js/api.js`): Full `API.docker` object with containers, images, info, start/stop/restart/remove, removeImage, logs, inspect, stats, inspectImage, imageHistory, pull, prune, createContainer, networks, inspectNetwork, removeNetwork, composeProjects, composeProject, containerFs, containerFsRead
+  - **Frontend UI** (`public/js/docker.js`): Complete Docker management interface with:
+    - Project-based container rendering with collapsible cards
+    - Color-coded status dots (running=green, paused=yellow, stopped=gray)
+    - Batch selection and actions (stop/restart/remove multiple containers)
+    - Search and filter containers
+    - Auto-refresh with configurable interval (5s/10s/30s/60s)
+    - Status bar showing counts of running/stopped containers
+    - Images management with pull/remove/inspect functionality
+    - Docker System Info header bar (version, containers, images, CPUs, RAM, driver, architecture)
+    - Network management tab (list/inspect/delete networks)
+    - Compose projects tab (view projects with Up/Down actions)
+    - Container logs viewer with live streaming
+    - Container stats modal (CPU, memory, network I/O, block I/O)
+    - Container inspect modal
+    - Container exec terminal (xterm.js with FitAddon)
+    - Pull image modal with progress tracking
+    - Prune system modal with granular options (containers/images/volumes)
+    - Create container modal (image, name, ports, volumes, env, memory limits)
+    - Filesystem browser for containers (directory listing + file reading)
+  - **CSS styles** (`public/css/docker.prompt.css`): All Docker-specific styles (project cards, status bars, modals, network cards, filesystem browser, compose actions, tabs, info bar)
+  - **HTML views** (`public/index.html`): Complete Docker view with tabs (Containers, Images, Networks, Compose), 10+ modals, toolbar with search, auto-refresh, create/pull/prune buttons
+
+### Fixed
+- **`deleteEntry` function missing in `filemanager.js`**: function body was accidentally removed in v1.11.0 commit, restored from v1.10.0 with user parameter for path resolution
+- **Docker `Names` array handling**: Docker API returns container names as arrays (e.g., `["/name"]`), frontend code assumed strings — added `Array.isArray()` checks throughout docker.js
+- **Container stats `percpu_usage` undefined**: Docker API may not provide `percpu_usage` on some systems — added fallback to 1 CPU count
+- **Container stats `system_cpu_usage` undefined**: Added null guards for CPU usage calculations
+- **Container stats `io_service_bytes_recursive` undefined**: Added check alongside existing `blkio_stats` guard
+- **Server restart required**: NexusPanel server had cached old route definitions before Docker routes were added
+
+### Changed
+- Cache-busting bumped to `v=1.12.0` for `docker.js`, `docker.prompt.css`
+- Removed `docker-exec.js` standalone script (consolidated into docker.js)
+- Docker routes properly mounted at `/api/docker` with auth middleware
+
 ## [1.11.0] - 2026-07-21
 ### Added
 - **Batch rename**: find/replace, prefix/suffix, case change, live preview with conflict detection
