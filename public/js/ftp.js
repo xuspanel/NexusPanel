@@ -72,9 +72,11 @@ async function loadFTP() {
     ]);
 
     renderFTPStatus(status);
-    ftpState.accounts = result.accounts;
-    ftpState.total = result.total;
-    renderFTPTable(result.accounts);
+    var accounts = Array.isArray(result) ? result : (result.accounts || []);
+    var total = result.total !== undefined ? result.total : accounts.length;
+    ftpState.accounts = accounts;
+    ftpState.total = total;
+    renderFTPTable(accounts);
     renderFTPPagination();
     updateBulkBar();
 
