@@ -814,6 +814,7 @@ function createPaneObject(tab, container, isPro, direction) {
     fontFamily: "'JetBrains Mono', 'Fira Code', 'Cascadia Code', 'Consolas', monospace",
     theme: TERM_THEMES[activeThemeName],
     allowTransparency: true,
+    allowProposedApi: true,
     cols: 80,
     rows: 24,
     scrollback: 10000,
