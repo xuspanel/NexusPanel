@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.13.1] - 2026-07-23
+### Fixed
+- **WebSocket "Invalid frame header" (CRITICAL)**: Switched WebSocket servers to `noServer` mode with manual upgrade handling — auth check happens before upgrade, eliminating mixed HTTP error + WebSocket frame responses that caused Chrome 150 to fail parsing
+- **WebSocket close producing HTTP 400**: Removed `setTimeout` close hack; server now sends clean HTTP 401 on auth failure instead of WebSocket close frames followed by stray HTTP responses
+- **xterm.js unicode11 addon**: Added `allowProposedApi: true` to terminal options to fix unicode11 extension loading
+- **FTP account list format**: Handle both array and `{accounts, total}` response formats for backward compatibility
+
 ## [1.13.0] - 2026-07-22
 ### Added
 - **FTP Service Control**: Start/stop/restart vsftpd service from the UI
