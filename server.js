@@ -1,5 +1,17 @@
 require('dotenv').config();
 
+const fs = require('fs');
+const pkg = require('./package.json');
+
+try {
+  const versionFile = require('path').join(__dirname, 'VERSION');
+  const current = fs.existsSync(versionFile) ? fs.readFileSync(versionFile, 'utf8').trim() : '';
+  if (current !== pkg.version) {
+    fs.writeFileSync(versionFile, pkg.version, 'utf8');
+    console.log('[STARTUP] VERSION synced: ' + current + ' → ' + pkg.version);
+  }
+} catch {}
+
 const REQUIRED_ENV = ['JWT_SECRET', 'ADMIN_PASS'];
 for (const key of REQUIRED_ENV) {
   if (!process.env[key] || process.env[key].startsWith('change-me') || process.env[key].startsWith('replace-with')) {

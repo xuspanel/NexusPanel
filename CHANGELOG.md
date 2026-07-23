@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.17.1] - 2026-07-23
+### Fixed
+- **CRITICAL: VERSION file never updated past 1.11.0**: Update checker read `VERSION` file instead of `package.json`, causing all installed instances to report v1.11.0 as "Up to date" even after multiple releases. Fixed with three-layer defense:
+  1. **Startup sync**: `server.js` now syncs `VERSION` from `package.json` on every boot — after `git pull && systemctl restart`, VERSION is immediately correct
+  2. **Runtime fallback**: `getLocalVersion()` falls back to `package.json` if `VERSION` is missing or malformed
+  3. **Auto-correction**: `getLocalVersion()` writes corrected VERSION back to disk if package.json is newer
+
 ## [1.17.0] - 2026-07-23
 ### Added
 - **Scan History Persistence**: Completed scans saved to `data/scan-history.json` (max 100 entries, oldest auto-pruned)
