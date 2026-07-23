@@ -1722,7 +1722,7 @@
         </div>
         <div class="db-header-right">
           <span id="scannerStatusBadge"></span>
-          <button class="db-btn db-btn-icon" onclick="updateDefs()" id="scannerUpdateDefsBtn" title="Update virus definitions">↻</button>
+          <button class="db-btn db-btn-icon" data-vs-action="update-defs" id="scannerUpdateDefsBtn" title="Update virus definitions">↻</button>
         </div>
       </div>
 
@@ -1738,36 +1738,36 @@
           <div class="scanner-targets">
             <div class="scanner-targets-title">Select Scan Target</div>
             <div class="scanner-targets-grid">
-              <div class="scanner-target" onclick="selectTarget('home', this)">
+              <div class="scanner-target" data-vs-action="select-target" data-vs-value="home">
                 <div class="scanner-target-icon">🏠</div>
                 <div class="scanner-target-name">Entire Home Directory</div>
                 <div class="scanner-target-path">/home</div>
               </div>
-              <div class="scanner-target" onclick="selectTarget('mail', this)">
+              <div class="scanner-target" data-vs-action="select-target" data-vs-value="mail">
                 <div class="scanner-target-icon">📧</div>
                 <div class="scanner-target-name">Mail</div>
                 <div class="scanner-target-path">/home/*/Maildir</div>
               </div>
-              <div class="scanner-target" onclick="selectTarget('ftp', this)">
+              <div class="scanner-target" data-vs-action="select-target" data-vs-value="ftp">
                 <div class="scanner-target-icon">📡</div>
                 <div class="scanner-target-name">Public FTP Space</div>
                 <div class="scanner-target-path">/etc/vsftpd</div>
               </div>
-              <div class="scanner-target" onclick="selectTarget('web', this)">
+              <div class="scanner-target" data-vs-action="select-target" data-vs-value="web">
                 <div class="scanner-target-icon">🌐</div>
                 <div class="scanner-target-name">Public Web Space</div>
                 <div class="scanner-target-path">/var/www</div>
               </div>
-              <div class="scanner-target" onclick="selectTarget('custom', this)">
+              <div class="scanner-target" data-vs-action="select-target" data-vs-value="custom">
                 <div class="scanner-target-icon">📁</div>
                 <div class="scanner-target-name">Specific Directory</div>
                 <div class="scanner-target-path">Custom path</div>
               </div>
             </div>
             <div class="scanner-custom-path" id="scannerCustomPathWrap" style="display:none;">
-              <input type="text" id="scannerCustomPath" class="db-search-input" placeholder="Enter full path e.g. /var/www/html" spellcheck="false">
+              <input type="text" id="scannerCustomPath" class="db-search-input" placeholder="Enter full path e.g. /var/www/html (must be within /home, /var/www, or /etc/vsftpd)" spellcheck="false">
             </div>
-            <button class="db-btn db-btn-primary" id="scannerStartBtn" onclick="startScan()">▶ Start Scan</button>
+            <button class="db-btn db-btn-primary" id="scannerStartBtn" data-vs-action="start-scan">▶ Start Scan</button>
           </div>
 
           <div class="scanner-progress" id="scannerProgress" style="display:none;">
@@ -1782,7 +1782,7 @@
               <span>Errors: <strong id="scannerProgressErrors">0</strong></span>
               <span>Elapsed: <strong id="scannerProgressTime">0m 0s</strong></span>
             </div>
-            <button class="db-btn db-btn-danger" onclick="abortScan()">✕ Abort</button>
+            <button class="db-btn db-btn-danger" data-vs-action="abort-scan">✕ Abort</button>
           </div>
 
           <div class="scanner-results" id="scannerResults" style="display:none;"></div>
@@ -1791,14 +1791,43 @@
 
         <div class="scanner-section">
           <div class="scanner-section-header">
-            <span class="scanner-section-title">📦 Quarantine</span>
+            <span class="scanner-section-title">Quarantine</span>
             <span class="scanner-section-badge" id="scannerQuarantineCount">0</span>
           </div>
+          <div class="scanner-search-bar">
+            <input type="text" id="scannerQuarantineSearch" class="db-search-input" placeholder="Search quarantine..." spellcheck="false">
+          </div>
           <div id="scannerQuarantineList" class="scanner-q-list"></div>
+          <div id="scannerQuarantinePagination"></div>
+        </div>
+
+        <div class="scanner-section">
+          <div class="scanner-section-header">
+            <span class="scanner-section-title">Scan History</span>
+          </div>
+          <div class="scanner-search-bar">
+            <input type="text" id="scannerHistorySearch" class="db-search-input" placeholder="Search history..." spellcheck="false">
+          </div>
+          <div id="scannerHistoryList" class="scanner-history-list"></div>
+          <div id="scannerHistoryPagination"></div>
         </div>
       </div>
 
       <div id="scannerToast" class="scanner-toast" style="display:none;"></div>
+
+      <div id="scannerDeleteModal" class="scanner-delete-modal-overlay" style="display:none;">
+        <div class="scanner-delete-modal">
+          <div class="scanner-delete-modal-header">
+            <h3 id="scannerDeleteModalTitle">Confirm Action</h3>
+            <button class="db-btn db-btn-sm" data-vs-action="cancel-delete">✕</button>
+          </div>
+          <div class="scanner-delete-modal-body" id="scannerDeleteModalBody"></div>
+          <div class="scanner-delete-modal-footer">
+            <button class="db-btn" data-vs-action="cancel-delete">Cancel</button>
+            <button class="db-btn db-btn-primary" data-vs-action="confirm-delete">Confirm</button>
+          </div>
+        </div>
+      </div>
     </main>
 
     <!-- MIME Types View -->

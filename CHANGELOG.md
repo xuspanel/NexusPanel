@@ -1,5 +1,35 @@
 # Changelog
 
+## [1.17.0] - 2026-07-23
+### Added
+- **Scan History Persistence**: Completed scans saved to `data/scan-history.json` (max 100 entries, oldest auto-pruned)
+- **Scan History UI**: New "Scan History" section with search, pagination, and status badges
+- **Scan History API**: `GET /api/virusscanner/history` with search, sort, pagination, status filter, target filter
+- **SHA-256 Hash Tracking**: Quarantined files get SHA-256 hash stored in `.meta.json` metadata
+- **ClamAV Defs Staleness Warning**: Badge shown when virus definitions are older than 7 days
+- **Quarantine Search**: Real-time search filtering on quarantine list by filename, path, or threat
+- **Quarantine Pagination**: Paginated quarantine list with page controls (20 per page)
+- **Delete Confirmation Modal**: Replaced `confirm()` dialogs with styled modal for quarantine delete/restore
+- **Audit Logging**: All scanner mutations (scan start/abort, quarantine create/restore/delete, defs update) logged
+- **Button Loading States**: All action buttons show loading text during async operations
+
+### Fixed
+- **CRITICAL: 5 XSS vulnerabilities via inline onclick**: All `onclick` handlers replaced with `data-vs-action` event delegation
+- **CRITICAL: Path traversal on custom scan path**: Custom path now validated to be within `/home`, `/var/www`, or `/etc/vsftpd`; rejects `..` sequences and symlinks outside allowed directories
+- **CRITICAL: Path traversal in quarantine restore/delete**: `filePath` validated to be inside quarantine directory using `realpathSync`
+- **Route parameter validation**: `scanId` validated against `/^scan_\d+_\d+$/`, `quarantineId` against `/^[a-zA-Z0-9_-]+$/`
+- **Input validation on custom path**: Route handler validates path format before passing to service
+- **Scan results lost on restart**: Now persisted to `scan-history.json`
+- **No file locking on quarantine**: Added in-memory lock for quarantine operations
+- **No atomic writes**: History file uses temp + rename pattern
+- **`fsp.rmdir` deprecated**: Replaced with `fsp.rm` for Node 18+ compatibility
+- **Hardcoded paths**: Allowed scan bases defined as constant
+
+### Changed
+- **Frontend JS full rewrite**: All functions encapsulated in IIFE, single event delegation listener on `document`
+- **HTML structure**: Added search bars, pagination containers, history section, delete modal, removed all inline onclick
+- **CSS additions**: Styles for `.scanner-history-*`, `.scanner-pagination`, `.scanner-delete-modal-*`, `.scanner-q-hash`
+
 ## [1.16.0] - 2026-07-23
 ### Added
 - **nginx Config Backup Item**: Backs up `/etc/nginx/conf.d/*.conf` and `nginx.conf`

@@ -318,6 +318,7 @@ const API = {
     restoreQuarantine: (quarantineId, filePath) => API.request('POST', '/virusscanner/quarantine/' + quarantineId + '/restore', { filePath }),
     deleteQuarantine: (quarantineId, filePath) => API.request('DELETE', '/virusscanner/quarantine/' + quarantineId + '?path=' + encodeURIComponent(filePath)),
     updateDefs: () => API.request('POST', '/virusscanner/update-defs'),
+    getScanHistory: (params) => API.request('GET', '/virusscanner/history' + '?' + new URLSearchParams(params)),
   },
   mimetypes: {
     getSystem: () => API.request('GET', '/mimetypes/system'),
