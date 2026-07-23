@@ -92,8 +92,20 @@ function applySingle(name) {
 }
 
 function getLocalVersion() {
-  const versionPath = path.join(__dirname, '..', '..', 'VERSION');
-  try { return fs.readFileSync(versionPath, 'utf8').trim(); } catch { return '0.0.0'; }
+  const root = path.join(__dirname, '..', '..');
+  let version = null;
+  try {
+    const v = fs.readFileSync(path.join(root, 'VERSION'), 'utf8').trim();
+    if (/^\d+\.\d+\.\d+$/.test(v)) version = v;
+  } catch {}
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
+    if (pkg.version && pkg.version !== version) {
+      version = pkg.version;
+      try { fs.writeFileSync(path.join(root, 'VERSION'), version, 'utf8'); } catch {}
+    }
+  } catch {}
+  return version || '0.0.0';
 }
 
 function getChangelog() {
