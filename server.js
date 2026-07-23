@@ -141,28 +141,58 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const wss = new WebSocketServer({ server, path: '/ws/terminal' });
+const wss = new WebSocketServer({ noServer: true });
 let sessIdCounter = 0;
 
-const dockerWss = new WebSocketServer({ server, path: '/ws/docker' });
+const dockerWss = new WebSocketServer({ noServer: true });
+
+server.on('upgrade', (req, socket, head) => {
+  let pathname;
+  try { pathname = new URL(req.url, 'http://localhost').pathname; } catch (_) { socket.destroy(); return; }
+
+  if (pathname === '/ws/terminal') {
+    const token = parseCookies(req.headers.cookie || '').token;
+    if (!token) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    try {
+      req.user = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (_) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    wss.handleUpgrade(req, socket, head, (ws) => {
+      wss.emit('connection', ws, req);
+    });
+  } else if (pathname === '/ws/docker') {
+    const token = parseCookies(req.headers.cookie || '').token;
+    if (!token) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    try {
+      req.user = jwt.verify(token, process.env.JWT_SECRET);
+    } catch (_) {
+      socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
+      socket.destroy();
+      return;
+    }
+    dockerWss.handleUpgrade(req, socket, head, (ws) => {
+      dockerWss.emit('connection', ws, req);
+    });
+  } else {
+    socket.destroy();
+  }
+});
+
 dockerWss.on('connection', (ws, req) => dockerWs.handleConnection(ws, req));
 
 wss.on('connection', (ws, req) => {
   const panes = new Map();
-  const token = parseCookies(req.headers.cookie || '').token;
-  if (!token) {
-    ws.send(JSON.stringify({ type: 'error', error: 'Session expired. Please refresh the page.' }));
-    setTimeout(() => { try { ws.close(4001, 'No auth cookie'); } catch(_){} }, 100);
-    return;
-  }
-  try {
-    req.user = jwt.verify(token, process.env.JWT_SECRET);
-  } catch (_) {
-    ws.send(JSON.stringify({ type: 'error', error: 'Invalid session. Please refresh the page.' }));
-    setTimeout(() => { try { ws.close(4001, 'Invalid token'); } catch(_){} }, 100);
-    return;
-  }
-
   ws.send(JSON.stringify({ type: 'ready' }));
 
   function createPane(cols, rows, explicitPaneId) {
