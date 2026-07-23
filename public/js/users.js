@@ -66,7 +66,7 @@ async function loadUsers() {
 
 function renderUsers() {
   const tbody = document.getElementById('usersTableBody');
-  const allChecked = usersState.data.length > 0 && usersState.selected.size === usersState.data.length;
+    const allChecked = usersState.data.length > 0 && usersState.data.every(u => u.username === 'root' || u.username === document._adminUser || usersState.selected.has(u.username));
   tbody.innerHTML = usersState.data.map(u => {
     const cannotDelete = u.username === 'root' || u.username === document._adminUser;
     const isSelected = usersState.selected.has(u.username);
