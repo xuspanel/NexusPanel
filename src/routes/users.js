@@ -1,23 +1,37 @@
 const express = require('express');
-const { authMiddleware, adminOnly } = require('../middleware/auth');
+const { adminOnly } = require('../middleware/auth');
 const users = require('../services/users');
+const audit = require('../services/audit');
 
 const router = express.Router();
 
-router.get('/list', adminOnly, async (req, res) => {
+router.get('/meta/options', adminOnly, async (req, res) => {
   try {
-    const systemUsers = await users.listSystemUsers();
-    res.json(systemUsers);
+    res.json({
+      groups: await users.getAvailableGroups(),
+      shells: users.getAvailableShells(),
+    });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
 
-router.get('/:username', adminOnly, (req, res) => {
+router.get('/list', adminOnly, async (req, res) => {
   try {
-    const u = users.getPanelUser(req.params.username);
+    const { search, sort, order, page, limit } = req.query;
+    const result = await users.listSystemUsers({ search, sort, order, page, limit });
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/:username', adminOnly, async (req, res) => {
+  try {
+    const u = await users.getSystemUser(req.params.username);
     if (!u) return res.status(404).json({ error: 'User not found' });
-    res.json({ username: req.params.username, ...u });
+    const panel = users.getPanelUserSafe(req.params.username);
+    res.json({ ...u, panelUser: panel });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -30,11 +44,13 @@ router.post('/create', adminOnly, async (req, res) => {
     if (!username || !password) {
       return res.status(400).json({ error: 'Username and password are required' });
     }
-    if (!/^[a-zA-Z0-9_.-]+$/.test(username)) {
-      return res.status(400).json({ error: 'Invalid username. Use letters, numbers, dots, hyphens, underscores.' });
+    if (!/^[a-zA-Z][a-zA-Z0-9._-]{0,31}$/.test(username)) {
+      return res.status(400).json({ error: 'Invalid username. Must start with a letter, use only letters, numbers, dots, hyphens, underscores (max 32 chars).' });
     }
-    if (password.length < 6) {
-      return res.status(400).json({ error: 'Password must be at least 6 characters' });
+    const strengthErr = users.validatePasswordStrength(password);
+    if (strengthErr) return res.status(400).json({ error: strengthErr });
+    if (homeBase && !/^[a-zA-Z0-9_\-\/.]+$/.test(homeBase)) {
+      return res.status(400).json({ error: 'Invalid home base path' });
     }
 
     const result = await users.createSystemUser(username, password, {
@@ -48,19 +64,7 @@ router.post('/create', adminOnly, async (req, res) => {
       gecos,
     });
 
-    if (createPanel !== false && email) {
-      try {
-        const homeDir = '/home/' + username;
-        const fs = require('fs');
-        const path = require('path');
-        for (const dir of ['Maildir/cur', 'Maildir/new', 'Maildir/tmp']) {
-          fs.mkdirSync(path.join(homeDir, dir), { recursive: true });
-        }
-        const { execFileSync } = require('child_process');
-        execFileSync('chown', ['-R', username + ':' + username, path.join(homeDir, 'Maildir')], { timeout: 5000, stdio: 'ignore' });
-        execFileSync('chmod', ['-R', '700', path.join(homeDir, 'Maildir')], { timeout: 5000, stdio: 'ignore' });
-      } catch (_) {}
-    }
+    audit.log('user:create', req, { username, shell: result.shell, sudo: !!sudo });
 
     res.json({ success: true, user: result });
   } catch (err) {
@@ -72,6 +76,11 @@ router.put('/:username', adminOnly, async (req, res) => {
   try {
     const { password, shell, groups, sudo, lock, unlock, panelRole, email } = req.body;
 
+    if (password) {
+      const strengthErr = users.validatePasswordStrength(password);
+      if (strengthErr) return res.status(400).json({ error: strengthErr });
+    }
+
     const opts = {};
     if (password) opts.password = password;
     if (shell) opts.shell = shell;
@@ -82,7 +91,17 @@ router.put('/:username', adminOnly, async (req, res) => {
     if (panelRole !== undefined) opts.panelRole = panelRole;
     if (email !== undefined) opts.email = email;
 
-    const result = await users.updateSystemUser(req.params.username, opts);
+    const result = await users.updateSystemUser(req.params.username, opts, req.user?.username);
+
+    const actions = [];
+    if (password) actions.push('password');
+    if (shell) actions.push('shell');
+    if (groups !== undefined) actions.push('groups');
+    if (sudo !== undefined) actions.push('sudo:' + (sudo ? 'grant' : 'revoke'));
+    if (lock) actions.push('locked');
+    if (unlock) actions.push('unlocked');
+    audit.log('user:update', req, { username: req.params.username, changes: actions });
+
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
@@ -91,21 +110,51 @@ router.put('/:username', adminOnly, async (req, res) => {
 
 router.delete('/:username', adminOnly, async (req, res) => {
   try {
-    const result = await users.deleteSystemUser(req.params.username);
+    const result = await users.deleteSystemUser(req.params.username, req.user?.username);
+    audit.log('user:delete', req, { username: req.params.username });
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });
   }
 });
 
-router.get('/meta/options', adminOnly, async (req, res) => {
+router.post('/bulk', adminOnly, async (req, res) => {
   try {
-    res.json({
-      groups: await users.getAvailableGroups(),
-      shells: users.getAvailableShells(),
-    });
+    const { action, usernames } = req.body;
+    if (!Array.isArray(usernames) || usernames.length === 0) {
+      return res.status(400).json({ error: 'No users selected' });
+    }
+    if (usernames.length > 50) {
+      return res.status(400).json({ error: 'Maximum 50 users per bulk operation' });
+    }
+
+    const results = [];
+    const errors = [];
+
+    for (const username of usernames) {
+      try {
+        if (action === 'delete') {
+          await users.deleteSystemUser(username, req.user?.username);
+          results.push({ username, ok: true });
+        } else if (action === 'lock') {
+          await users.updateSystemUser(username, { lock: true }, req.user?.username);
+          results.push({ username, ok: true });
+        } else if (action === 'unlock') {
+          await users.updateSystemUser(username, { unlock: true }, req.user?.username);
+          results.push({ username, ok: true });
+        } else {
+          return res.status(400).json({ error: 'Invalid bulk action: ' + action });
+        }
+      } catch (err) {
+        errors.push({ username, error: err.message });
+      }
+    }
+
+    audit.log('user:bulk:' + action, req, { usernames, succeeded: results.length, failed: errors.length });
+
+    res.json({ success: true, results, errors, total: usernames.length, succeeded: results.length, failed: errors.length });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    res.status(400).json({ error: err.message });
   }
 });
 

@@ -11,21 +11,70 @@ const ALLOWED_FIELDS = ['passwordHash', 'email', 'twoFactorSecret', 'twoFactorEn
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const PROFILE_FILE = path.join(DATA_DIR, 'profile.json');
+const VALID_HOME_BASES = ['/home', '/var/www'];
+
+let writeLock = false;
+const LOCK_TIMEOUT = 5000;
+
+function acquireLock() {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const wait = () => {
+      if (!writeLock) { writeLock = true; return resolve(); }
+      if (Date.now() - start > LOCK_TIMEOUT) return reject(new Error('Write lock timeout'));
+      setTimeout(wait, 10);
+    };
+    wait();
+  });
+}
+
+function releaseLock() { writeLock = false; }
 
 function loadAll() {
   try {
     if (fs.existsSync(USERS_FILE)) {
       return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error('[Users] Failed to load users.json:', err.message);
+  }
   return {};
 }
 
-let writeLock = false;
-
 function saveAll(users) {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf8');
+  const tmpFile = USERS_FILE + '.tmp';
+  fs.writeFileSync(tmpFile, JSON.stringify(users, null, 2), 'utf8');
+  fs.renameSync(tmpFile, USERS_FILE);
+}
+
+function sanitizeUserResponse(username, data) {
+  const out = { username };
+  for (const key of Object.keys(data)) {
+    if (key === 'passwordHash' || key === 'twoFactorSecret') continue;
+    out[key] = data[key];
+  }
+  return out;
+}
+
+function validatePasswordStrength(password) {
+  if (!password || password.length < 6) return 'Password must be at least 6 characters';
+  if (!/[A-Z]/.test(password)) return 'Password must contain at least one uppercase letter';
+  if (!/[0-9]/.test(password)) return 'Password must contain at least one digit';
+  return null;
+}
+
+function validateHomeBase(homeBase) {
+  if (!homeBase) return '/home';
+  const resolved = path.resolve(homeBase);
+  if (!VALID_HOME_BASES.some(base => resolved === base || resolved.startsWith(base + '/'))) {
+    throw new Error('Invalid home base directory. Allowed: ' + VALID_HOME_BASES.join(', '));
+  }
+  return resolved;
+}
+
+function validateGroupName(name) {
+  return /^[a-zA-Z_][a-zA-Z0-9_-]*$/.test(name) && name.length <= 32;
 }
 
 function init() {
@@ -64,6 +113,12 @@ function getPanelUser(username) {
   return users[username] || null;
 }
 
+function getPanelUserSafe(username) {
+  const user = getPanelUser(username);
+  if (!user) return null;
+  return sanitizeUserResponse(username, user);
+}
+
 function panelUserExists(username) {
   const users = loadAll();
   return !!users[username];
@@ -80,26 +135,36 @@ function listPanelUsers() {
   }));
 }
 
-function createPanelUser(username, password, email, role) {
-  const users = loadAll();
-  if (users[username]) throw new Error('Panel user already exists');
-  users[username] = {
-    passwordHash: bcrypt.hashSync(password, 12),
-    email: email || username + '@meedo51.com',
-    twoFactorSecret: null,
-    twoFactorEnabled: false,
-    role: role || 'user',
-    createdAt: new Date().toISOString(),
-  };
-  saveAll(users);
+async function createPanelUser(username, password, email, role) {
+  await acquireLock();
+  try {
+    const users = loadAll();
+    if (users[username]) throw new Error('Panel user already exists');
+    users[username] = {
+      passwordHash: bcrypt.hashSync(password, 12),
+      email: email || username + '@meedo51.com',
+      twoFactorSecret: null,
+      twoFactorEnabled: false,
+      role: role || 'user',
+      createdAt: new Date().toISOString(),
+    };
+    saveAll(users);
+  } finally {
+    releaseLock();
+  }
 }
 
-function deletePanelUser(username) {
+async function deletePanelUser(username) {
   const adminName = process.env.ADMIN_USER || 'admin';
   if (username === adminName) throw new Error('Cannot delete the primary admin user');
-  const users = loadAll();
-  delete users[username];
-  saveAll(users);
+  await acquireLock();
+  try {
+    const users = loadAll();
+    delete users[username];
+    saveAll(users);
+  } finally {
+    releaseLock();
+  }
 }
 
 function updatePanelUser(username, updates) {
@@ -131,12 +196,17 @@ function changePassword(username, currentPassword, newPassword) {
   if (!bcrypt.compareSync(currentPassword, user.passwordHash)) {
     return { error: 'Current password is incorrect' };
   }
+  const strengthErr = validatePasswordStrength(newPassword);
+  if (strengthErr) return { error: strengthErr };
   user.passwordHash = bcrypt.hashSync(newPassword, 12);
   saveAll(users);
   return { success: true };
 }
 
 function updateEmail(username, email) {
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    throw new Error('Invalid email format');
+  }
   const users = loadAll();
   const user = users[username];
   if (!user) return false;
@@ -202,7 +272,7 @@ async function changeSystemPassword(username, password) {
       else reject(new Error(stderr.trim() || 'chpasswd failed'));
     });
     proc.on('error', reject);
-    proc.stdin.write(username + ':' + password + '\n');
+    proc.stdin.write(username.replace(/[\n\r]/g, '') + ':' + password.replace(/[\n\r]/g, '') + '\n');
     proc.stdin.end();
   });
 }
@@ -216,7 +286,8 @@ function getAvailableShells() {
   }
 }
 
-async function listSystemUsers() {
+async function listSystemUsers(opts = {}) {
+  const { search, sort, order, page, limit } = opts;
   const { stdout: passwd } = await execFileAsync('getent', ['passwd']).catch(() => ({ stdout: '' }));
   const { stdout: shadow } = await execFileAsync('getent', ['shadow']).catch(() => ({ stdout: '' }));
   const { stdout: groups } = await execFileAsync('getent', ['group']).catch(() => ({ stdout: '' }));
@@ -325,11 +396,80 @@ async function listSystemUsers() {
     });
   }
 
-  return result;
+  if (search) {
+    const q = search.toLowerCase();
+    const filtered = result.filter(u =>
+      u.username.toLowerCase().includes(q) ||
+      u.shell.toLowerCase().includes(q) ||
+      u.home.toLowerCase().includes(q) ||
+      u.groups.some(g => g.toLowerCase().includes(q))
+    );
+    return applySortingAndPagination(filtered, sort, order, page, limit);
+  }
+
+  return applySortingAndPagination(result, sort, order, page, limit);
 }
 
-function getSystemUser(username) {
-  return null;
+function applySortingAndPagination(arr, sort, order, page, limit) {
+  if (sort) {
+    const dir = order === 'desc' ? -1 : 1;
+    arr.sort((a, b) => {
+      const va = a[sort] ?? '';
+      const vb = b[sort] ?? '';
+      if (typeof va === 'number' && typeof vb === 'number') return (va - vb) * dir;
+      return String(va).localeCompare(String(vb)) * dir;
+    });
+  }
+
+  const total = arr.length;
+  if (page && limit) {
+    const p = Math.max(1, parseInt(page, 10) || 1);
+    const l = Math.min(200, Math.max(1, parseInt(limit, 10) || 50));
+    const start = (p - 1) * l;
+    return { users: arr.slice(start, start + l), total, page: p, limit: l, pages: Math.ceil(total / l) };
+  }
+
+  return { users: arr, total, page: 1, limit: total, pages: 1 };
+}
+
+async function getSystemUser(username) {
+  if (!validators.username.test(username)) throw new Error('Invalid username');
+  try {
+    const { stdout } = await execFileAsync('getent', ['passwd', username]);
+    const line = stdout.split('\n')[0];
+    if (!line) return null;
+    const parts = line.split(':');
+    if (parts.length < 7) return null;
+    const [user, , uid, gid, gecos, home, shell] = parts;
+
+    let lastLogin = null;
+    try {
+      const { stdout: llOut } = await execFileAsync('lastlog', ['-u', user]).catch(() => ({ stdout: '' }));
+      const lastLine = llOut.split('\n').pop() || '';
+      if (!lastLine.includes('**Never logged in**')) {
+        const p2 = lastLine.split(/\s+/);
+        if (p2.length >= 5) lastLogin = p2.slice(3).join(' ');
+      }
+    } catch {}
+
+    const panelUsers = loadAll();
+    const panel = panelUsers[user] || null;
+
+    return {
+      username: user,
+      uid: parseInt(uid, 10),
+      gid: parseInt(gid, 10),
+      gecos,
+      home,
+      shell,
+      lastLogin,
+      panelEnabled: !!panel,
+      panelRole: panel ? panel.role : null,
+      email: panel ? panel.email : '',
+    };
+  } catch {
+    return null;
+  }
 }
 
 async function createSystemUser(username, password, opts) {
@@ -340,42 +480,59 @@ async function createSystemUser(username, password, opts) {
   const exists = await userExists(username);
   if (exists) throw new Error('System user already exists');
 
+  const strengthErr = validatePasswordStrength(password);
+  if (strengthErr) throw new Error(strengthErr);
+
   const validShells = getAvailableShells();
   const shell = opts.shell || '/bin/bash';
   if (!validShells.includes(shell)) throw new Error('Invalid shell: ' + shell);
 
-  const homeBase = opts.homeBase || '/home';
+  const homeBase = validateHomeBase(opts.homeBase);
   const homeDir = homeBase + '/' + username;
-  const groups = opts.groups || [];
+  const groups = (opts.groups || []).filter(validateGroupName);
 
-  const addArgs = ['-m', '-d', homeDir, '-s', shell, '-c', opts.gecos || username];
+  const addArgs = ['-m', '-d', homeDir, '-s', shell, '-c', (opts.gecos || username).substring(0, 128)];
   if (groups.length > 0) addArgs.push('-G', groups.join(','));
   addArgs.push(username);
 
   await execFileAsync('useradd', addArgs, { timeout: 10000 });
-
   await changeSystemPassword(username, password);
 
   if (opts.sudo) {
     try {
       const filePath = '/etc/sudoers.d/' + username;
-      const rule = username + ' ALL=(ALL) ALL\n';
-      fs.writeFileSync(filePath, rule, { mode: 0o440 });
-    } catch (_) {}
+      fs.writeFileSync(filePath, username + ' ALL=(ALL) ALL\n', { mode: 0o440 });
+    } catch (err) {
+      console.error('[Users] Failed to write sudoers file:', err.message);
+    }
+  }
+
+  if (opts.createPanel !== false) {
+    try {
+      await createPanelUser(username, password, opts.email || '', opts.panelRole || 'user');
+    } catch (err) {
+      console.error('[Users] Failed to create panel user:', err.message);
+    }
   }
 
   return { username, home: homeDir, shell };
 }
 
-async function updateSystemUser(username, opts) {
+async function updateSystemUser(username, opts, adminUsername) {
   if (!validators.username.test(username)) throw new Error('Invalid username');
 
   const exists = await userExists(username);
   if (!exists) throw new Error('System user not found');
 
+  if (opts.panelRole !== undefined && adminUsername && username === adminUsername) {
+    throw new Error('Cannot change your own admin role');
+  }
+
   const validShells = getAvailableShells();
 
   if (opts.password) {
+    const strengthErr = validatePasswordStrength(opts.password);
+    if (strengthErr) throw new Error(strengthErr);
     await changeSystemPassword(username, opts.password);
   }
 
@@ -385,7 +542,8 @@ async function updateSystemUser(username, opts) {
   }
 
   if (opts.groups !== undefined) {
-    await execFileAsync('usermod', ['-G', opts.groups.join(','), username], { timeout: 5000 });
+    const validGroups = Array.isArray(opts.groups) ? opts.groups.filter(validateGroupName) : [];
+    await execFileAsync('usermod', ['-G', validGroups.join(',') || 'users', username], { timeout: 5000 });
   }
 
   if (opts.lock) {
@@ -398,44 +556,41 @@ async function updateSystemUser(username, opts) {
     try {
       const filePath = '/etc/sudoers.d/' + username;
       if (!fs.existsSync(filePath)) {
-        const rule = username + ' ALL=(ALL) ALL\n';
-        fs.writeFileSync(filePath, rule, { mode: 0o440 });
+        fs.writeFileSync(filePath, username + ' ALL=(ALL) ALL\n', { mode: 0o440 });
       }
-    } catch (_) {}
+    } catch (err) {
+      console.error('[Users] Failed to write sudoers file:', err.message);
+    }
   } else if (opts.sudo === false) {
     try {
       const filePath = '/etc/sudoers.d/' + username;
       if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
-    } catch (_) {}
+    } catch (err) {
+      console.error('[Users] Failed to remove sudoers file:', err.message);
+    }
   }
 
-  if (opts.panelRole !== undefined) {
+  if (opts.panelRole !== undefined || opts.email !== undefined) {
+    await acquireLock();
     try {
       const pu = loadAll();
       if (pu[username]) {
-        pu[username].role = opts.panelRole || 'user';
+        if (opts.panelRole !== undefined) pu[username].role = opts.panelRole || 'user';
+        if (opts.email !== undefined) pu[username].email = opts.email;
         saveAll(pu);
       }
-    } catch (_) {}
+    } finally {
+      releaseLock();
+    }
   }
 
-  if (opts.email !== undefined) {
-    try {
-      const pu = loadAll();
-      if (pu[username]) {
-        pu[username].email = opts.email;
-        saveAll(pu);
-      }
-    } catch (_) {}
-  }
-
-  return true;
+  return { ok: true, username };
 }
 
-async function deleteSystemUser(username) {
+async function deleteSystemUser(username, adminUsername) {
   if (!validators.username.test(username)) throw new Error('Invalid username');
 
-  const adminName = process.env.ADMIN_USER || 'admin';
+  const adminName = adminUsername || process.env.ADMIN_USER || 'admin';
   if (username === adminName) throw new Error('Cannot delete the primary admin user');
 
   try {
@@ -444,15 +599,25 @@ async function deleteSystemUser(username) {
   await new Promise(r => setTimeout(r, 500));
 
   try {
-    await execFileAsync('userdel', ['-rf', username], { timeout: 10000 });
-  } catch {}
+    await execFileAsync('userdel', ['-r', username], { timeout: 10000 });
+  } catch (err) {
+    throw new Error('Failed to delete system user: ' + (err.stderr || err.message));
+  }
 
   try {
     const sudoFile = '/etc/sudoers.d/' + username;
     if (fs.existsSync(sudoFile)) fs.unlinkSync(sudoFile);
-  } catch (_) {}
+  } catch (err) {
+    console.error('[Users] Failed to remove sudoers file:', err.message);
+  }
 
-  return { ok: true };
+  try {
+    await deletePanelUser(username);
+  } catch (err) {
+    console.error('[Users] Failed to delete panel user:', err.message);
+  }
+
+  return { ok: true, username };
 }
 
 async function getAvailableGroups() {
@@ -468,11 +633,7 @@ async function getAvailableGroups() {
         }
       }
     });
-    groups.add('sudo');
-    groups.add('wheel');
-    groups.add('docker');
-    groups.add('users');
-    groups.add('admin');
+    for (const g of ['sudo', 'wheel', 'docker', 'www-data', 'users', 'admin']) groups.add(g);
     return Array.from(groups).sort();
   } catch (_) {
     return ['sudo', 'wheel', 'docker', 'users', 'admin'];
@@ -482,6 +643,7 @@ async function getAvailableGroups() {
 module.exports = {
   init,
   getPanelUser,
+  getPanelUserSafe,
   panelUserExists,
   listPanelUsers,
   createPanelUser,
@@ -502,4 +664,5 @@ module.exports = {
   deleteSystemUser,
   getAvailableGroups,
   getAvailableShells,
+  validatePasswordStrength,
 };

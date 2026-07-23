@@ -463,22 +463,39 @@
       </div>
 
       <div id="usersContent" style="display:none;">
+        <div class="users-toolbar">
+          <div class="users-search-wrap">
+            <span class="users-search-icon">🔍</span>
+            <input type="text" id="usersSearchInput" class="users-search-input" placeholder="Search users..." autocomplete="off">
+          </div>
+        </div>
+
+        <div id="usersBulkBar" class="users-bulk-bar" style="display:none;">
+          <span id="usersBulkCount" class="users-bulk-count">0 selected</span>
+          <button class="fm-btn fm-btn-secondary fm-btn-sm" data-um-bulk="lock">🔒 Lock</button>
+          <button class="fm-btn fm-btn-secondary fm-btn-sm" data-um-bulk="unlock">🔓 Unlock</button>
+          <button class="fm-btn fm-btn-danger fm-btn-sm" data-um-bulk="delete">🗑️ Delete</button>
+        </div>
+
         <div class="users-table-wrap">
           <table class="users-table">
             <thead>
               <tr>
-                <th>Username</th>
-                <th>UID</th>
+                <th class="users-th-check"><label class="form-checkbox"><input type="checkbox" id="usersSelectAll"><span class="form-checkbox-mark"></span></label></th>
+                <th data-sort="username" class="users-th-sortable">Username <span class="sort-icon">⇅</span></th>
+                <th data-sort="uid" class="users-th-sortable">UID <span class="sort-icon">⇅</span></th>
                 <th>Groups</th>
-                <th>Shell</th>
+                <th data-sort="shell" class="users-th-sortable">Shell <span class="sort-icon">⇅</span></th>
                 <th>Home</th>
-                <th>Last Login</th>
+                <th data-sort="lastLogin" class="users-th-sortable">Last Login <span class="sort-icon">⇅</span></th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="usersTableBody"></tbody>
           </table>
         </div>
+
+        <div id="usersPagination" class="users-pagination"></div>
       </div>
     </main>
 

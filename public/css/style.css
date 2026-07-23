@@ -7300,7 +7300,7 @@ body::before {
 
 .users-table-wrap {
   overflow-x: auto;
-  margin-top: 8px;
+  margin-top: 0;
 }
 
 .users-table {
@@ -7319,6 +7319,29 @@ body::before {
   letter-spacing: 0.05em;
   border-bottom: 1px solid rgba(255, 255, 255, 0.06);
   white-space: nowrap;
+  user-select: none;
+}
+
+.users-th-sortable {
+  cursor: pointer;
+}
+.users-th-sortable:hover {
+  color: var(--text-primary);
+}
+.users-th-active {
+  color: var(--accent-cyan) !important;
+}
+.sort-icon {
+  font-size: 10px;
+  opacity: 0.5;
+  margin-left: 2px;
+}
+.users-th-active .sort-icon {
+  opacity: 1;
+}
+.users-th-check {
+  width: 40px;
+  padding-left: 14px !important;
 }
 
 .users-table td {
@@ -7330,6 +7353,9 @@ body::before {
 .users-table tbody tr:hover {
   background: rgba(255, 255, 255, 0.02);
 }
+.users-row-selected {
+  background: rgba(6, 182, 212, 0.06) !important;
+}
 
 .user-name {
   display: flex;
@@ -7338,6 +7364,21 @@ body::before {
   font-weight: 500;
   flex-wrap: wrap;
 }
+
+.u-badge {
+  display: inline-block;
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 2px 6px;
+  border-radius: 4px;
+  line-height: 1.2;
+}
+.u-badge-red { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+.u-badge-amber { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+.u-badge-cyan { background: rgba(6, 182, 212, 0.15); color: #22d3ee; }
+.u-badge-green { background: rgba(34, 197, 94, 0.15); color: #4ade80; }
 
 .user-admin-badge {
   display: inline-block;
@@ -7378,6 +7419,140 @@ body::before {
 
 .users-delete-btn:hover {
   background: rgba(239, 68, 68, 0.1) !important;
+}
+
+.users-select-wrap {
+  display: inline-flex;
+}
+
+.u-more {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.u-home-cell {
+  max-width: 180px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.users-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.users-search-wrap {
+  position: relative;
+  flex: 1;
+  max-width: 360px;
+}
+.users-search-icon {
+  position: absolute;
+  left: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 14px;
+  pointer-events: none;
+  opacity: 0.5;
+}
+.users-search-input {
+  width: 100%;
+  padding: 8px 12px 8px 36px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius);
+  color: var(--text-primary);
+  font-size: 13px;
+  outline: none;
+  transition: border-color 0.2s;
+}
+.users-search-input:focus {
+  border-color: rgba(6, 182, 212, 0.5);
+}
+.users-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.users-bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  background: rgba(6, 182, 212, 0.08);
+  border: 1px solid rgba(6, 182, 212, 0.15);
+  border-radius: var(--radius);
+  margin-bottom: 12px;
+}
+.users-bulk-count {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--accent-cyan);
+  margin-right: 8px;
+}
+
+.users-pagination {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 14px;
+  justify-content: center;
+}
+.users-page-ellipsis {
+  color: var(--text-muted);
+  padding: 0 4px;
+  font-size: 12px;
+}
+.users-page-info {
+  color: var(--text-muted);
+  font-size: 12px;
+  margin-left: 12px;
+}
+
+.users-delete-msg {
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+.users-delete-warning {
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.users-toast {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  padding: 12px 20px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  z-index: 10000;
+  transform: translateY(20px);
+  opacity: 0;
+  transition: all 0.3s ease;
+  pointer-events: none;
+}
+.users-toast-show {
+  transform: translateY(0);
+  opacity: 1;
+}
+.users-toast-error {
+  background: rgba(239, 68, 68, 0.9);
+  color: #fff;
+}
+.users-toast-info {
+  background: rgba(6, 182, 212, 0.9);
+  color: #fff;
+}
+
+.fm-btn-danger {
+  background: rgba(239, 68, 68, 0.15);
+  color: #f87171;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+}
+.fm-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.25);
 }
 
 /* ── Home Screen ── */
@@ -9127,6 +9302,12 @@ body::before {
 [data-theme="light"] .user-card { background: var(--bg-card); }
 [data-theme="light"] .user-form-input,
 [data-theme="light"] .user-form-select { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.1); color: var(--text-primary); }
+[data-theme="light"] .users-search-input { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.1); color: var(--text-primary); }
+[data-theme="light"] .users-bulk-bar { background: rgba(6, 182, 212, 0.06); border-color: rgba(6, 182, 212, 0.12); }
+[data-theme="light"] .users-table tbody tr:hover { background: rgba(0, 0, 0, 0.02); }
+[data-theme="light"] .users-row-selected { background: rgba(6, 182, 212, 0.04) !important; }
+[data-theme="light"] .users-toast-error { background: rgba(239, 68, 68, 0.9); }
+[data-theme="light"] .users-toast-info { background: rgba(6, 182, 212, 0.9); }
 [data-theme="light"] .ecfg-section { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); }
 [data-theme="light"] .ftp-card { background: var(--bg-card); }
 [data-theme="light"] .sql-editor { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.08); }

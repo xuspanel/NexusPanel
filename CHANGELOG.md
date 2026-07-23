@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.14.0] - 2026-07-23
+### Added
+- **User Search**: Real-time search filtering by username, shell, home, or groups
+- **Column Sorting**: Click any sortable column header (Username, UID, Shell, Last Login) to sort ascending/descending
+- **Server-Side Pagination**: Paginated user list with page controls for large user bases
+- **Bulk Operations**: Select multiple users via checkboxes for bulk delete, lock, or unlock
+- **Bulk Toolbar**: Visual selection toolbar with count and action buttons
+- **User Detail Endpoint**: `GET /api/users/:username` now returns full system user data + panel user (safe)
+- **2FA Badge**: Shows 2FA enabled status in user table
+- **Delete Confirmation Modal**: Replaced `confirm()` dialog with styled modal
+- **Toast Notifications**: Non-blocking success/error messages for bulk operations
+- **Audit Logging**: All user create/update/delete/bulk operations logged to audit system
+- **Password Strength Validation**: Enforces uppercase + digit requirements on create and update
+- **Atomic File Writes**: `users.json` writes use temp file + rename for crash safety
+- **File Locking**: Concurrent write protection for `users.json`
+
+### Fixed
+- **CRITICAL: Route ordering**: `GET /meta/options` was unreachable due to `/:username` shadowing it — moved above parameterized routes
+- **CRITICAL: Password hash leak**: `GET /:username` no longer exposes `passwordHash` or `twoFactorSecret`
+- **Home base path traversal**: `homeBase` now restricted to `/home` and `/var/www`
+- **Panel user never created**: `POST /create` now actually calls `createPanelUser()` when `createPanel` is not false
+- **Panel user orphaned on delete**: `DELETE /:username` now cleans up the panel user record
+- **XSS via inline onclick**: Replaced with `data-` attribute event delegation (same pattern as FTP module)
+- **Group handling**: Empty groups array no longer runs `usermod -G ""` (defaults to `users` group)
+- **Password minimum on update**: Admin password changes now enforce 6-char minimum + strength rules
+- **Silent error swallowing**: Critical operations (sudoers, deletion, chown) now log errors instead of silently ignoring
+- **Self-demotion protection**: Admin cannot change their own role via `PUT /:username`
+- **`getSystemUser()` implemented**: Was a stub returning `null`, now properly queries `getent passwd`
+- **`userdel -rf` changed to `-r`**: No longer force-deletes home directory if removal fails
+- **chpasswd stdin sanitization**: Strips newline characters from username/password to prevent injection
+
+### Changed
+- **`GET /list` response format**: Now returns `{ users, total, page, limit, pages }` with pagination metadata
+- **`DELETE /:username` response**: Now includes `username` field in response
+- **`PUT /:username` response**: Now returns `{ ok, username }` instead of bare `true`
+- **`POST /bulk`**: New endpoint for bulk delete/lock/unlock operations (max 50 users per request)
+
 ## [1.13.1] - 2026-07-23
 ### Fixed
 - **WebSocket "Invalid frame header" (CRITICAL)**: Switched WebSocket servers to `noServer` mode with manual upgrade handling — auth check happens before upgrade, eliminating mixed HTTP error + WebSocket frame responses that caused Chrome 150 to fail parsing

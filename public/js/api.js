@@ -207,12 +207,13 @@ const API = {
     bandwidth: () => API.request('GET', '/ftp/bandwidth'),
   },
   users: {
-    list: () => API.request('GET', '/users/list'),
+    list: (params) => API.request('GET', '/users/list' + (params ? '?' + new URLSearchParams(params).toString() : '')),
     get: (username) => API.request('GET', '/users/' + encodeURIComponent(username)),
     create: (data) => API.request('POST', '/users/create', data),
     update: (username, data) => API.request('PUT', '/users/' + encodeURIComponent(username), data),
     del: (username) => API.request('DELETE', '/users/' + encodeURIComponent(username)),
     options: () => API.request('GET', '/users/meta/options'),
+    bulk: (action, usernames) => API.request('POST', '/users/bulk', { action, usernames }),
   },
   file: {
     list: (p) => API.request('GET', '/files/list?path=' + encodeURIComponent(p)),
