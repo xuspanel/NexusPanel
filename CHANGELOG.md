@@ -1,5 +1,42 @@
 # Changelog
 
+## [1.16.0] - 2026-07-23
+### Added
+- **nginx Config Backup Item**: Backs up `/etc/nginx/conf.d/*.conf` and `nginx.conf`
+- **Panel Configuration Backup Item**: Backs up `data/*.json`, `.env`, and `package.json`
+- **Cancel Backup**: `POST /api/backups/:taskId/cancel` endpoint to abort running backups
+- **Backup Statistics**: `GET /api/backups/stats` endpoint returns total backups, size, last backup, failed count
+- **SHA256 Checksums**: Each backup item file gets a SHA256 checksum stored in metadata
+- **Backup Search**: Real-time search filtering on backup list (by timestamp, type, items)
+- **Backup Type Filter**: Filter backups by Full/Selected type
+- **Column Sorting**: Click sortable column headers (Date, Type, Size, Status) to sort ascending/descending
+- **Server-Side Pagination**: Paginated backup list with page controls
+- **Delete Confirmation Modal**: Replaced `confirm()` dialog with styled modal
+- **Audit Logging**: All backup start/cancel/delete/schedule operations logged to audit system
+- **Schedule Form Styles**: Added missing CSS for `.bk-schedule-item`, `.bk-toggle`, `.bk-form-row`, `.bk-form-actions`
+- **Light Theme Overrides**: Added light theme support for schedule items and toggle switches
+- **Schedule Next Run Display**: Shows next run time in schedule list
+
+### Fixed
+- **CRITICAL: `applyRetention()` treated array as object**: `Object.entries()` on JSON array returned index-keyed pairs, not backup entries — retention never worked. Now correctly filters by target and uses `splice()` on array
+- **CRITICAL: Scheduler status check typo**: `status === 'completed'` never matched — backup service uses `'complete'`. Fixed to `'complete'`
+- **CRITICAL: Scheduled backups crashed immediately**: `schedule.target` (string) passed to `startBackup()` which called `.filter()` on it. Now wraps in array: `[schedule.target]`
+- **XSS via inline onclick**: All backup UI functions now use `data-bk-action` attribute event delegation
+- **No audit logging**: All backup mutation operations now logged via `audit.log()`
+- **`saveMeta()` not atomic**: Now uses temp file + `fs.renameSync()` for crash safety
+- **File locking on metadata**: Added in-memory write lock for `backups.json` to prevent concurrent corruption
+- **`checkDiskSpace()` after `mkdir`**: Now runs before creating backup directory
+- **`parseInt` without radix**: All `parseInt` calls now include radix 10
+- **Download path traversal**: `resolveDownload()` now validates timestamp with regex and checks resolved path stays within backup dir
+
+### Changed
+- **`GET /api/backups/list` response format**: Now returns `{ backups, total, page, limit, pages }` with pagination metadata
+- **`startBackup()` returns synchronously**: Task runs in `setImmediate()`, returns `{ taskId, timestamp, items }` immediately
+- **`ITEM_DEFS` expanded**: Now 11 items (added `nginx` and `config`)
+- **Scheduler `getDue()` now also handles `'cancelled'` status** to properly mark runs
+- **Schedule form uses event delegation**: No more inline `onchange`/`onclick` handlers
+- **Backup list refresh button**: Uses event delegation instead of inline `onclick`
+
 ## [1.15.0] - 2026-07-23
 ### Added
 - **Domain Search**: Real-time search filtering by domain name, type, or parent domain

@@ -510,7 +510,7 @@
           </div>
         </div>
         <div class="db-header-right">
-          <button class="db-btn db-btn-icon" onclick="loadBackupList()" title="Refresh">↻</button>
+          <button class="db-btn db-btn-icon" id="bkRefreshBtn" title="Refresh">↻</button>
         </div>
       </div>
 
@@ -544,35 +544,44 @@
       </div>
 
       <div id="bkList" class="bk-list-view" style="display:none;">
+        <div id="bkSearchBar" style="display:flex;gap:12px;margin-bottom:12px;align-items:center;">
+          <input type="text" id="bkSearch" class="users-search-input" placeholder="Search backups..." spellcheck="false" autocomplete="off" style="flex:1;max-width:300px;">
+          <select id="bkTypeFilter" class="fm-form-input" style="width:auto;padding:8px 12px;">
+            <option value="">All Types</option>
+            <option value="full">Full</option>
+            <option value="selected">Selected</option>
+          </select>
+        </div>
         <div id="bkListLoading" class="db-loading" style="display:none;">
           <div class="db-loading-spinner"></div>
           <span>Loading backups...</span>
         </div>
-        <div id="bkListEmpty" class="db-error" style="display:none;">📭 No backups found yet</div>
+        <div id="bkListEmpty" class="db-error" style="display:none;">No backups found</div>
         <div class="bk-table-wrap">
           <table class="users-table" id="bkListTable">
             <thead>
               <tr>
                 <th>#</th>
-                <th>Date</th>
-                <th>Type</th>
+                <th class="sortable" data-bk-sort="createdAt">Date <span class="sort-icon" data-bk-sort="createdAt"></span></th>
+                <th class="sortable" data-bk-sort="type">Type <span class="sort-icon" data-bk-sort="type"></span></th>
                 <th>Items</th>
-                <th>Size</th>
-                <th>Status</th>
+                <th class="sortable" data-bk-sort="totalSize">Size <span class="sort-icon" data-bk-sort="totalSize"></span></th>
+                <th class="sortable" data-bk-sort="failedItems">Status <span class="sort-icon" data-bk-sort="failedItems"></span></th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="bkListBody"></tbody>
           </table>
         </div>
+        <div id="bkPagination" class="users-pagination" style="display:none;"></div>
       </div>
 
       <div id="bkSchedules" class="bk-list-view" style="display:none;">
         <div style="margin-bottom:16px">
-          <button class="db-btn db-btn-primary" onclick="bkShowScheduleForm()">+ New Schedule</button>
+          <button class="db-btn db-btn-primary" id="bkNewScheduleBtn">+ New Schedule</button>
         </div>
         <div id="bkScheduleList"></div>
-        <div id="bkScheduleForm" style="display:none" class="bk-card">
+        <div id="bkScheduleForm" style="display:none" class="bk-card bk-schedule-form">
           <h3 id="bkScheduleFormTitle">New Backup Schedule</h3>
           <div class="bk-form-row">
             <label>Target</label>
@@ -580,7 +589,7 @@
           </div>
           <div class="bk-form-row">
             <label>Frequency</label>
-            <select id="bkSchFreq" onchange="bkSchFreqChange()" class="fm-form-input">
+            <select id="bkSchFreq" class="fm-form-input">
               <option value="daily">Daily</option>
               <option value="weekly">Weekly</option>
               <option value="monthly">Monthly</option>
@@ -599,13 +608,32 @@
             <input type="number" id="bkSchRetention" value="7" min="1" max="100" class="fm-form-input">
           </div>
           <div class="bk-form-actions">
-            <button class="db-btn" onclick="document.getElementById('bkScheduleForm').style.display='none'">Cancel</button>
-            <button class="db-btn db-btn-primary" onclick="bkSaveSchedule()">Save Schedule</button>
+            <button class="db-btn" id="bkScheduleCancelBtn">Cancel</button>
+            <button class="db-btn db-btn-primary" id="bkScheduleSaveBtn">Save Schedule</button>
           </div>
         </div>
       </div>
 
       <div id="bkToast" class="bk-toast" style="display:none;"></div>
+
+      <!-- Backup Delete Confirmation Modal -->
+      <div id="bkDeleteModal" class="modal-overlay bk-delete-modal" style="display:none;">
+        <div class="modal" style="max-width:440px;">
+          <div class="modal-header">
+            <span class="modal-icon" style="color:var(--red);">⚠</span>
+            <span class="modal-title">Delete Backup</span>
+            <button class="modal-close" id="bkDeleteClose">✕</button>
+          </div>
+          <div class="modal-body">
+            <p class="bk-delete-msg" id="bkDeleteMsg"></p>
+            <p class="bk-delete-warning">This will permanently remove all backup files and metadata. This action cannot be undone.</p>
+          </div>
+          <div class="modal-footer">
+            <button class="fm-btn fm-btn-secondary" id="bkDeleteCancel">Cancel</button>
+            <button class="fm-btn fm-btn-danger" id="bkDeleteConfirm">Delete</button>
+          </div>
+        </div>
+      </div>
     </main>
 
     <!-- Profile View -->

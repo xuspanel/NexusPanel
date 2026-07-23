@@ -2,14 +2,43 @@ const fs = require('fs');
 const path = require('path');
 
 const SCHEDULE_FILE = path.join(__dirname, '..', '..', 'data', 'backup-schedules.json');
+const BACKUP_ROOT = '/var/backups/nexuspanel';
+const META_FILE = path.join(__dirname, '..', '..', 'data', 'backups.json');
+
+let writeLock = false;
+const LOCK_TIMEOUT = 5000;
+
+function acquireLock() {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const wait = () => {
+      if (!writeLock) { writeLock = true; return resolve(); }
+      if (Date.now() - start > LOCK_TIMEOUT) return reject(new Error('Schedule write lock timeout'));
+      setTimeout(wait, 10);
+    };
+    wait();
+  });
+}
+
+function releaseLock() { writeLock = false; }
 
 function load() {
-  try { return JSON.parse(fs.readFileSync(SCHEDULE_FILE, 'utf8')); }
-  catch { return []; }
+  try {
+    if (fs.existsSync(SCHEDULE_FILE)) {
+      return JSON.parse(fs.readFileSync(SCHEDULE_FILE, 'utf8'));
+    }
+  } catch (err) {
+    console.error('[Scheduler] Failed to load schedules:', err.message);
+  }
+  return [];
 }
 
 function save(schedules) {
-  fs.writeFileSync(SCHEDULE_FILE, JSON.stringify(schedules, null, 2));
+  const dir = path.dirname(SCHEDULE_FILE);
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+  const tmpFile = SCHEDULE_FILE + '.tmp';
+  fs.writeFileSync(tmpFile, JSON.stringify(schedules, null, 2), 'utf8');
+  fs.renameSync(tmpFile, SCHEDULE_FILE);
 }
 
 function create(config) {
@@ -17,11 +46,11 @@ function create(config) {
   const schedule = {
     id: 'bs_' + Date.now(),
     target: config.target,
-    frequency: config.frequency,  // 'daily', 'weekly', 'monthly'
-    time: config.time || '02:00', // HH:MM UTC
-    dayOfWeek: config.dayOfWeek || 0, // 0=Sun for weekly
-    dayOfMonth: config.dayOfMonth || 1, // for monthly
-    retention: config.retention || 7, // keep last N backups
+    frequency: config.frequency,
+    time: config.time || '02:00',
+    dayOfWeek: config.dayOfWeek || 0,
+    dayOfMonth: config.dayOfMonth || 1,
+    retention: config.retention || 7,
     enabled: true,
     lastRun: null,
     nextRun: null,
@@ -69,6 +98,7 @@ function toggle(id, enabled) {
   if (!s) return null;
   s.enabled = enabled;
   if (enabled) computeNextRun(s);
+  else s.nextRun = null;
   save(schedules);
   return s;
 }
@@ -89,6 +119,7 @@ function markRun(id) {
   s.lastRun = new Date().toISOString();
   computeNextRun(s);
   save(schedules);
+  return s;
 }
 
 function getDue() {
@@ -98,22 +129,38 @@ function getDue() {
 
 function applyRetention(target, keep) {
   try {
-    const meta = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'data', 'backups.json'), 'utf8'));
-    const entries = Object.entries(meta)
-      .filter(([, v]) => (v.type || v.target) === target)
-      .sort((a, b) => new Date(b[0]) - new Date(a[0]));
-    if (entries.length > keep) {
-      const toDelete = entries.slice(keep);
-      toDelete.forEach(([ts]) => {
-        const dir = path.join('/var/backups/nexuspanel', ts);
-        if (fs.existsSync(dir)) {
-          fs.rmSync(dir, { recursive: true, force: true });
-        }
-        delete meta[ts];
-      });
-      fs.writeFileSync(path.join(__dirname, '..', '..', 'data', 'backups.json'), JSON.stringify(meta, null, 2));
+    let meta = [];
+    try {
+      if (fs.existsSync(META_FILE)) {
+        meta = JSON.parse(fs.readFileSync(META_FILE, 'utf8'));
+      }
+    } catch (_) {}
+
+    if (!Array.isArray(meta) || meta.length === 0) return;
+
+    const matching = meta
+      .filter(e => e.type === target || (e.items && e.items.some(it => it.id === target)))
+      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+
+    if (matching.length <= keep) return;
+
+    const toDelete = matching.slice(keep);
+    for (const entry of toDelete) {
+      if (!entry.timestamp) continue;
+      const dir = path.join(BACKUP_ROOT, 'backup_' + entry.timestamp);
+      try {
+        if (fs.existsSync(dir)) fs.rmSync(dir, { recursive: true, force: true });
+      } catch (_) {}
+      const idx = meta.findIndex(e => e.timestamp === entry.timestamp);
+      if (idx !== -1) meta.splice(idx, 1);
     }
-  } catch {}
+
+    const tmpFile = META_FILE + '.tmp';
+    fs.writeFileSync(tmpFile, JSON.stringify(meta, null, 2), 'utf8');
+    fs.renameSync(tmpFile, META_FILE);
+  } catch (err) {
+    console.error('[Scheduler] Retention error:', err.message);
+  }
 }
 
 module.exports = { create, list, get, toggle, remove, getDue, markRun, applyRetention };

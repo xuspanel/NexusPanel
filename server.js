@@ -330,26 +330,33 @@ server.listen(PORT, '127.0.0.1', () => {
       for (const schedule of due) {
         console.log('[Scheduler] Running backup for:', schedule.target, 'schedule:', schedule.id);
         try {
-          const taskId = await backupService.startBackup(schedule.target, null);
+          const items = Array.isArray(schedule.target) ? schedule.target : [schedule.target];
+          const taskId = backupService.startBackup(items, null);
           let done = false;
           let attempts = 0;
           while (!done && attempts < 300) {
             await new Promise(r => setTimeout(r, 2000));
             const status = backupService.getTaskStatus(taskId);
-            if (status?.status === 'completed') {
+            if (status?.status === 'complete') {
               done = true;
               backupScheduler.applyRetention(schedule.target, schedule.retention);
               backupScheduler.markRun(schedule.id);
+              console.log('[Scheduler] Backup completed for:', schedule.target);
             } else if (status?.status === 'failed') {
               done = true;
               backupScheduler.markRun(schedule.id);
               notificationService.add('error', 'Scheduled Backup Failed',
                 'Backup for ' + schedule.target + ' failed. Schedule: ' + schedule.id);
+            } else if (status?.status === 'cancelled') {
+              done = true;
+              backupScheduler.markRun(schedule.id);
+              console.log('[Scheduler] Backup cancelled for:', schedule.target);
             }
             attempts++;
           }
           if (!done) {
             backupScheduler.markRun(schedule.id);
+            console.error('[Scheduler] Backup timed out for:', schedule.target);
           }
         } catch (e) {
           console.error('[Scheduler] Backup failed:', e.message);

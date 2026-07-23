@@ -280,10 +280,24 @@ const API = {
   },
   backups: {
     defs: () => API.request('GET', '/backups/defs'),
+    stats: () => API.request('GET', '/backups/stats'),
     start: (data) => API.request('POST', '/backups/start', data),
+    cancel: (taskId) => API.request('POST', '/backups/' + taskId + '/cancel'),
     status: (taskId) => API.request('GET', '/backups/status/' + taskId),
     current: () => API.request('GET', '/backups/current'),
-    list: () => API.request('GET', '/backups/list'),
+    list: (params) => {
+      const qs = new URLSearchParams();
+      if (params) {
+        if (params.search) qs.set('search', params.search);
+        if (params.sort) qs.set('sort', params.sort);
+        if (params.dir) qs.set('dir', params.dir);
+        if (params.page) qs.set('page', params.page);
+        if (params.limit) qs.set('limit', params.limit);
+        if (params.type) qs.set('type', params.type);
+      }
+      const q = qs.toString();
+      return API.request('GET', '/backups/list' + (q ? '?' + q : ''));
+    },
     get: (timestamp) => API.request('GET', '/backups/' + timestamp),
     downloadUrl: (timestamp) => API.base + '/backups/' + timestamp + '/download',
     downloadFileUrl: (timestamp, filename) => API.base + '/backups/' + timestamp + '/download/' + encodeURIComponent(filename),
