@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.17.2] - 2026-07-23
+### Fixed
+- **update.sh: systemd service detection**: Auto-detects service name by scanning `systemctl list-unit-files` for any `nexuspanel*` service instead of hardcoding `nexuspanel`. Falls back gracefully when no systemd service exists
+- **update.sh: direct restart fallback**: When no systemd service found, starts with `nohup` + PID file (`/var/run/nexuspanel.pid`) + log file (`/var/log/nexuspanel.log`). Old process is killed gracefully before starting. Port freed with `fuser -k` + wait loop
+- **update.sh: git stash on clean tree**: Only stashes when there are actual uncommitted changes (`git diff --quiet` check), preventing unnecessary stash on clean working trees
+- **update.sh: port/config extracted**: Port (3443), install dir, PID file, and log file paths defined as variables at top of script
+- **update.sh: output shows correct service info**: Final summary displays systemd service name or PID + log path depending on how the service was started
+
 ## [1.17.1] - 2026-07-23
 ### Fixed
 - **CRITICAL: VERSION file never updated past 1.11.0**: Update checker read `VERSION` file instead of `package.json`, causing all installed instances to report v1.11.0 as "Up to date" even after multiple releases. Fixed with three-layer defense:
