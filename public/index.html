@@ -1842,14 +1842,14 @@
         </div>
         <div class="db-header-right">
           <span id="mimeStats"></span>
-          <input type="text" id="mimeSystemSearch" class="db-search-input" placeholder="Search system types..." oninput="filterSystem()" style="width:200px">
+          <input type="text" id="mimeSystemSearch" class="db-search-input" placeholder="Search system types..." style="width:200px">
         </div>
       </div>
 
       <div id="mimeContent">
         <div class="mime-section">
           <div class="mime-section-header">
-            <span class="mime-section-title">📦 System MIME Types</span>
+            <span class="mime-section-title">System MIME Types</span>
             <span class="mime-section-desc">Read-only definitions from /etc/mime.types</span>
           </div>
           <div id="mimeSystemTypes" class="mime-system-types"></div>
@@ -1857,8 +1857,7 @@
 
         <div class="mime-section">
           <div class="mime-section-header">
-            <span class="mime-section-title">✏️ User-Defined MIME Types</span>
-            <button class="db-btn" onclick="openAddMime()">+ Add Custom MIME Type</button>
+            <span class="mime-section-title">User-Defined MIME Types</span>
           </div>
           <div id="mimeUserTypes" class="mime-user-types"></div>
         </div>
@@ -1867,17 +1866,17 @@
       <div id="mimeToast" class="mime-toast" style="display:none;"></div>
     </main>
 
-    <!-- MIME Type Modal -->
+    <!-- MIME Type Add/Edit Modal -->
     <div class="fm-modal-overlay" id="mimeModalOverlay" style="display:none;">
       <div class="fm-modal" style="max-width:520px;">
         <div class="fm-modal-header">
           <span class="fm-modal-title" id="mimeModalTitle">Add Custom MIME Type</span>
-          <button class="fm-modal-close" onclick="closeMimeModal()">✕</button>
+          <button class="fm-modal-close" data-mt-action="close-modal">\u2715</button>
         </div>
         <div class="fm-modal-body">
           <div class="mime-form-group">
             <label class="mime-form-label">MIME Type</label>
-            <input class="mime-form-input" id="mimeModalType" placeholder="application/x-myformat">
+            <input class="mime-form-input" id="mimeModalType" placeholder="application/x-myformat" maxlength="128">
           </div>
           <div class="mime-form-group">
             <label class="mime-form-label">Extensions (comma-separated)</label>
@@ -1885,12 +1884,49 @@
           </div>
           <div class="mime-form-group">
             <label class="mime-form-label">Description (optional)</label>
-            <input class="mime-form-input" id="mimeModalDesc" placeholder="My custom format">
+            <textarea class="mime-form-input mime-form-textarea" id="mimeModalDesc" placeholder="My custom format" maxlength="512" rows="3"></textarea>
           </div>
+          <div class="mime-form-overlap" id="mimeModalOverlap" style="display:none;"></div>
           <div class="mime-form-error" id="mimeModalError" style="display:none;"></div>
           <div class="mime-form-actions">
-            <button class="fm-btn" onclick="closeMimeModal()">Cancel</button>
-            <button class="fm-btn fm-btn-primary" onclick="saveMime()">💾 Save</button>
+            <button class="fm-btn" data-mt-action="close-modal">Cancel</button>
+            <button class="fm-btn fm-btn-primary" data-mt-action="save-mime">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- MIME Type Delete Confirmation Modal -->
+    <div class="mime-delete-modal-overlay" id="mimeDeleteModal" style="display:none;">
+      <div class="mime-delete-modal">
+        <div class="mime-delete-modal-header">
+          <h3 id="mimeDeleteModalTitle">Confirm Delete</h3>
+          <button class="db-btn db-btn-sm" data-mt-action="cancel-delete">\u2715</button>
+        </div>
+        <div class="mime-delete-modal-body" id="mimeDeleteModalBody"></div>
+        <div class="mime-delete-modal-footer">
+          <button class="db-btn" data-mt-action="cancel-delete">Cancel</button>
+          <button class="db-btn db-btn-danger" data-mt-action="confirm-delete">Delete</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- MIME Type Import Modal -->
+    <div class="fm-modal-overlay" id="mimeImportOverlay" style="display:none;">
+      <div class="fm-modal" style="max-width:520px;">
+        <div class="fm-modal-header">
+          <span class="fm-modal-title">Import MIME Types</span>
+          <button class="fm-modal-close" data-mt-action="close-import">\u2715</button>
+        </div>
+        <div class="fm-modal-body">
+          <div class="mime-form-group">
+            <label class="mime-form-label">Paste JSON array of MIME type objects</label>
+            <textarea class="mime-form-input mime-form-textarea" id="mimeImportData" rows="8" placeholder='[{"mimeType":"application/x-custom","extensions":[".custom"],"description":"My format"}]'></textarea>
+          </div>
+          <div class="mime-form-error" id="mimeImportError" style="display:none;"></div>
+          <div class="mime-form-actions">
+            <button class="fm-btn" data-mt-action="close-import">Cancel</button>
+            <button class="fm-btn fm-btn-primary" data-mt-action="do-import">Import</button>
           </div>
         </div>
       </div>

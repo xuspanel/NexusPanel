@@ -323,10 +323,15 @@ const API = {
   mimetypes: {
     getSystem: () => API.request('GET', '/mimetypes/system'),
     list: () => API.request('GET', '/mimetypes'),
-    get: (id) => API.request('GET', '/mimetypes/' + id),
+    get: (id) => API.request('GET', '/mimetypes/' + encodeURIComponent(id)),
     create: (data) => API.request('POST', '/mimetypes', data),
-    update: (id, data) => API.request('PUT', '/mimetypes/' + id, data),
-    del: (id) => API.request('DELETE', '/mimetypes/' + id),
+    update: (id, data) => API.request('PUT', '/mimetypes/' + encodeURIComponent(id), data),
+    del: (id) => API.request('DELETE', '/mimetypes/' + encodeURIComponent(id)),
+    lookup: (ext) => API.request('GET', '/mimetypes/lookup/' + encodeURIComponent(ext)),
+    bulkDelete: (ids) => API.request('POST', '/mimetypes/bulk/delete', { ids }),
+    exportTypes: () => API.request('GET', '/mimetypes/export'),
+    importTypes: (types) => API.request('POST', '/mimetypes/import', { types }),
+    overlap: (exts) => API.request('POST', '/mimetypes/overlap', { extensions: exts }),
   },
   audit: {
     list: (opts) => {

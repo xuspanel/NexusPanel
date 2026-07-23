@@ -1,5 +1,46 @@
 # Changelog
 
+## [1.18.0] - 2026-07-23
+### Added
+- **adminOnly middleware**: All mutation routes (create/update/delete) now require admin role
+- **Audit logging**: All create/update/delete/bulk-delete/import operations logged via `audit.log()`
+- **File locking**: In-memory lock on `mime-types.json` prevents concurrent write corruption
+- **Atomic writes**: `saveUserTypes()` uses temp file + `fs.rename()` for crash safety
+- **Secure ID generation**: IDs now use `m_<timestamp>_<random-hex>` to prevent collisions
+- **Input length validation**: mimeType max 128, description max 512, extensions max 20 items each max 32 chars
+- **Extension format validation**: Each extension validated against `/^\.[a-z0-9]{1,32}$/i`
+- **Route parameter validation**: `:id` validated against `/^m_\d+_[a-f0-9]+$/`
+- **Extension-to-type reverse lookup**: `GET /api/mimetypes/lookup/:ext` finds all types claiming an extension
+- **Bulk delete**: `POST /api/mimetypes/bulk/delete` with array of IDs (max 50)
+- **Export**: `GET /api/mimetypes/export` downloads user types as JSON
+- **Import**: `POST /api/mimetypes/import` imports types from JSON array (duplicate detection, max 50)
+- **User types search**: Filter by mimeType, extensions, or description
+- **User types sorting**: Click Type/Exts/Date headers to toggle asc/desc
+- **User types pagination**: 20 per page with page controls
+- **Delete confirmation modal**: Styled modal replaces `confirm()` dialog
+- **Bulk selection**: Checkboxes on cards + bulk toolbar with delete/deselect
+- **Loading skeleton**: Animated skeleton shown during data fetch
+- **Button loading states**: All async buttons show loading text
+- **Description textarea**: Changed from `<input>` to `<textarea>` for multi-line support
+- **Extension overlap warning**: `POST /api/mimetypes/overlap` checks for duplicate extensions across types
+
+### Fixed
+- **XSS via inline onclick**: All onclick handlers replaced with `data-mt-action` event delegation
+- **No adminOnly on routes**: Any authenticated user could create/edit/delete MIME types via API
+- **Zero audit logging**: All mutation operations now recorded
+- **No file locking**: Concurrent requests could corrupt mime-types.json
+- **Non-atomic writes**: saveUserTypes now uses temp+rename pattern
+- **ID collision risk**: `Date.now()` IDs replaced with timestamp + crypto random suffix
+- **API client missing encodeURIComponent**: All ID parameters now properly URL-encoded
+- **Misleading error messages**: "Session expired" replaced with specific error text
+- **No input validation on extensions**: Now validates format and length
+- **Global function pollution**: All functions encapsulated in IIFE
+
+### Changed
+- **Frontend JS full rewrite**: IIFE encapsulation, single event delegation listener, all functions private
+- **HTML restructure**: Added delete modal, import modal, sort bar, bulk bar, pagination, loading skeleton, removed all inline onclick
+- **CSS additions**: Styles for `.mime-toolbar`, `.mime-bulk-bar`, `.mime-pagination`, `.mime-loading`, `.mime-delete-modal-*`, `.mime-user-sort-bar`, `.mime-form-textarea`, `.mime-form-overlap`
+
 ## [1.17.2] - 2026-07-23
 ### Fixed
 - **update.sh: systemd service detection**: Auto-detects service name by scanning `systemctl list-unit-files` for any `nexuspanel*` service instead of hardcoding `nexuspanel`. Falls back gracefully when no systemd service exists

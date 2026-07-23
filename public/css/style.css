@@ -9448,6 +9448,31 @@ body::before {
 .mime-toast.info { background: var(--bg-card); border: 1px solid var(--glass-border); color: var(--text-primary); }
 .mime-toast.success { background: rgba(16,185,129,0.15); border: 1px solid rgba(16,185,129,0.3); color: #10b981; }
 .mime-toast.error { background: rgba(239,68,68,0.15); border: 1px solid rgba(239,68,68,0.3); color: #ef4444; }
+.mime-form-textarea { resize: vertical; min-height: 60px; font-family: inherit; }
+.mime-form-overlap { font-size: 12px; color: #f59e0b; background: rgba(245,158,11,0.08); border: 1px solid rgba(245,158,11,0.2); border-radius: var(--radius-sm); padding: 8px 12px; margin-bottom: 12px; }
+.mime-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; flex-wrap: wrap; }
+.mime-toolbar-actions { display: flex; gap: 8px; }
+.mime-bulk-bar { display: flex; align-items: center; gap: 12px; padding: 10px 14px; background: rgba(6,182,212,0.08); border: 1px solid rgba(6,182,212,0.2); border-radius: var(--radius-sm); margin-bottom: 12px; font-size: 13px; color: var(--text-primary); }
+.mime-user-check { display: flex; align-items: center; justify-content: center; width: 32px; flex-shrink: 0; }
+.mime-user-check input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: var(--accent-cyan); }
+.mime-user-card.selected { border-color: var(--accent-cyan); background: rgba(6,182,212,0.06); }
+.mime-user-sort-bar { display: flex; gap: 16px; margin-bottom: 8px; padding: 6px 0; font-size: 12px; color: var(--text-tertiary); border-bottom: 1px solid var(--glass-border); }
+.mime-sort-btn { cursor: pointer; user-select: none; }
+.mime-sort-btn:hover { color: var(--text-primary); }
+.mime-pagination { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 12px; padding: 8px 0; }
+.mime-pagination-info { font-size: 12px; color: var(--text-secondary); }
+.mime-loading { padding: 40px 20px; }
+.mime-loading-bar { height: 14px; background: rgba(255,255,255,0.06); border-radius: 4px; margin-bottom: 10px; animation: mimePulse 1.5s ease-in-out infinite; }
+.mime-loading-bar.short { width: 60%; }
+@keyframes mimePulse { 0%,100% { opacity: 0.4; } 50% { opacity: 0.8; } }
+.mime-delete-modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 10000; backdrop-filter: blur(4px); }
+.mime-delete-modal { background: var(--bg-card); border: 1px solid var(--glass-border); border-radius: var(--radius-lg); width: 100%; max-width: 420px; box-shadow: 0 16px 48px rgba(0,0,0,0.3); }
+.mime-delete-modal-header { display: flex; align-items: center; justify-content: space-between; padding: 16px 20px; border-bottom: 1px solid var(--glass-border); }
+.mime-delete-modal-header h3 { margin: 0; font-size: 16px; font-weight: 600; color: var(--text-primary); }
+.mime-delete-modal-body { padding: 20px; font-size: 14px; color: var(--text-secondary); line-height: 1.6; }
+.mime-delete-modal-body p { margin: 0 0 8px; }
+.mime-delete-modal-warning { color: #ef4444; font-weight: 500; }
+.mime-delete-modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 20px; border-top: 1px solid var(--glass-border); }
 
 /* ─── Light Theme Overrides ─── */
 [data-theme="light"] body::before {
@@ -9592,6 +9617,11 @@ body::before {
 [data-theme="light"] .mime-dist-bar-wrap { background: rgba(0,0,0,0.06); }
 [data-theme="light"] .mime-toast.info { background: var(--bg-card); }
 [data-theme="light"] .mime-form-input:focus { border-color: var(--accent-cyan); box-shadow: 0 0 0 2px rgba(6,182,212,0.12); }
+[data-theme="light"] .mime-user-card.selected { border-color: var(--accent-cyan); background: rgba(6,182,212,0.04); }
+[data-theme="light"] .mime-bulk-bar { background: rgba(6,182,212,0.04); border-color: rgba(6,182,212,0.15); }
+[data-theme="light"] .mime-loading-bar { background: rgba(0,0,0,0.06); }
+[data-theme="light"] .mime-form-overlap { background: rgba(245,158,11,0.04); border-color: rgba(245,158,11,0.15); }
+[data-theme="light"] .mime-delete-modal { background: var(--bg-card); border-color: rgba(0,0,0,0.1); }
 [data-theme="light"] .email-card { background: var(--bg-card); }
 [data-theme="light"] .email-card:hover { background: var(--bg-card-hover); }
 [data-theme="light"] .ec-sidebar { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); }
