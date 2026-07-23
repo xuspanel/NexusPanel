@@ -7,19 +7,51 @@ const DOMAINS_FILE = path.join(DATA_DIR, 'domains.json');
 const NGINX_CONF_DIR = '/etc/nginx/conf.d';
 const WWW_DIR = '/var/www';
 const NGINX_LOG_DIR = '/var/log/nginx';
+const PORT_RANGE_START = 8000;
+const PORT_RANGE_END = 9000;
+const LOCK_TIMEOUT = 5000;
+
+let writeLock = false;
+
+function acquireLock() {
+  return new Promise((resolve, reject) => {
+    const start = Date.now();
+    const wait = () => {
+      if (!writeLock) { writeLock = true; return resolve(); }
+      if (Date.now() - start > LOCK_TIMEOUT) return reject(new Error('Write lock timeout'));
+      setTimeout(wait, 10);
+    };
+    wait();
+  });
+}
+
+function releaseLock() { writeLock = false; }
 
 function loadDomains() {
   try {
     if (fs.existsSync(DOMAINS_FILE)) {
       return JSON.parse(fs.readFileSync(DOMAINS_FILE, 'utf8'));
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error('[Domains] Failed to load domains.json:', err.message);
+  }
   return {};
 }
 
 function saveDomains(data) {
   if (!fs.existsSync(DATA_DIR)) fs.mkdirSync(DATA_DIR, { recursive: true });
-  fs.writeFileSync(DOMAINS_FILE, JSON.stringify(data, null, 2), 'utf8');
+  const tmpFile = DOMAINS_FILE + '.tmp';
+  fs.writeFileSync(tmpFile, JSON.stringify(data, null, 2), 'utf8');
+  fs.renameSync(tmpFile, DOMAINS_FILE);
+}
+
+function backupNginxConf(domain) {
+  const confPath = path.join(NGINX_CONF_DIR, domain + '.conf');
+  if (fs.existsSync(confPath)) {
+    const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const backupPath = path.join(NGINX_CONF_DIR, domain + '.conf.bak.' + ts);
+    try { fs.copyFileSync(confPath, backupPath); } catch (_) {}
+  }
 }
 
 function nginxTestAndReload() {
@@ -32,6 +64,25 @@ function nginxTestAndReload() {
   const reloadOutput = (reload.stdout + reload.stderr);
   if (reload.status !== 0 || reloadOutput.includes('failed') || reloadOutput.includes('error')) {
     throw new Error('nginx reload failed:\n' + (reloadOutput || reload.error));
+  }
+  return true;
+}
+
+function validateNginxContent(content) {
+  if (!content || content.trim().length === 0) throw new Error('Config content cannot be empty');
+  const dangerous = [
+    /\bproxy_pass\b/,
+    /\balias\b/,
+    /\binclude\b/,
+    /\bset\b/,
+    /\beval\b/,
+    /\baccess_by_lua\b/,
+    /\bcontent_by_lua\b/,
+  ];
+  for (const re of dangerous) {
+    if (re.test(content)) {
+      throw new Error('Config contains potentially dangerous directive: ' + re.source.replace(/\\b/g, ''));
+    }
   }
   return true;
 }
@@ -66,7 +117,7 @@ function parseNginxServerBlocks(confContent) {
         if (name === 'localhost' || name === '_') continue;
         blocks.push({
           server_name: name,
-          port: listenM ? parseInt(listenM[1]) : 80,
+          port: listenM ? parseInt(listenM[1]) || 80 : 80,
           root: rootM ? rootM[1].trim() : '',
           sslEnabled: sslEnabled,
           sslCert: sslM ? sslM[1].trim() : '',
@@ -80,6 +131,18 @@ function parseNginxServerBlocks(confContent) {
   return blocks;
 }
 
+function findAvailablePort() {
+  const store = loadDomains();
+  const usedPorts = new Set([80, 443]);
+  for (const name in store) {
+    if (store[name].port) usedPorts.add(store[name].port);
+  }
+  for (let p = PORT_RANGE_START; p <= PORT_RANGE_END; p++) {
+    if (!usedPorts.has(p)) return p;
+  }
+  throw new Error('No available ports in range ' + PORT_RANGE_START + '-' + PORT_RANGE_END);
+}
+
 function syncFromNginx() {
   const store = loadDomains();
   const seen = {};
@@ -87,7 +150,7 @@ function syncFromNginx() {
 
   try {
     if (!fs.existsSync(NGINX_CONF_DIR)) return store;
-    const files = fs.readdirSync(NGINX_CONF_DIR).filter(f => f.endsWith('.conf'));
+    const files = fs.readdirSync(NGINX_CONF_DIR).filter(f => f.endsWith('.conf') && !f.includes('.bak'));
 
     for (const file of files) {
       const content = fs.readFileSync(path.join(NGINX_CONF_DIR, file), 'utf8');
@@ -136,37 +199,32 @@ function syncFromNginx() {
           store[name].port = block.port || store[name].port;
           store[name].root = block.root || store[name].root;
           store[name].sslEnabled = !!block.sslEnabled;
+          store[name].sslCert = block.sslCert || store[name].sslCert;
           store[name].nginxFile = block.nginxFile;
           changed[name] = 'updated';
         }
       }
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error('[Domains] nginx sync error:', err.message);
+  }
 
   if (Object.keys(changed).length > 0) saveDomains(store);
   return store;
 }
 
-function findAvailablePort() {
-  return 80;
-}
-
 function validateDomain(name, type) {
   if (!name || name.length < 3) throw new Error('Invalid domain name');
-  if (type === 'domain') {
-    if (!/^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/.test(name)) {
-      throw new Error('Invalid domain format. Use example.com');
-    }
-  } else {
-    if (!/^([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}$/.test(name)) {
-      throw new Error('Invalid subdomain format. Use sub.example.com');
-    }
+  if (!validators.domain.test(name)) {
+    throw new Error('Invalid domain format. Use example.com');
+  }
+  if (type === 'subdomain') {
     const parts = name.split('.');
     if (parts.length < 3) throw new Error('Subdomain must have at least 3 parts (e.g. sub.example.com)');
   }
 }
 
-function generateNginxConf(domain, port, sslEnabled) {
+function generateNginxConf(domain, port, sslEnabled, type, options) {
   const root = '/var/www/' + domain;
   const log = '/var/log/nginx/' + domain;
   let conf = 'server {\n';
@@ -211,14 +269,21 @@ function generateNginxConf(domain, port, sslEnabled) {
 }
 
 function writeNginxConf(domain, confContent) {
+  if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
   const confPath = path.join(NGINX_CONF_DIR, domain + '.conf');
-  fs.writeFileSync(confPath, confContent, 'utf8');
+  backupNginxConf(domain);
+  const tmpFile = confPath + '.tmp';
+  fs.writeFileSync(tmpFile, confContent, 'utf8');
+  fs.renameSync(tmpFile, confPath);
   return confPath;
 }
 
 function removeNginxConf(domain) {
+  if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
   const confPath = path.join(NGINX_CONF_DIR, domain + '.conf');
-  try { if (fs.existsSync(confPath)) fs.unlinkSync(confPath); } catch (_) {}
+  try {
+    if (fs.existsSync(confPath)) fs.unlinkSync(confPath);
+  } catch (_) {}
 }
 
 function createDomainWWW(domain) {
@@ -241,9 +306,30 @@ function removeDomainWWW(domain) {
   } catch (_) {}
 }
 
+function getSSLCertInfo(domain) {
+  try {
+    const certPath = '/etc/letsencrypt/live/' + domain + '/fullchain.pem';
+    if (!fs.existsSync(certPath)) return null;
+    const result = runSafeSync('openssl', ['x509', '-enddate', '-noout', '-in', certPath]);
+    const match = result.stdout.match(/notAfter=(.+)/);
+    if (!match) return null;
+    const expiryDate = new Date(match[1].trim());
+    const now = new Date();
+    const daysLeft = Math.floor((expiryDate - now) / (1000 * 60 * 60 * 24));
+    return {
+      expiryDate: expiryDate.toISOString(),
+      daysLeft: daysLeft,
+      isExpired: daysLeft < 0,
+      isExpiringSoon: daysLeft >= 0 && daysLeft < 30,
+    };
+  } catch (_) {
+    return null;
+  }
+}
+
 function installCertbotSSL(domain) {
   if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
-  const adminEmail = 'admin@meedo51.com';
+  const adminEmail = process.env.CERTBOT_EMAIL || 'admin@meedo51.com';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) throw new Error('Invalid email');
   const result = runSafeSync('certbot', ['--nginx', '-d', domain, '--non-interactive', '--agree-tos', '-m', adminEmail], { timeout: 120000 });
   const output = (result.stdout || '') + (result.stderr || '');
@@ -255,30 +341,10 @@ function installCertbotSSL(domain) {
 function deleteCertbotSSL(domain) {
   if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
   const result = runSafeSync('certbot', ['delete', '--cert-name', domain, '--non-interactive'], { timeout: 30000 });
-  const output = (result.stdout || '') + (result.stderr || '');
-  return { output };
+  return { output: (result.stdout || '') + (result.stderr || '') };
 }
 
-function listDomains() {
-  syncFromNginx();
-  const store = loadDomains();
-  return Object.keys(store).sort().map(name => ({
-    domain: name,
-    type: store[name].type || 'domain',
-    port: store[name].port || 80,
-    root: store[name].root || '/var/www/' + name,
-    sslEnabled: !!store[name].sslEnabled,
-    parentDomain: store[name].parentDomain || null,
-    syncedFromNginx: !!store[name].syncedFromNginx,
-    createdAt: store[name].createdAt || '',
-  }));
-}
-
-function getDomain(name) {
-  syncFromNginx();
-  const store = loadDomains();
-  if (!store[name]) throw new Error('Domain not found: ' + name);
-  const d = store[name];
+function sanitizeDomain(d, name) {
   return {
     domain: name,
     type: d.type || 'domain',
@@ -289,7 +355,48 @@ function getDomain(name) {
     syncedFromNginx: !!d.syncedFromNginx,
     autoPort: !!d.autoPort,
     createdAt: d.createdAt || '',
+    nginxFile: d.nginxFile || name + '.conf',
+    sslInfo: d.sslEnabled ? getSSLCertInfo(name) : null,
   };
+}
+
+function listDomains(opts) {
+  syncFromNginx();
+  const store = loadDomains();
+  let list = Object.keys(store).sort().map(name => sanitizeDomain(store[name], name));
+
+  if (opts && opts.search) {
+    const s = opts.search.toLowerCase();
+    list = list.filter(d =>
+      d.domain.toLowerCase().includes(s) ||
+      d.type.toLowerCase().includes(s) ||
+      (d.parentDomain && d.parentDomain.toLowerCase().includes(s))
+    );
+  }
+
+  const sortBy = (opts && opts.sort) || 'domain';
+  const sortDir = (opts && opts.dir) === 'desc' ? -1 : 1;
+  list.sort((a, b) => {
+    const va = a[sortBy] || '';
+    const vb = b[sortBy] || '';
+    if (typeof va === 'string') return va.localeCompare(vb) * sortDir;
+    return (va - vb) * sortDir;
+  });
+
+  const page = (opts && opts.page) || 1;
+  const limit = (opts && opts.limit) || 50;
+  const total = list.length;
+  const start = (page - 1) * limit;
+  const paged = list.slice(start, start + limit);
+
+  return { domains: paged, total, page, limit, pages: Math.ceil(total / limit) };
+}
+
+function getDomain(name) {
+  syncFromNginx();
+  const store = loadDomains();
+  if (!store[name]) throw new Error('Domain not found: ' + name);
+  return sanitizeDomain(store[name], name);
 }
 
 function createDomain(type, name, port, enableSSL) {
@@ -319,12 +426,11 @@ function createDomain(type, name, port, enableSSL) {
     if (sslResult.success) {
       finalSSL = true;
     } else {
-      console.error('SSL install failed for ' + name + ': ' + sslResult.output);
+      console.error('[Domains] SSL install failed for ' + name + ':', sslResult.output);
     }
   }
-  if (!sslEnabled || !finalSSL) {
-    writeNginxConf(name, generateNginxConf(name, port, false));
-  }
+
+  writeNginxConf(name, generateNginxConf(name, finalSSL ? 443 : port, finalSSL));
   nginxTestAndReload();
 
   const parentDomain = type === 'subdomain' ? name.split('.').slice(1).join('.') : null;
@@ -336,6 +442,7 @@ function createDomain(type, name, port, enableSSL) {
     port: finalSSL ? 443 : port,
     root: '/var/www/' + name,
     sslEnabled: finalSSL,
+    sslCert: finalSSL ? '/etc/letsencrypt/live/' + name + '/fullchain.pem' : '',
     autoPort: autoPort,
     syncedFromNginx: false,
     nginxFile: name + '.conf',
@@ -351,20 +458,20 @@ function editDomain(name, updates) {
   if (!store[name]) throw new Error('Domain not found: ' + name);
 
   const d = store[name];
-  const newPort = updates.port !== undefined ? parseInt(updates.port) : d.port;
+  const allowed = ['port', 'sslEnabled', 'root', 'type'];
+  const newPort = updates.port !== undefined ? parseInt(updates.port, 10) : d.port;
   const newSSL = updates.sslEnabled !== undefined ? !!updates.sslEnabled : !!d.sslEnabled;
   const newRoot = updates.root || d.root;
 
-  if (updates.port !== undefined && parseInt(updates.port) !== d.port) {
-    const portNum = parseInt(updates.port);
-    if (portNum < 1 || portNum > 65535) throw new Error('Invalid port number');
-    d.port = portNum;
+  if (updates.port !== undefined) {
+    if (isNaN(newPort) || newPort < 1 || newPort > 65535) throw new Error('Invalid port number');
+    d.port = newPort;
   }
 
   if (updates.root) d.root = newRoot;
   if (updates.type) d.type = updates.type;
 
-  if (updates.port !== undefined) {
+  if (updates.port !== undefined || updates.root) {
     const conf = generateNginxConf(name, d.port, d.sslEnabled);
     writeNginxConf(name, conf);
     nginxTestAndReload();
@@ -372,19 +479,27 @@ function editDomain(name, updates) {
 
   if (updates.sslEnabled !== undefined && updates.sslEnabled !== d.sslEnabled) {
     if (newSSL) {
+      writeNginxConf(name, generateNginxConf(name, 80, false));
+      nginxTestAndReload();
       const sslResult = installCertbotSSL(name);
       if (!sslResult.success) {
+        writeNginxConf(name, generateNginxConf(name, d.port || 80, false));
+        nginxTestAndReload();
         throw new Error('SSL installation failed: ' + sslResult.output);
       }
       d.sslEnabled = true;
       d.port = 443;
+      d.sslCert = '/etc/letsencrypt/live/' + name + '/fullchain.pem';
     } else {
       writeNginxConf(name, generateNginxConf(name, 80, false));
       nginxTestAndReload();
       d.sslEnabled = false;
       d.port = 80;
+      d.sslCert = '';
       deleteCertbotSSL(name);
     }
+    writeNginxConf(name, generateNginxConf(name, d.port, d.sslEnabled));
+    nginxTestAndReload();
   }
 
   if (updates.type === 'subdomain' && !d.parentDomain) {
@@ -415,13 +530,15 @@ function deleteDomain(name) {
 }
 
 function getNginxPreview(name) {
+  if (!validators.domain.test(name)) throw new Error('Invalid domain: ' + name);
   const confPath = path.join(NGINX_CONF_DIR, name + '.conf');
   if (!fs.existsSync(confPath)) throw new Error('nginx config not found for ' + name);
   return fs.readFileSync(confPath, 'utf8');
 }
 
 function saveNginxPreview(name, content) {
-  if (!content || content.trim().length === 0) throw new Error('Config content cannot be empty');
+  if (!validators.domain.test(name)) throw new Error('Invalid domain: ' + name);
+  validateNginxContent(content);
   writeNginxConf(name, content);
   nginxTestAndReload();
   return { ok: true };
@@ -435,6 +552,9 @@ function installSSL(name) {
   if (result.success) {
     store[name].sslEnabled = true;
     store[name].port = 443;
+    store[name].sslCert = '/etc/letsencrypt/live/' + name + '/fullchain.pem';
+    writeNginxConf(name, generateNginxConf(name, 443, true));
+    nginxTestAndReload();
     saveDomains(store);
   }
 
@@ -457,6 +577,21 @@ function getSuggestedPort() {
   return { port: findAvailablePort() };
 }
 
+function bulkDelete(names) {
+  if (!Array.isArray(names) || names.length === 0) throw new Error('No domains specified');
+  if (names.length > 50) throw new Error('Too many domains (max 50)');
+  const results = [];
+  for (const name of names) {
+    try {
+      deleteDomain(name);
+      results.push({ domain: name, success: true });
+    } catch (e) {
+      results.push({ domain: name, success: false, error: e.message });
+    }
+  }
+  return results;
+}
+
 module.exports = {
   listDomains,
   getDomain,
@@ -469,4 +604,6 @@ module.exports = {
   getParentCandidates,
   getSuggestedPort,
   syncFromNginx,
+  bulkDelete,
+  validateNginxContent,
 };

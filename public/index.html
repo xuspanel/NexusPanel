@@ -1354,23 +1354,35 @@
         <button class="db-btn db-btn-retry" id="domainsRetryBtn">Retry</button>
       </div>
 
+      <div id="domainsSearchBar" style="display:none;margin-bottom:12px;">
+        <input type="text" id="domainsSearch" class="users-search-input" placeholder="Search domains..." spellcheck="false" autocomplete="off">
+      </div>
+
+      <div id="domainsBulkBar" class="users-bulk-bar" style="display:none;">
+        <span id="domainsBulkCount">0 selected</span>
+        <button class="fm-btn fm-btn-danger fm-btn-sm" id="domainsBulkDelete">Delete Selected</button>
+        <button class="fm-btn fm-btn-secondary fm-btn-sm" id="domainsBulkClear">Clear</button>
+      </div>
+
       <div id="domainsContent" style="display:none;">
         <div class="users-table-wrap">
           <table class="users-table">
             <thead>
               <tr>
-                <th>Type</th>
-                <th>Domain</th>
-                <th>Port</th>
+                <th style="width:40px;"><input type="checkbox" id="domainsSelectAll" title="Select all"></th>
+                <th class="sortable" data-dm-sort="type">Type <span class="sort-icon" data-dm-sort="type"></span></th>
+                <th class="sortable" data-dm-sort="domain">Domain <span class="sort-icon" data-dm-sort="domain"></span></th>
+                <th class="sortable" data-dm-sort="port">Port <span class="sort-icon" data-dm-sort="port"></span></th>
                 <th>SSL</th>
                 <th>Root</th>
-                <th>Created</th>
+                <th class="sortable" data-dm-sort="createdAt">Created <span class="sort-icon" data-dm-sort="createdAt"></span></th>
                 <th>Actions</th>
               </tr>
             </thead>
             <tbody id="domainsTableBody"></tbody>
           </table>
         </div>
+        <div id="domainsPagination" class="users-pagination" style="display:none;"></div>
       </div>
     </main>
 
@@ -2295,6 +2307,30 @@
             <strong>Tip:</strong> You can edit the nginx config directly using the Edit button. After saving, nginx will be reloaded automatically.
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Domain Delete Confirmation Modal -->
+  <div id="domainDeleteModal" class="modal-overlay domain-delete-modal" style="display:none;">
+    <div class="modal" style="max-width:440px;">
+      <div class="modal-header">
+        <span class="modal-icon" style="color:var(--red);">⚠</span>
+        <span class="modal-title">Delete Domain</span>
+        <button class="modal-close" id="domainDeleteClose">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="domain-delete-msg" id="domainDeleteMsg"></p>
+        <ul class="domain-delete-effects">
+          <li>Remove the nginx config file</li>
+          <li>Delete the <code>/var/www/{name}</code> folder</li>
+          <li>Remove the SSL certificate (if any)</li>
+        </ul>
+        <p class="domain-delete-warning">This action cannot be undone.</p>
+      </div>
+      <div class="modal-footer">
+        <button class="fm-btn fm-btn-secondary" id="domainDeleteCancel">Cancel</button>
+        <button class="fm-btn fm-btn-danger" id="domainDeleteConfirm">Delete</button>
       </div>
     </div>
   </div>

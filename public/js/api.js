@@ -255,7 +255,18 @@ const API = {
     },
   },
   domains: {
-    list: () => API.request('GET', '/domains'),
+    list: (params) => {
+      const qs = new URLSearchParams();
+      if (params) {
+        if (params.search) qs.set('search', params.search);
+        if (params.sort) qs.set('sort', params.sort);
+        if (params.dir) qs.set('dir', params.dir);
+        if (params.page) qs.set('page', params.page);
+        if (params.limit) qs.set('limit', params.limit);
+      }
+      const q = qs.toString();
+      return API.request('GET', '/domains' + (q ? '?' + q : ''));
+    },
     get: (name) => API.request('GET', '/domains/' + encodeURIComponent(name)),
     create: (data) => API.request('POST', '/domains/create', data),
     update: (name, data) => API.request('PUT', '/domains/' + encodeURIComponent(name), data),
@@ -265,6 +276,7 @@ const API = {
     ssl: (name) => API.request('POST', '/domains/' + encodeURIComponent(name) + '/ssl'),
     parents: () => API.request('GET', '/domains/parents'),
     availablePort: () => API.request('GET', '/domains/ports/available'),
+    bulkDelete: (names) => API.request('POST', '/domains/bulk/delete', { domains: names }),
   },
   backups: {
     defs: () => API.request('GET', '/backups/defs'),

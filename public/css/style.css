@@ -8528,6 +8528,70 @@ body::before {
   background: rgba(239, 68, 68, 0.15) !important;
 }
 
+.domain-ssl-expiry {
+  font-size: 0.72rem;
+  color: var(--accent-green);
+  margin-left: 6px;
+  white-space: nowrap;
+}
+
+.domain-ssl-expiry.expiring {
+  color: var(--accent-orange);
+}
+
+.domain-ssl-expiry.expired {
+  color: var(--accent-red);
+}
+
+.domain-delete-msg {
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+}
+
+.domain-delete-effects {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 12px 0;
+}
+
+.domain-delete-effects li {
+  padding: 3px 0 3px 18px;
+  position: relative;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.domain-delete-effects li::before {
+  content: '•';
+  position: absolute;
+  left: 0;
+  color: var(--accent-red);
+}
+
+.domain-delete-effects code {
+  font-size: 0.8rem;
+  background: rgba(255, 255, 255, 0.06);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.domain-delete-warning {
+  font-size: 0.8rem;
+  color: var(--accent-red);
+  font-style: italic;
+}
+
+.fm-btn-danger {
+  background: var(--accent-red) !important;
+  color: #fff !important;
+  border-color: var(--accent-red) !important;
+}
+
+.fm-btn-danger:hover {
+  background: rgba(239, 68, 68, 0.85) !important;
+}
+
 /* ── Nginx Config Preview/Edit Split Modal ── */
 .domain-nginx-modal {
   z-index: 120;

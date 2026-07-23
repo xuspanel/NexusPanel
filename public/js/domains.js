@@ -1,28 +1,108 @@
 let domainsData = [];
 let domainsNginxContent = '';
 let domainsEditing = null;
+let domainsCurrentSort = 'domain';
+let domainsSortDir = 'asc';
+let domainsCurrentPage = 1;
+let domainsTotalPages = 1;
+let domainsSearch = '';
+let domainsSelected = new Set();
+let domainsDeleteTarget = null;
 
 window.initDomains = async function () {
   try {
     const u = await API.me();
     if (u.role !== 'admin') {
-      document.getElementById('domainsContent').innerHTML = '<div class="db-error"><span class="db-error-icon">\u26A0\uFE0F</span><span>Admin access required</span></div>';
+      document.getElementById('domainsContent').innerHTML = '<div class="db-error"><span class="db-error-icon">⚠️</span><span>Admin access required</span></div>';
       return;
     }
+    document.getElementById('domainsSearchBar').style.display = 'block';
+    bindDomainsEvents();
     await loadDomains();
   } catch (err) {
-    document.getElementById('domainsContent').innerHTML = '<div class="db-error"><span class="db-error-icon">\u26A0\uFE0F</span><span>' + escHtml(err.message) + '</span></div>';
+    document.getElementById('domainsContent').innerHTML = '<div class="db-error"><span class="db-error-icon">⚠️</span><span>' + escHtml(err.message) + '</span></div>';
   }
 };
+
+function bindDomainsEvents() {
+  const searchBar = document.getElementById('domainsSearchBar');
+  if (searchBar && !searchBar.dataset.bound) {
+    searchBar.dataset.bound = '1';
+    document.getElementById('domainsSearch').addEventListener('input', (e) => {
+      domainsSearch = e.target.value.trim();
+      domainsCurrentPage = 1;
+      loadDomains();
+    });
+  }
+
+  const selectAll = document.getElementById('domainsSelectAll');
+  if (selectAll && !selectAll.dataset.bound) {
+    selectAll.dataset.bound = '1';
+    selectAll.addEventListener('change', (e) => {
+      const checkboxes = document.querySelectorAll('.domains-cb');
+      const selectable = [];
+      checkboxes.forEach(cb => { selectable.push(cb); cb.checked = e.target.checked; });
+      domainsSelected.clear();
+      if (e.target.checked) selectable.forEach(cb => domainsSelected.add(cb.dataset.dm));
+      updateBulkBar();
+    });
+  }
+
+  document.getElementById('domainsBulkDelete')?.addEventListener('click', bulkDeleteDomains);
+  document.getElementById('domainsBulkClear')?.addEventListener('click', () => {
+    domainsSelected.clear();
+    document.querySelectorAll('.domains-cb').forEach(cb => cb.checked = false);
+    document.getElementById('domainsSelectAll').checked = false;
+    updateBulkBar();
+  });
+
+  document.querySelectorAll('[data-dm-sort]').forEach(el => {
+    el.addEventListener('click', () => {
+      const field = el.dataset.dmSort;
+      if (domainsCurrentSort === field) {
+        domainsSortDir = domainsSortDir === 'asc' ? 'desc' : 'asc';
+      } else {
+        domainsCurrentSort = field;
+        domainsSortDir = 'asc';
+      }
+      domainsCurrentPage = 1;
+      loadDomains();
+    });
+  });
+
+  document.getElementById('domainDeleteClose')?.addEventListener('click', closeDomainDeleteModal);
+  document.getElementById('domainDeleteCancel')?.addEventListener('click', closeDomainDeleteModal);
+  document.getElementById('domainDeleteConfirm')?.addEventListener('click', confirmDeleteDomain);
+  document.querySelectorAll('.domain-delete-modal').forEach(el => {
+    el.addEventListener('click', (e) => { if (e.target === el) closeDomainDeleteModal(); });
+  });
+}
 
 async function loadDomains() {
   try {
     document.getElementById('domainsLoading').style.display = 'flex';
     document.getElementById('domainsContent').style.display = 'none';
+    document.getElementById('domainsError').style.display = 'none';
 
-    const list = await API.domains.list();
-    domainsData = list;
-    renderDomainsTable(list);
+    const result = await API.domains.list({
+      search: domainsSearch || undefined,
+      sort: domainsCurrentSort,
+      dir: domainsSortDir,
+      page: domainsCurrentPage,
+      limit: 50,
+    });
+
+    domainsData = result.domains;
+    domainsTotalPages = result.pages || 1;
+    domainsCurrentPage = result.page || 1;
+    domainsSelected.clear();
+    document.getElementById('domainsSelectAll').checked = false;
+    updateBulkBar();
+
+    renderDomainsTable(domainsData);
+    renderSortIcons();
+    renderPagination(result.total || 0);
+
     document.getElementById('domainsLoading').style.display = 'none';
     document.getElementById('domainsContent').style.display = 'block';
   } catch (err) {
@@ -34,32 +114,153 @@ async function loadDomains() {
 
 function renderDomainsTable(domains) {
   const tbody = document.getElementById('domainsTableBody');
+  if (!domains || domains.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="8" class="users-empty">No domains found</td></tr>';
+    return;
+  }
   tbody.innerHTML = domains.map(d => {
     const typeBadge = d.type === 'subdomain'
       ? '<span class="domain-type-badge domain-type-sub">SUB</span>'
       : '<span class="domain-type-badge domain-type-main">DOMAIN</span>';
     const sslBadge = d.sslEnabled
-      ? '<span class="domain-ssl-badge on">\uD83D\uDD12 SSL</span>'
-      : '<span class="domain-ssl-badge off">\u26A0 No SSL</span>';
-    const syncBadge = d.syncedFromNginx
-      ? '<span class="domain-sync-badge">\uD83D\uDD04 Synced</span>'
+      ? '<span class="domain-ssl-badge on">🔒 SSL</span>'
+      : '<span class="domain-ssl-badge off">⚠ No SSL</span>';
+    const sslExpiry = d.sslInfo
+      ? '<span class="domain-ssl-expiry' + (d.sslInfo.isExpiringSoon ? ' expiring' : '') + (d.sslInfo.isExpired ? ' expired' : '') + '">' +
+        (d.sslInfo.isExpired ? 'Expired' : d.sslInfo.daysLeft + 'd left') + '</span>'
       : '';
+    const syncBadge = d.syncedFromNginx
+      ? '<span class="domain-sync-badge">🔄 Synced</span>'
+      : '';
+    const checked = domainsSelected.has(d.domain) ? ' checked' : '';
     return '<tr>' +
+      '<td><input type="checkbox" class="domains-cb" data-dm="' + escHtml(d.domain) + '"' + checked + '></td>' +
       '<td>' + typeBadge + '</td>' +
       '<td><span class="domain-name-cell">' + escHtml(d.domain) + '</span> ' + syncBadge + '</td>' +
       '<td><span class="domain-port-badge">' + d.port + '</span></td>' +
-      '<td>' + sslBadge + '</td>' +
+      '<td>' + sslBadge + ' ' + sslExpiry + '</td>' +
       '<td class="domain-root-cell" title="' + escHtml(d.root) + '">' + escHtml(d.root) + '</td>' +
       '<td class="domain-date-cell">' + (d.createdAt ? formatDate(d.createdAt) : '—') + '</td>' +
       '<td class="domain-actions">' +
-        '<button class="fm-btn fm-btn-secondary fm-btn-sm" onclick="openVisitDomain(\'' + escHtml(d.domain) + '\', ' + d.port + ', ' + d.sslEnabled + ')" title="Open site in new tab">\uD83D\uDD17</button>' +
-        '<button class="fm-btn fm-btn-secondary fm-btn-sm" onclick="openDomainNginx(\'' + escHtml(d.domain) + '\')" title="View/Edit nginx config">\u2699</button>' +
-        (d.sslEnabled ? '' : '<button class="fm-btn fm-btn-secondary fm-btn-sm" onclick="installDomainSSL(\'' + escHtml(d.domain) + '\')" title="Install SSL">\uD83D\uDD12</button>') +
-        '<button class="fm-btn fm-btn-secondary fm-btn-sm" onclick="openEditDomain(\'' + escHtml(d.domain) + '\')" title="Edit">\u2692\uFE0F</button>' +
-        '<button class="fm-btn fm-btn-secondary fm-btn-sm domain-delete-btn" onclick="deleteDomain(\'' + escHtml(d.domain) + '\')" title="Delete">\uD83D\uDDD1</button>' +
+        '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="visit" data-dm-domain="' + escHtml(d.domain) + '" data-dm-port="' + d.port + '" data-dm-ssl="' + d.sslEnabled + '" title="Open site in new tab">🔗</button>' +
+        '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="nginx" data-dm-domain="' + escHtml(d.domain) + '" title="View/Edit nginx config">⚙</button>' +
+        (!d.sslEnabled ? '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="ssl" data-dm-domain="' + escHtml(d.domain) + '" title="Install SSL">🔒</button>' : '') +
+        '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="edit" data-dm-domain="' + escHtml(d.domain) + '" title="Edit">✎</button>' +
+        '<button class="fm-btn fm-btn-secondary fm-btn-sm domain-delete-btn" data-dm-action="delete" data-dm-domain="' + escHtml(d.domain) + '" title="Delete">🗑</button>' +
       '</td>' +
     '</tr>';
   }).join('');
+
+  tbody.querySelectorAll('.domains-cb').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) domainsSelected.add(cb.dataset.dm);
+      else domainsSelected.delete(cb.dataset.dm);
+      updateBulkBar();
+    });
+  });
+
+  tbody.querySelectorAll('[data-dm-action]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.dmAction;
+      const name = btn.dataset.dmDomain;
+      if (action === 'visit') openVisitDomain(name, parseInt(btn.dataset.dmPort), btn.dataset.dmSsl === 'true');
+      else if (action === 'nginx') openDomainNginx(name);
+      else if (action === 'ssl') installDomainSSL(name);
+      else if (action === 'edit') openEditDomain(name);
+      else if (action === 'delete') openDeleteDomainModal(name);
+    });
+  });
+}
+
+function renderSortIcons() {
+  document.querySelectorAll('.sort-icon').forEach(el => {
+    const field = el.dataset.dmSort;
+    if (field === domainsCurrentSort) {
+      el.textContent = domainsSortDir === 'asc' ? '▲' : '▼';
+    } else {
+      el.textContent = '';
+    }
+  });
+}
+
+function renderPagination(total) {
+  const el = document.getElementById('domainsPagination');
+  if (!el) return;
+  if (domainsTotalPages <= 1) { el.style.display = 'none'; return; }
+  el.style.display = 'flex';
+  let html = '<button class="pg-btn" data-dm-pg="prev"' + (domainsCurrentPage <= 1 ? ' disabled' : '') + '>‹</button>';
+  const start = Math.max(1, domainsCurrentPage - 2);
+  const end = Math.min(domainsTotalPages, domainsCurrentPage + 2);
+  if (start > 1) html += '<button class="pg-btn" data-dm-pg="1">1</button>';
+  if (start > 2) html += '<span class="pg-ellipsis">…</span>';
+  for (let i = start; i <= end; i++) {
+    html += '<button class="pg-btn' + (i === domainsCurrentPage ? ' pg-active' : '') + '" data-dm-pg="' + i + '">' + i + '</button>';
+  }
+  if (end < domainsTotalPages - 1) html += '<span class="pg-ellipsis">…</span>';
+  if (end < domainsTotalPages) html += '<button class="pg-btn" data-dm-pg="' + domainsTotalPages + '">' + domainsTotalPages + '</button>';
+  html += '<button class="pg-btn" data-dm-pg="next"' + (domainsCurrentPage >= domainsTotalPages ? ' disabled' : '') + '>›</button>';
+  html += '<span class="pg-info">' + total + ' domains</span>';
+  el.innerHTML = html;
+  el.querySelectorAll('[data-dm-pg]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (btn.disabled) return;
+      const pg = btn.dataset.dmPg;
+      if (pg === 'prev') domainsCurrentPage = Math.max(1, domainsCurrentPage - 1);
+      else if (pg === 'next') domainsCurrentPage = Math.min(domainsTotalPages, domainsCurrentPage + 1);
+      else domainsCurrentPage = parseInt(pg, 10);
+      loadDomains();
+    });
+  });
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('domainsBulkBar');
+  const count = document.getElementById('domainsBulkCount');
+  if (domainsSelected.size > 0) {
+    bar.style.display = 'flex';
+    count.textContent = domainsSelected.size + ' selected';
+  } else {
+    bar.style.display = 'none';
+  }
+}
+
+async function bulkDeleteDomains() {
+  if (domainsSelected.size === 0) return;
+  openDeleteDomainModal(Array.from(domainsSelected));
+}
+
+/* ── Delete Confirmation Modal ── */
+
+function openDeleteDomainModal(target) {
+  domainsDeleteTarget = target;
+  const names = Array.isArray(target) ? target : [target];
+  const msg = names.length === 1
+    ? 'Delete domain "' + names[0] + '"?'
+    : 'Delete ' + names.length + ' domains?';
+  document.getElementById('domainDeleteMsg').textContent = msg;
+  document.getElementById('domainDeleteModal').style.display = 'flex';
+}
+
+function closeDomainDeleteModal() {
+  document.getElementById('domainDeleteModal').style.display = 'none';
+  domainsDeleteTarget = null;
+}
+
+async function confirmDeleteDomain() {
+  const target = domainsDeleteTarget;
+  if (!target) return;
+  const names = Array.isArray(target) ? target : [target];
+  closeDomainDeleteModal();
+  try {
+    if (names.length === 1) {
+      await API.domains.del(names[0]);
+    } else {
+      await API.domains.bulkDelete(names);
+    }
+    fmShowToast(names.length === 1 ? 'Deleted ' + names[0] : 'Deleted ' + names.length + ' domains', 'success');
+    domainsSelected.clear();
+    await loadDomains();
+  } catch (e) { fmShowToast(e.message, 'error'); }
 }
 
 /* ── Add/Edit Domain Modal ── */
@@ -223,8 +424,8 @@ function closeNginxPreview() {
 /* ── Actions ── */
 
 function openVisitDomain(name, port, ssl) {
-  const protocol = ssl ? 'https' : 'http';
-  const defaultPort = ssl ? 443 : 80;
+  const protocol = ssl === 'true' || ssl === true ? 'https' : 'http';
+  const defaultPort = protocol === 'https' ? 443 : 80;
   const url = protocol + '://' + name + (Number(port) === defaultPort ? '' : ':' + port);
   window.open(url, '_blank');
 }
@@ -238,15 +439,6 @@ async function installDomainSSL(name) {
     } else {
       fmShowToast('SSL install had issues: ' + (result.output || '').substring(0, 200), 'error');
     }
-    await loadDomains();
-  } catch (e) { fmShowToast(e.message, 'error'); }
-}
-
-async function deleteDomain(name) {
-  if (!confirm('Delete domain "' + name + '"?\n\nThis will:\n- Remove the nginx config file\n- Delete the /var/www/' + name + ' folder\n- Remove the SSL certificate (if any)\n\nThis action cannot be undone.')) return;
-  try {
-    await API.domains.del(name);
-    fmShowToast('Deleted ' + name, 'success');
     await loadDomains();
   } catch (e) { fmShowToast(e.message, 'error'); }
 }
@@ -332,7 +524,7 @@ function fmShowToast(msg, type) {
   const text = document.getElementById('fmToastMsg');
   if (!el) return;
   text.textContent = msg;
-  icon.textContent = type === 'error' ? '\u26A0\uFE0F' : '\u2705';
+  icon.textContent = type === 'error' ? '⚠️' : '✅';
   el.className = 'fm-toast fm-toast-' + (type || 'success') + ' fm-toast-show';
   clearTimeout(el._hideTimer);
   el._hideTimer = setTimeout(() => {

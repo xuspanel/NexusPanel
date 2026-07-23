@@ -1,5 +1,40 @@
 # Changelog
 
+## [1.15.0] - 2026-07-23
+### Added
+- **Domain Search**: Real-time search filtering by domain name, type, or parent domain
+- **Column Sorting**: Click sortable column headers (Type, Domain, Port, Created) to sort ascending/descending
+- **Server-Side Pagination**: Paginated domain list with page controls
+- **Bulk Selection**: Select multiple domains via checkboxes for bulk delete
+- **Bulk Delete Toolbar**: Visual selection toolbar with count and action buttons
+- **SSL Expiry Display**: Shows certificate days remaining or expiration status per domain
+- **Delete Confirmation Modal**: Replaced `confirm()` dialog with styled modal (supports single and bulk)
+- **Nginx Config Backup**: Timestamped `.bak` files created before every nginx config overwrite
+- **Dangerous Directive Blocking**: `saveNginxPreview` blocks `proxy_pass`, `alias`, `include`, `set`, `eval`, `access_by_lua`, `content_by_lua`
+- **Audit Logging**: All domain create/update/delete/SSL/nginx operations logged to audit system
+- **Atomic File Writes**: `domains.json` writes use temp file + rename for crash safety
+- **File Locking**: Concurrent write protection for `domains.json`
+- **`bulkDelete` Endpoint**: `POST /api/domains/bulk/delete` for batch domain removal (max 50)
+
+### Fixed
+- **CRITICAL: SSL config not updated after certbot success**: `createDomain` now rewrites nginx conf with SSL listen/redirect blocks after successful certbot install
+- **CRITICAL: `findAvailablePort()` always returned 80**: Now scans port range 8000-9000 excluding used ports
+- **CRITICAL: `parseInt` NaN in `editDomain`**: Added `isNaN` check before port validation
+- **Path traversal on `writeNginxConf`**: Domain name validated against `validators.domain` regex before file write
+- **`saveNginxPreview` accepts arbitrary nginx**: Dangerous directives now blocked before write
+- **SSL cert info lost on reload**: `getSSLCertInfo()` reads actual cert expiry from disk via `openssl x509`
+- **`sslCert` field never stored**: Create and edit now persist the cert path in `domains.json`
+- **No config backup before overwrite**: `backupNginxConf()` creates timestamped `.bak` before every write
+- **XSS via inline onclick**: Replaced with `data-dm-action`/`data-dm-domain` attribute event delegation
+- **Hardcoded certbot email**: Now reads from `process.env.CERTBOT_EMAIL` with fallback
+- **`parseInt` without radix**: All `parseInt` calls now include radix 10
+- **No field whitelist on domain edit**: `sanitizeUpdates()` restricts to `port`, `sslEnabled`, `root`, `type`
+
+### Changed
+- **`GET /api/domains` response format**: Now returns `{ domains, total, page, limit, pages }` with pagination metadata
+- **Domain list response**: Each domain now includes `sslInfo` (expiry date, days left, isExpired, isExpiringSoon) when SSL is enabled
+- **`nginx.conf` exclusion**: Sync now skips `.bak` files when scanning `/etc/nginx/conf.d`
+
 ## [1.14.0] - 2026-07-23
 ### Added
 - **User Search**: Real-time search filtering by username, shell, home, or groups

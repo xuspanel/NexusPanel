@@ -1,15 +1,33 @@
 const express = require('express');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 const domains = require('../services/domains');
+const audit = require('../services/audit');
 
 const router = express.Router();
 router.use(authMiddleware);
 
-router.use(adminOnly);
+const ALLOWED_FIELDS = ['port', 'sslEnabled', 'root', 'type'];
+
+function sanitizeUpdates(body) {
+  const out = {};
+  for (const key of ALLOWED_FIELDS) {
+    if (body[key] !== undefined) out[key] = body[key];
+  }
+  return out;
+}
 
 router.get('/', (req, res) => {
-  try { res.json(domains.listDomains()); }
-  catch (e) { res.status(500).json({ error: e.message }); }
+  try {
+    const { search, sort, dir, page, limit } = req.query;
+    const result = domains.listDomains({
+      search: search || undefined,
+      sort: sort || 'domain',
+      dir: dir || 'asc',
+      page: parseInt(page, 10) || 1,
+      limit: parseInt(limit, 10) || 50,
+    });
+    res.json(result);
+  } catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/parents', (req, res) => {
@@ -39,6 +57,7 @@ router.put('/:name/nginx', (req, res) => {
     const { content } = req.body;
     if (!content) return res.status(400).json({ error: 'Content required' });
     domains.saveNginxPreview(req.params.name, content);
+    audit.log('domain.nginx.update', req, { domain: req.params.name });
     res.json({ ok: true });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -48,13 +67,16 @@ router.post('/create', (req, res) => {
     const { type, domain, port, ssl } = req.body;
     if (!domain || !type) return res.status(400).json({ error: 'Domain name and type required' });
     const result = domains.createDomain(type, domain, port, ssl !== false);
+    audit.log('domain.create', req, { domain, type, port: result.port, ssl: result.sslEnabled });
     res.json({ success: true, domain: result });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
 router.put('/:name', (req, res) => {
   try {
-    const result = domains.editDomain(req.params.name, req.body);
+    const updates = sanitizeUpdates(req.body);
+    const result = domains.editDomain(req.params.name, updates);
+    audit.log('domain.update', req, { domain: req.params.name, updates });
     res.json({ success: true, domain: result });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -62,6 +84,7 @@ router.put('/:name', (req, res) => {
 router.delete('/:name', (req, res) => {
   try {
     const result = domains.deleteDomain(req.params.name);
+    audit.log('domain.delete', req, { domain: req.params.name });
     res.json(result);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
@@ -69,7 +92,18 @@ router.delete('/:name', (req, res) => {
 router.post('/:name/ssl', (req, res) => {
   try {
     const result = domains.installSSL(req.params.name);
+    audit.log('domain.ssl.install', req, { domain: req.params.name, success: result.success });
     res.json(result);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.post('/bulk/delete', (req, res) => {
+  try {
+    const { domains: names } = req.body;
+    if (!Array.isArray(names) || names.length === 0) return res.status(400).json({ error: 'No domains specified' });
+    const result = domains.bulkDelete(names);
+    audit.log('domain.bulk.delete', req, { domains: names });
+    res.json({ results: result });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
