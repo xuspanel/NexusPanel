@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.20.0] - 2026-07-24
+### Added
+- **Admin-only API access**: All service endpoints (list, status, action) now require admin role
+- **Bulk actions**: `POST /api/services/bulk/:action` for start/stop/restart on multiple services (max 20)
+- **Service actions endpoint**: `GET /api/services/actions` returns valid action list
+- **Stats header**: Total, running, stopped, and failed service counts
+- **Sort by name/state/description**: Click column headers to toggle sort
+- **Bulk selection**: Checkboxes on service rows with bulk action toolbar
+- **Status modal**: Styled modal with formatted output replaces `alert()` dialog
+- **Loading skeleton**: Animated shimmer rows during data fetch
+- **Search debounce**: 300ms debounce on filter input
+- **Button loading states**: Action buttons show loading indicator during API call
+- **Optimistic UI updates**: Service state updates immediately after action (no full reload)
+- **Toast notifications**: Success/error feedback on actions
+- **Error state UI**: Visible error message when API fails
+
+### Fixed
+- **`action()` silently succeeds on failure**: Backend now checks `systemctl` exit code and stderr, returns error messages
+- **XSS via onclick injection**: All inline `onclick` handlers replaced with `data-svc-action` event delegation
+- **Non-admin users can list services**: `GET /api/services` and `GET /:name/status` now require admin role
+- **`alert()` for status output**: Replaced with styled modal with formatted pre-formatted text
+- **Empty `catch {}` swallows errors**: Error state now displayed to user
+- **`svcState.loading`/`svcState.filter` dead code**: State properties properly used
+- **Empty service name after sanitization**: Backend validates name is non-empty before calling systemctl
+- **Error information leakage**: Backend sanitizes error messages before returning to client
+- **Service name `.service` suffix**: Backend now handles both `nginx` and `nginx.service` formats
+- **Full list reload after every action**: Optimistic update of affected service state
+- **No loading indicator**: Loading skeleton shown during data fetch
+
+### Changed
+- **Frontend rewritten as IIFE**: Encapsulated in immediately-invoked function expression
+- **Event delegation**: All inline handlers replaced with `data-svc-action` attributes
+- **HTML expanded**: Minified single-line HTML now properly formatted with new elements
+- **CSS expanded**: Hover states, loading skeleton, modal, toast, bulk bar, sort bar, pagination
+- **API client**: `act` parameter now URL-encoded, new methods added (bulkAction, actions)
+
 ## [1.19.0] - 2026-07-24
 ### Added
 - **Full audit coverage**: `routeLogger` middleware added to all 16 previously unlogged route files (auth, settings, profile, tokens, services, processes, updates, ssl, cron, firewall, docker, emails, phpfpm, databases, alerts, notifications)

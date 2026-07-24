@@ -1985,9 +1985,37 @@
     </div>
     <!-- Service Manager View -->
     <main class="dashboard-content" id="viewServices" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⚙</span><div class="db-header-info"><div class="db-header-title">Service Manager</div><div class="db-header-subtitle">Systemd service control</div></div></div><div class="db-header-right"><input type="text" id="svcFilter" class="db-search-input" placeholder="Filter..." oninput="svcFilter()" style="width:200px"><button class="db-btn db-btn-icon" onclick="loadServices()" title="Refresh">↻</button></div></div>
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">&#x2699;&#xFE0F;</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Service Manager</div>
+            <div class="db-header-subtitle">Systemd service control</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <span id="svcStats" class="svc-stats"></span>
+        </div>
+      </div>
+      <div class="svc-toolbar">
+        <input type="text" id="svcFilter" class="db-search-input" placeholder="Filter services..." style="width:200px">
+        <button class="db-btn" data-svc-action="refresh" title="Refresh">&#x21BB;</button>
+      </div>
       <div id="svcList" class="svc-list"></div>
+      <div id="svcPagination" class="svc-pagination"></div>
+      <div id="svcToast" class="svc-toast" style="display:none;"></div>
     </main>
+
+    <!-- Service Status Modal -->
+    <div class="svc-modal-overlay" id="svcStatusModal" style="display:none;">
+      <div class="svc-modal">
+        <div class="svc-modal-header">
+          <h3 id="svcStatusTitle">Service Status</h3>
+          <button class="db-btn db-btn-sm" data-svc-action="close-status">&#x2715;</button>
+        </div>
+        <div class="svc-modal-body" id="svcStatusBody"></div>
+      </div>
+    </div>
     <!-- Process Manager View -->
     <main class="dashboard-content" id="viewProcesses" style="display:none;">
       <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📊</span><div class="db-header-info"><div class="db-header-title">Process Manager</div><div class="db-header-subtitle">Live process monitoring (refreshes every 5s)</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadProcesses()" title="Refresh">↻</button></div></div>

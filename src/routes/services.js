@@ -1,14 +1,37 @@
 const express = require('express');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 const services = require('../services/services');
+const audit = require('../services/audit');
 const router = express.Router();
 router.use(authMiddleware);
-const audit = require('../services/audit');
 router.use(audit.routeLogger('service'));
-router.get('/', (req, res) => { res.json(services.list()); });
-router.post('/:name/:action', adminOnly, (req, res) => {
-  try { services.action(req.params.name, req.params.action); res.json({ ok: true }); }
-  catch (e) { res.status(400).json({ error: e.message }); }
+
+router.get('/', adminOnly, (req, res) => {
+  try { res.json(services.list()); }
+  catch (e) { res.status(500).json({ error: 'Failed to list services' }); }
 });
-router.get('/:name/status', (req, res) => { res.json({ output: services.status(req.params.name) }); });
+
+router.get('/actions', adminOnly, (req, res) => {
+  res.json(services.VALID_ACTIONS);
+});
+
+router.post('/:name/:action', adminOnly, (req, res) => {
+  try {
+    const result = services.action(req.params.name, req.params.action);
+    res.json(result);
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.post('/bulk/:action', adminOnly, (req, res) => {
+  try {
+    const results = services.bulkAction(req.body.services, req.params.action);
+    res.json({ results: results });
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.get('/:name/status', adminOnly, (req, res) => {
+  try { res.json(services.status(req.params.name)); }
+  catch (e) { res.status(400).json({ error: 'Failed to get status' }); }
+});
+
 module.exports = router;

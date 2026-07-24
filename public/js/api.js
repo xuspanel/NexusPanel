@@ -357,7 +357,9 @@ const API = {
   },
   services: {
     list: () => API.request('GET', '/services'),
-    action: (name, act) => API.request('POST', '/services/' + encodeURIComponent(name) + '/' + act),
+    actions: () => API.request('GET', '/services/actions'),
+    action: (name, act) => API.request('POST', '/services/' + encodeURIComponent(name) + '/' + encodeURIComponent(act)),
+    bulkAction: (names, act) => API.request('POST', '/services/bulk/' + encodeURIComponent(act), { services: names }),
     status: (name) => API.request('GET', '/services/' + encodeURIComponent(name) + '/status'),
   },
   processes: {
