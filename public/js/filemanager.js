@@ -73,6 +73,7 @@ async function fmLoadDirectory() {
 
   try {
     const result = await API.file.list(fmState.currentPath);
+    fmState.currentPath = result.currentPath;
     fmState.entries = result.entries;
     document.getElementById('fmPathInput').value = result.currentPath;
     fmRenderEntries();
