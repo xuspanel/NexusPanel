@@ -3,6 +3,8 @@ const { authMiddleware, adminOnly } = require('../middleware/auth');
 const cron = require('../services/cron');
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('cron'));
 router.get('/owners', (req, res) => { res.json(cron.getOwners()); });
 router.get('/:owner', (req, res) => { res.json(cron.list(req.params.owner)); });
 router.post('/:owner', adminOnly, (req, res) => {

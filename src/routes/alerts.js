@@ -3,6 +3,8 @@ const { authMiddleware, adminOnly } = require('../middleware/auth');
 const alerts = require('../services/alerts');
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('alert'));
 router.get('/config', (req, res) => res.json(alerts.getConfig()));
 router.put('/config', adminOnly, (req, res) => res.json(alerts.updateConfig(req.body)));
 router.get('/history', (req, res) => res.json(alerts.getHistory()));

@@ -3,6 +3,8 @@ const { authMiddleware } = require('../middleware/auth');
 const tokens = require('../services/tokens');
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('token'));
 router.get('/', (req, res) => res.json(tokens.list(req.user?.id || req.user?.username)));
 router.post('/', async (req, res) => {
   try {

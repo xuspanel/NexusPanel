@@ -6,6 +6,8 @@ const { authMiddleware } = require('../middleware/auth');
 const users = require('../services/users');
 
 const router = express.Router();
+const audit = require('../services/audit');
+router.use(audit.routeLogger('auth'));
 
 const loginAttempts = new Map();
 

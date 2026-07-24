@@ -54,22 +54,7 @@ app.use('/api', (req, res, next) => {
   next();
 });
 
-const audit = require('./src/services/audit');
-app.use('/api', (req, res, next) => {
-  if (['POST', 'PUT', 'DELETE'].includes(req.method)) {
-    const orig = res.json.bind(res);
-    res.json = function (data) {
-      if (data && !data.error) {
-        const act = req.method === 'POST' ? req.path.split('/')[2] + ':create' :
-                    req.method === 'PUT' ? req.path.split('/')[2] + ':update' :
-                    req.path.split('/')[2] + ':delete';
-        audit.log(act, req, null);
-      }
-      return orig(data);
-    };
-  }
-  next();
-});
+require('./src/services/audit').init();
 
 app.use(express.static(path.join(__dirname, 'public'), { maxAge: '365d', etag: true, lastModified: true }));
 

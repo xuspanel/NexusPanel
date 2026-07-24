@@ -1933,9 +1933,56 @@
     </div>
     <!-- Audit Trail View -->
     <main class="dashboard-content" id="viewAudit" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📜</span><div class="db-header-info"><div class="db-header-title">Audit Trail</div><div class="db-header-subtitle">Admin activity log</div></div></div><div class="db-header-right"><input type="text" id="auditSearchInput" class="db-search-input" placeholder="Search..." oninput="auditFilter()" style="width:160px"><select id="auditActionFilter" class="db-search-input" onchange="auditFilter()" style="width:140px"><option value="">All Actions</option></select><button class="db-btn db-btn-icon" onclick="loadAudit()" title="Refresh">↻</button><button class="db-btn db-btn-icon" onclick="auditClear()" title="Clear">🗑</button></div></div>
-      <div id="auditContent"><div id="auditList" class="audit-list"></div><div id="auditPagination" class="audit-pagination"></div></div>
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">&#x1F4DC;</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Audit Trail</div>
+            <div class="db-header-subtitle">Admin activity log</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <span id="auditStats" class="audit-stats"></span>
+        </div>
+      </div>
+      <div class="audit-toolbar">
+        <input type="text" id="auditSearchInput" class="db-search-input" placeholder="Search entries..." style="width:180px">
+        <select id="auditActionFilter" class="db-search-input" style="width:160px">
+          <option value="">All Actions</option>
+        </select>
+        <select id="auditUserFilter" class="db-search-input" style="width:140px">
+          <option value="">All Users</option>
+        </select>
+        <input type="date" id="auditStartDate" class="db-search-input" title="Start date" style="width:150px">
+        <input type="date" id="auditEndDate" class="db-search-input" title="End date" style="width:150px">
+        <button class="db-btn" data-audit-action="refresh" title="Refresh">&#x21BB;</button>
+        <button class="db-btn" data-audit-action="export" title="Export JSON">&#x2B07; Export</button>
+        <button class="db-btn db-btn-danger" data-audit-action="clear" title="Clear all">&#x1F5D1; Clear</button>
+      </div>
+      <div id="auditContent">
+        <div id="auditList" class="audit-list"></div>
+        <div id="auditPagination" class="audit-pagination"></div>
+      </div>
+      <div id="auditToast" class="audit-toast" style="display:none;"></div>
     </main>
+
+    <!-- Audit Clear Confirmation Modal -->
+    <div class="audit-modal-overlay" id="auditClearModal" style="display:none;">
+      <div class="audit-modal">
+        <div class="audit-modal-header">
+          <h3>Clear Audit Log</h3>
+          <button class="db-btn db-btn-sm" data-audit-action="cancel-clear">&#x2715;</button>
+        </div>
+        <div class="audit-modal-body">
+          <p>Are you sure you want to clear <strong>all audit entries</strong>?</p>
+          <p class="audit-modal-warning">A backup will be saved automatically. This action cannot be undone.</p>
+        </div>
+        <div class="audit-modal-footer">
+          <button class="db-btn" data-audit-action="cancel-clear">Cancel</button>
+          <button class="db-btn db-btn-danger" data-audit-action="confirm-clear">Clear All</button>
+        </div>
+      </div>
+    </div>
     <!-- Service Manager View -->
     <main class="dashboard-content" id="viewServices" style="display:none;">
       <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⚙</span><div class="db-header-info"><div class="db-header-title">Service Manager</div><div class="db-header-subtitle">Systemd service control</div></div></div><div class="db-header-right"><input type="text" id="svcFilter" class="db-search-input" placeholder="Filter..." oninput="svcFilter()" style="width:200px"><button class="db-btn db-btn-icon" onclick="loadServices()" title="Refresh">↻</button></div></div>

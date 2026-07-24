@@ -339,11 +339,16 @@ const API = {
       if (opts && opts.user) p.push('user=' + encodeURIComponent(opts.user));
       if (opts && opts.action) p.push('action=' + encodeURIComponent(opts.action));
       if (opts && opts.search) p.push('search=' + encodeURIComponent(opts.search));
+      if (opts && opts.startDate) p.push('startDate=' + encodeURIComponent(opts.startDate));
+      if (opts && opts.endDate) p.push('endDate=' + encodeURIComponent(opts.endDate));
       if (opts && opts.limit) p.push('limit=' + opts.limit);
       if (opts && opts.offset) p.push('offset=' + opts.offset);
       return API.request('GET', '/audit' + (p.length ? '?' + p.join('&') : ''));
     },
     actions: () => API.request('GET', '/audit/actions'),
+    users: () => API.request('GET', '/audit/users'),
+    stats: () => API.request('GET', '/audit/stats'),
+    exportLog: () => API.request('GET', '/audit/export'),
     clear: () => API.request('DELETE', '/audit/clear'),
   },
   metrics: {

@@ -6,6 +6,8 @@ const users = require('../services/users');
 
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('profile'));
 
 router.get('/', (req, res) => {
   const user = users.getPanelUser(req.user.username);

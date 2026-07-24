@@ -8,6 +8,8 @@ const { authMiddleware, adminOnly } = require('../middleware/auth');
 
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('email'));
 router.use((req, res, next) => {
   if (['POST', 'PUT', 'DELETE'].includes(req.method)) return adminOnly(req, res, next);
   next();

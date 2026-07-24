@@ -3,6 +3,8 @@ const { authMiddleware, adminOnly } = require('../middleware/auth');
 const fw = require('../services/firewall');
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('firewall'));
 router.get('/', adminOnly, (req, res) => { res.json(fw.listRules()); });
 router.post('/rule', adminOnly, (req, res) => {
   try { res.json(fw.addRule(req.body.chain, req.body.rule)); }

@@ -3,6 +3,8 @@ const { authMiddleware, adminOnly } = require('../middleware/auth');
 const updates = require('../services/updates');
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('update'));
 router.get('/', (req, res) => { res.json(updates.check()); });
 router.post('/apply', adminOnly, (req, res) => { res.json(updates.apply()); });
 router.post('/apply/:name', adminOnly, (req, res) => {

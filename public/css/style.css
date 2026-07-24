@@ -9658,19 +9658,51 @@ body::before {
 [data-theme="light"] .sql-result { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); }
 
 /* ─── Audit Trail ─── */
+.audit-toolbar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 16px; background:rgba(255,255,255,0.02); border:1px solid var(--glass-border); border-radius:var(--radius-sm); margin-bottom:10px; }
+.audit-stats { display:flex; gap:8px; font-size:12px; color:var(--text-muted); align-items:center; }
+.audit-stat { font-size:12px; color:var(--text-secondary); }
+.audit-stat strong { color:var(--text-primary); font-weight:700; }
+.audit-stat-sep { color:var(--text-tertiary); }
 .audit-list { display:flex; flex-direction:column; gap:4px; }
-.audit-entry { display:flex; align-items:center; gap:12px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-sm); }
-.audit-badge { padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; text-transform:uppercase; }
+.audit-entry { display:flex; align-items:center; gap:10px; padding:10px 14px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-sm); transition:background 0.15s, border-color 0.15s; }
+.audit-entry:hover { background:rgba(255,255,255,0.06); border-color:rgba(255,255,255,0.12); }
+.audit-icon { width:20px; height:20px; display:flex; align-items:center; justify-content:center; border-radius:50%; font-size:11px; font-weight:700; flex-shrink:0; }
+.audit-icon-create { background:rgba(16,185,129,0.15); color:#10b981; }
+.audit-icon-update { background:rgba(245,158,11,0.15); color:#f59e0b; }
+.audit-icon-delete { background:rgba(239,68,68,0.15); color:#ef4444; }
+.audit-icon-other { background:rgba(255,255,255,0.06); color:var(--text-muted); }
+.audit-badge { padding:2px 8px; border-radius:10px; font-size:10px; font-weight:700; text-transform:uppercase; flex-shrink:0; }
 .audit-badge-create { background:rgba(16,185,129,0.12); color:#10b981; }
 .audit-badge-update { background:rgba(245,158,11,0.12); color:#f59e0b; }
 .audit-badge-delete { background:rgba(239,68,68,0.12); color:#ef4444; }
 .audit-badge-default { background:rgba(255,255,255,0.06); color:var(--text-muted); }
 .audit-info { flex:1; min-width:0; display:flex; flex-direction:column; gap:2px; }
 .audit-action { font-size:13px; font-weight:600; color:var(--text-primary); }
-.audit-path { font-size:11px; color:var(--text-tertiary); font-family:var(--font-mono); }
+.audit-path { font-size:11px; color:var(--text-tertiary); font-family:var(--font-mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.audit-details { font-size:10px; color:var(--text-tertiary); font-family:var(--font-mono); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; opacity:0.7; }
 .audit-meta { display:flex; gap:12px; font-size:11px; color:var(--text-muted); flex-shrink:0; }
+.audit-user { font-weight:600; color:var(--text-secondary); }
+.audit-ip { font-family:var(--font-mono); font-size:10px; }
+.audit-time { white-space:nowrap; }
+.audit-empty { padding:32px; text-align:center; color:var(--text-tertiary); font-size:13px; }
 .audit-pagination { display:flex; align-items:center; gap:8px; justify-content:center; margin-top:12px; }
-.audit-page { font-size:12px; color:var(--text-tertiary); }
+.audit-page-info { font-size:12px; color:var(--text-tertiary); }
+.audit-loading { display:flex; flex-direction:column; gap:8px; padding:16px; }
+.audit-loading-row { height:42px; background:linear-gradient(90deg, rgba(255,255,255,0.03) 25%, rgba(255,255,255,0.06) 50%, rgba(255,255,255,0.03) 75%); background-size:200% 100%; animation:audit-shimmer 1.5s infinite; border-radius:var(--radius-sm); border:1px solid var(--glass-border); }
+.audit-loading-row.short { width:60%; }
+@keyframes audit-shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+.audit-toast { position:fixed; bottom:24px; right:24px; padding:10px 20px; border-radius:var(--radius-sm); font-size:13px; font-weight:600; z-index:10000; box-shadow:0 4px 12px rgba(0,0,0,0.3); }
+.audit-toast.success { background:#10b981; color:#fff; }
+.audit-toast.error { background:#ef4444; color:#fff; }
+.audit-toast.info { background:var(--accent-cyan); color:#fff; }
+.audit-modal-overlay { position:fixed; inset:0; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; z-index:9999; }
+.audit-modal { background:var(--bg-secondary, #1e293b); border:1px solid var(--glass-border); border-radius:var(--radius-md); width:400px; max-width:90vw; }
+.audit-modal-header { display:flex; align-items:center; justify-content:space-between; padding:16px 20px; border-bottom:1px solid var(--glass-border); }
+.audit-modal-header h3 { margin:0; font-size:15px; color:var(--text-primary); }
+.audit-modal-body { padding:20px; }
+.audit-modal-body p { margin:0 0 8px; font-size:13px; color:var(--text-secondary); }
+.audit-modal-warning { color:#f59e0b !important; font-size:12px !important; }
+.audit-modal-footer { display:flex; gap:8px; justify-content:flex-end; padding:12px 20px; border-top:1px solid var(--glass-border); }
 
 /* ─── Service Manager ─── */
 .svc-list { display:flex; flex-direction:column; gap:4px; }
@@ -9851,6 +9883,10 @@ body::before {
 
 /* ─── Light theme overrides for new features ─── */
 [data-theme="light"] .audit-entry { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .audit-entry:hover { background: rgba(0,0,0,0.04); border-color: rgba(0,0,0,0.1); }
+[data-theme="light"] .audit-toolbar { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .audit-loading-row { background: linear-gradient(90deg, rgba(0,0,0,0.02) 25%, rgba(0,0,0,0.05) 50%, rgba(0,0,0,0.02) 75%); background-size: 200% 100%; }
+[data-theme="light"] .audit-modal { background: #f8fafc; }
 [data-theme="light"] .svc-row { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .proc-row { background: rgba(0,0,0,0.01); }
 [data-theme="light"] .proc-row:hover { background: rgba(0,0,0,0.03); }

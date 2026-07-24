@@ -3,6 +3,8 @@ const { authMiddleware, adminOnly } = require('../middleware/auth');
 const phpfpm = require('../services/phpfpm');
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('phpfpm'));
 router.get('/', (req, res) => { res.json(phpfpm.listPools()); });
 router.get('/status', (req, res) => { res.json({ output: phpfpm.getStatus() }); });
 router.post('/restart', adminOnly, (req, res) => { res.json(phpfpm.restart()); });

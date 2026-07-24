@@ -3,6 +3,8 @@ const { authMiddleware, adminOnly } = require('../middleware/auth');
 const ssl = require('../services/ssl');
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('ssl'));
 router.get('/', (req, res) => { res.json(ssl.list()); });
 router.post('/issue', adminOnly, (req, res) => {
   const r = ssl.issue(req.body.domain, req.body);

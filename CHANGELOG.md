@@ -1,5 +1,41 @@
 # Changelog
 
+## [1.19.0] - 2026-07-24
+### Added
+- **Full audit coverage**: `routeLogger` middleware added to all 16 previously unlogged route files (auth, settings, profile, tokens, services, processes, updates, ssl, cron, firewall, docker, emails, phpfpm, databases, alerts, notifications)
+- **User filter**: Filter audit entries by username via dropdown
+- **Date-range filtering**: Filter by start/end date
+- **Export**: Download full audit log as JSON file
+- **Stats header**: Total entries, unique users, and action type counts
+- **Clear confirmation modal**: Styled modal replaces `confirm()` dialog; clears are now self-logged with backup reference
+- **Auto backup before clear**: `clear()` saves a timestamped backup file before wiping
+- **In-memory cache**: Entries loaded into memory on startup; queries read from memory instead of disk
+- **Flush buffer with graceful shutdown**: Writes batched and flushed on interval + process exit/SIGINT/SIGTERM
+- **Action icons**: Color-coded create/update/delete indicators per entry
+- **Details display**: Audit entry details shown inline beneath the path
+- **Loading skeleton**: Animated shimmer rows during data fetch
+- **Search debounce**: 300ms debounce on search input
+- **New API endpoints**: `GET /api/audit/users`, `GET /api/audit/stats`, `GET /api/audit/export`
+- **Route params in details**: Audit entries now capture route parameters (username, domain, etc.)
+- **Safe body fields**: Audit details capture safe fields from request body (name, type, action, enabled, domain, username, email, host, port)
+
+### Fixed
+- **Double-logging**: Removed broken `server.js` auto-logging middleware that produced duplicate entries for every mutation
+- **`undefined:*` action names**: The removed middleware generated corrupted actions like `"undefined:create"` from incorrect URL parsing; 100+ corrupted entries eliminated
+- **ID collision risk**: IDs now use `Date.now() + crypto.randomBytes(4)` to prevent duplicate IDs within the same millisecond
+- **Race condition on writes**: In-memory cache + flush buffer eliminates concurrent read-modify-write cycles
+- **Synchronous I/O blocking**: Queries now read from memory instead of blocking on `readFileSync` per request
+- **No limit cap on queries**: Query limit now capped at 500 maximum
+- **`DELETE /clear` not logged**: Clear action now self-logged with backup file reference
+- **`getActions()` loads entire file**: Now reads from in-memory cache
+- **Silent data loss on parse failure**: Corrupted `audit.json` no longer silently wipes history
+
+### Changed
+- **Frontend rewritten as IIFE**: Encapsulated in immediately-invoked function expression
+- **Event delegation**: All inline `onclick`/`oninput`/`onchange` replaced with `data-audit-action` attributes
+- **HTML expanded**: Previously minified single-line HTML now properly formatted
+- **CSS expanded**: Hover states, loading skeleton animation, modal, toast, responsive layout
+
 ## [1.18.2] - 2026-07-23
 ### Fixed
 - **File Manager "path outside allowed directories"**: `fmState.currentPath` was never synced from the server response; when server redirects `/` to `/var/www`, creating a folder sent `parentPath='/'` which resolved to `/new_folder` outside allowed roots

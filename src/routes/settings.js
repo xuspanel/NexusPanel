@@ -4,6 +4,8 @@ const settings = require('../services/settings');
 
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('settings'));
 
 router.get('/', (req, res) => {
   res.json(settings.load());

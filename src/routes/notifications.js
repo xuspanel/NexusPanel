@@ -3,6 +3,8 @@ const { authMiddleware } = require('../middleware/auth');
 const notif = require('../services/notifications');
 const router = express.Router();
 router.use(authMiddleware);
+const audit = require('../services/audit');
+router.use(audit.routeLogger('notification'));
 router.get('/', (req, res) => { res.json(notif.list(req.query.unread === '1')); });
 router.post('/read/:id', (req, res) => { notif.markRead(req.params.id); res.json({ ok: true }); });
 router.post('/read-all', (req, res) => { notif.markAllRead(); res.json({ ok: true }); });

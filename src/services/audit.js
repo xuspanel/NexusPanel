@@ -1,65 +1,162 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const DATA_FILE = path.join(__dirname, '..', '..', 'data', 'audit.json');
 const MAX_ENTRIES = 10000;
+const MAX_QUERY_LIMIT = 500;
+const FLUSH_INTERVAL = 5000;
 
-function load() {
-  try { return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
-  catch { return []; }
+let entries = [];
+let writeBuffer = [];
+let initialized = false;
+let flushTimer = null;
+
+function loadFromDisk() {
+  try { entries = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
+  catch { entries = []; }
+  if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
 }
 
-function save(entries) {
-  if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
-  fs.writeFileSync(DATA_FILE, JSON.stringify(entries, null, 2));
+function flushToDisk() {
+  if (writeBuffer.length === 0) return;
+  const toWrite = entries.slice();
+  writeBuffer = [];
+  try { fs.writeFileSync(DATA_FILE, JSON.stringify(toWrite, null, 2)); }
+  catch (err) { console.error('[AUDIT] Failed to flush:', err.message); }
+}
+
+function init() {
+  if (initialized) return;
+  loadFromDisk();
+  initialized = true;
+  flushTimer = setInterval(flushToDisk, FLUSH_INTERVAL);
+  process.on('exit', flushToDisk);
+  process.on('SIGINT', () => { flushToDisk(); process.exit(); });
+  process.on('SIGTERM', () => { flushToDisk(); process.exit(); });
 }
 
 function log(action, req, details) {
+  init();
   const entry = {
-    id: 'a_' + Date.now(),
+    id: 'a_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex'),
     timestamp: new Date().toISOString(),
-    user: req.user?.username || 'system',
-    role: req.user?.role || 'system',
-    ip: req.ip || req.connection?.remoteAddress || 'unknown',
+    user: (req && req.user && req.user.username) || 'system',
+    role: (req && req.user && req.user.role) || 'system',
+    ip: (req && (req.ip || (req.connection && req.connection.remoteAddress))) || 'unknown',
     action,
-    method: req.method,
-    path: req.originalUrl || req.url,
+    method: (req && req.method) || 'SYSTEM',
+    path: (req && (req.originalUrl || req.url)) || '-',
     details: details || null,
   };
-  const entries = load();
   entries.push(entry);
-  save(entries);
+  if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
+  writeBuffer.push(entry);
   return entry;
 }
 
 function query(opts) {
-  const { user, action, search, limit, offset } = opts || {};
-  let entries = load().reverse();
-  if (user) entries = entries.filter(e => e.user === user);
-  if (action) entries = entries.filter(e => e.action === action);
+  init();
+  const { user, action, search, startDate, endDate, limit, offset } = opts || {};
+  let result = entries.slice().reverse();
+  if (user) result = result.filter(function (e) { return e.user === user; });
+  if (action) result = result.filter(function (e) { return e.action === action; });
   if (search) {
-    const s = search.toLowerCase();
-    entries = entries.filter(e =>
-      e.action.toLowerCase().includes(s) ||
-      e.path.toLowerCase().includes(s) ||
-      (e.details && JSON.stringify(e.details).toLowerCase().includes(s))
-    );
+    var s = search.toLowerCase();
+    result = result.filter(function (e) {
+      return e.action.toLowerCase().indexOf(s) !== -1
+        || e.path.toLowerCase().indexOf(s) !== -1
+        || e.user.toLowerCase().indexOf(s) !== -1
+        || (e.details && JSON.stringify(e.details).toLowerCase().indexOf(s) !== -1);
+    });
   }
-  const total = entries.length;
-  const start = offset || 0;
-  const end = start + (limit || 100);
-  return { entries: entries.slice(start, end), total };
+  if (startDate) result = result.filter(function (e) { return e.timestamp >= startDate; });
+  if (endDate) result = result.filter(function (e) { return e.timestamp <= endDate; });
+  var total = result.length;
+  var safeLimit = Math.min(Math.max(parseInt(limit) || 50, 1), MAX_QUERY_LIMIT);
+  var safeOffset = Math.max(parseInt(offset) || 0, 0);
+  return { entries: result.slice(safeOffset, safeOffset + safeLimit), total: total };
 }
 
 function getActions() {
-  const entries = load();
-  const actions = new Set();
-  entries.forEach(e => actions.add(e.action));
-  return [...actions].sort();
+  init();
+  var actions = new Set();
+  entries.forEach(function (e) { actions.add(e.action); });
+  return Array.from(actions).sort();
+}
+
+function getUsers() {
+  init();
+  var users = new Set();
+  entries.forEach(function (e) { if (e.user !== 'system') users.add(e.user); });
+  return Array.from(users).sort();
+}
+
+function getStats() {
+  init();
+  var actionCounts = {};
+  var userCounts = {};
+  entries.forEach(function (e) {
+    actionCounts[e.action] = (actionCounts[e.action] || 0) + 1;
+    userCounts[e.user] = (userCounts[e.user] || 0) + 1;
+  });
+  return {
+    total: entries.length,
+    oldest: entries.length > 0 ? entries[0].timestamp : null,
+    newest: entries.length > 0 ? entries[entries.length - 1].timestamp : null,
+    actions: actionCounts,
+    users: userCounts,
+  };
+}
+
+function exportAll() {
+  init();
+  return entries.slice();
 }
 
 function clear() {
-  fs.writeFileSync(DATA_FILE, '[]');
+  init();
+  var backupFile = null;
+  if (entries.length > 0) {
+    backupFile = path.join(__dirname, '..', '..', 'data', 'audit-backup-' + Date.now() + '.json');
+    try { fs.writeFileSync(backupFile, JSON.stringify(entries, null, 2)); } catch {}
+  }
+  entries = [];
+  writeBuffer = [];
+  flushToDisk();
+  return { cleared: true, backup: backupFile };
 }
 
-module.exports = { log, query, getActions, clear };
+function routeLogger(moduleName) {
+  return function (req, res, next) {
+    if (['POST', 'PUT', 'DELETE'].indexOf(req.method) === -1) return next();
+    var orig = res.json.bind(res);
+    res.json = function (data) {
+      if (data && !data.error) {
+        var suffix = req.method === 'POST' ? 'create' : req.method === 'PUT' ? 'update' : 'delete';
+        var action = moduleName + ':' + suffix;
+        var details = {};
+        if (req.params) {
+          Object.keys(req.params).forEach(function (k) {
+            var v = req.params[k];
+            if (v && typeof v === 'string' && v.length < 200) details[k] = v;
+          });
+        }
+        if (req.body && typeof req.body === 'object') {
+          ['name', 'type', 'action', 'enabled', 'domain', 'username', 'email', 'host', 'port'].forEach(function (k) {
+            if (req.body[k] !== undefined) {
+              var v = req.body[k];
+              if (typeof v === 'string' && v.length < 200) details[k] = v;
+              else if (typeof v === 'boolean' || typeof v === 'number') details[k] = v;
+            }
+          });
+        }
+        log(action, req, Object.keys(details).length > 0 ? details : null);
+      }
+      return orig(data);
+    };
+    next();
+  };
+}
+
+module.exports = { log, query, getActions, getUsers, getStats, exportAll, clear, routeLogger, init };
