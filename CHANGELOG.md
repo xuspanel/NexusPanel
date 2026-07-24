@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.18.1] - 2026-07-23
+### Fixed
+- **VERSION file drift**: `VERSION` file was not updated in the v1.18.0 commit, causing the update checker on remote VPS instances to report "Up to date" on stale versions
+- **MIME Types "Cannot set properties of null"**: `showLoading()` destroyed DOM container elements (`mimeSystemTypes`, `mimeUserTypes`) before rendering; `loadAll()` now restores the structure after data loads
+
 ## [1.18.0] - 2026-07-23
 ### Added
 - **adminOnly middleware**: All mutation routes (create/update/delete) now require admin role
