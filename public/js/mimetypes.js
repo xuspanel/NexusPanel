@@ -79,6 +79,11 @@
       var results = await Promise.all([API.mimetypes.getSystem(), API.mimetypes.list()]);
       mimeState.system = results[0];
       mimeState.user = results[1];
+      var el = document.getElementById('mimeContent');
+      if (el) {
+        el.innerHTML = '<div class="mime-section"><div class="mime-section-header"><span class="mime-section-title">System MIME Types</span><span class="mime-section-desc">Read-only definitions from /etc/mime.types</span></div><div id="mimeSystemTypes" class="mime-system-types"></div></div>'
+          + '<div class="mime-section"><div class="mime-section-header"><span class="mime-section-title">User-Defined MIME Types</span></div><div id="mimeUserTypes" class="mime-user-types"></div></div>';
+      }
       render();
     } catch (err) {
       document.getElementById('mimeContent').innerHTML = '<div class="db-error" style="display:flex"><span class="db-error-icon">!</span><span class="db-error-text">Error loading data: ' + esc(err.message) + '</span></div>';
