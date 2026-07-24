@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.18.2] - 2026-07-23
+### Fixed
+- **File Manager "path outside allowed directories"**: `fmState.currentPath` was never synced from the server response; when server redirects `/` to `/var/www`, creating a folder sent `parentPath='/'` which resolved to `/new_folder` outside allowed roots
+
 ## [1.18.1] - 2026-07-23
 ### Fixed
 - **VERSION file drift**: `VERSION` file was not updated in the v1.18.0 commit, causing the update checker on remote VPS instances to report "Up to date" on stale versions
