@@ -364,7 +364,11 @@ const API = {
   },
   processes: {
     list: () => API.request('GET', '/processes'),
-    kill: (pid) => API.request('POST', '/processes/kill/' + pid, { signal: '-15' }),
+    tree: () => API.request('GET', '/processes/tree'),
+    signals: () => API.request('GET', '/processes/signals'),
+    details: (pid) => API.request('GET', '/processes/' + pid + '/details'),
+    kill: (pid, signal) => API.request('POST', '/processes/kill/' + pid, { signal: parseInt(signal) || 15 }),
+    signal: (pid, signal) => API.request('POST', '/processes/signal', { pid: pid, signal: signal }),
   },
   logs: {
     list: () => API.request('GET', '/logs'),

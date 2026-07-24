@@ -264,6 +264,15 @@
     }
   });
 
+  document.addEventListener('change', function (e) {
+    if (e.target.classList.contains('svc-check') && e.target.dataset.svcAction === 'toggle-select') {
+      var n = e.target.dataset.svcName;
+      if (e.target.checked) state.selected.add(n);
+      else state.selected.delete(n);
+      renderServices();
+    }
+  });
+
   document.addEventListener('click', function (e) {
     var btn = e.target.closest('[data-svc-action]');
     if (!btn) return;
@@ -282,13 +291,6 @@
         e.preventDefault();
         showStatus(btn.dataset.svcName);
         break;
-      case 'toggle-select': {
-        var n = btn.dataset.svcName;
-        if (btn.checked) state.selected.add(n);
-        else state.selected.delete(n);
-        renderServices();
-        break;
-      }
       case 'bulk-act':
         e.preventDefault();
         doBulkAction(btn.dataset.svcAct);

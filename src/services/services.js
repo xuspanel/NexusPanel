@@ -7,7 +7,8 @@ function list() {
   const result = runSafeSync('systemctl', ['list-units', '--type=service', '--all', '--no-legend', '--no-pager']);
   if (result.status !== 0) return [];
   return result.stdout.trim().split('\n').filter(Boolean).map(line => {
-    const parts = line.split(/\s+/);
+    const clean = line.replace(/^[\s\u25CF]+/, '');
+    const parts = clean.split(/\s+/);
     const name = (parts[0] || '').replace(/\.service$/, '');
     return {
       name: name,

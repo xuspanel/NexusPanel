@@ -37,7 +37,7 @@
   <script defer src="/js/mimetypes.js?v=1.1.0"></script>
   <script defer src="/js/audit.js?v=1.1.0"></script>
   <script defer src="/js/services.js?v=1.1.0"></script>
-  <script defer src="/js/processes.js?v=1.1.0"></script>
+  <script defer src="/js/processes.js?v=1.21.0"></script>
   <script defer src="/js/logs.js?v=1.1.0"></script>
   <script defer src="/js/cron.js?v=1.1.0"></script>
   <script defer src="/js/firewall.js?v=1.1.0"></script>
@@ -2018,9 +2018,80 @@
     </div>
     <!-- Process Manager View -->
     <main class="dashboard-content" id="viewProcesses" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📊</span><div class="db-header-info"><div class="db-header-title">Process Manager</div><div class="db-header-subtitle">Live process monitoring (refreshes every 5s)</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadProcesses()" title="Refresh">↻</button></div></div>
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">📊</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Process Manager</div>
+            <div class="db-header-subtitle">Live process monitoring</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <span id="procStats" class="proc-stats"></span>
+        </div>
+      </div>
+      <div class="proc-toolbar">
+        <input type="text" id="procSearchInput" class="db-search-input" placeholder="Filter by PID, user, command..." style="width:260px">
+        <div class="proc-toolbar-right">
+          <div class="proc-view-toggle">
+            <button class="db-btn db-btn-sm active" id="procViewList" data-action="view-list">☰ List</button>
+            <button class="db-btn db-btn-sm" id="procViewTree" data-action="view-tree">⊞ Tree</button>
+          </div>
+          <button class="db-btn db-btn-sm" data-action="refresh" title="Refresh now">↻</button>
+          <button class="db-btn db-btn-sm" data-action="cycle-refresh" title="Auto-refresh interval">
+            ⏱ <span id="procRefreshLabel">5s</span>
+          </button>
+        </div>
+      </div>
+      <div id="procSortBar" class="proc-sort-bar"></div>
       <div id="procList" class="proc-list"></div>
+      <div id="procPagination" class="proc-pagination"></div>
+      <div id="procToast" class="proc-toast" style="display:none;"></div>
     </main>
+
+    <!-- Process Kill Modal -->
+    <div class="modal-overlay" id="procKillModal" style="display:none;">
+      <div class="proc-modal">
+        <div class="proc-modal-header">
+          <h3>Kill Process</h3>
+          <button class="db-btn db-btn-sm" data-action="cancel-kill">&#x2715;</button>
+        </div>
+        <div class="proc-modal-body">
+          <div id="procKillInfo"></div>
+          <div class="proc-kill-signal">
+            <label class="proc-kill-label">Signal:</label>
+            <select id="procKillSignal" class="db-search-input" style="width:160px">
+              <option value="SIGTERM">SIGTERM (15) - Graceful</option>
+              <option value="SIGKILL">SIGKILL (9) - Force</option>
+              <option value="SIGHUP">SIGHUP (1) - Reload</option>
+              <option value="SIGUSR1">SIGUSR1 (10) - User defined</option>
+              <option value="SIGSTOP">SIGSTOP (19) - Pause</option>
+            </select>
+          </div>
+          <div class="proc-kill-warn">This action cannot be undone. The process will be terminated immediately.</div>
+        </div>
+        <div class="proc-modal-footer">
+          <button class="db-btn" data-action="cancel-kill">Cancel</button>
+          <button class="db-btn db-btn-danger" data-action="confirm-kill">Kill Process</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Process Detail Modal -->
+    <div class="modal-overlay" id="procDetailModal" style="display:none;">
+      <div class="proc-modal">
+        <div class="proc-modal-header">
+          <h3>Process Details</h3>
+          <button class="db-btn db-btn-sm" data-action="cancel-detail">&#x2715;</button>
+        </div>
+        <div class="proc-modal-body">
+          <div id="procDetailBody"></div>
+        </div>
+        <div class="proc-modal-footer">
+          <button class="db-btn" data-action="cancel-detail">Close</button>
+        </div>
+      </div>
+    </div>
     <!-- Log Viewer -->
     <main class="dashboard-content" id="viewLogs" style="display:none;">
       <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📝</span><div class="db-header-info"><div class="db-header-title">Log Viewer</div><div class="db-header-subtitle">System log browser</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadLogList()" title="Refresh">↻</button></div></div>
