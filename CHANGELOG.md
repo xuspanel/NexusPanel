@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.21.0] - 2026-07-24
+### Added
+- **Process Details endpoint**: `GET /api/processes/:pid/details` reads `/proc/<pid>/status`, fd count, full command
+- **Process Signals endpoint**: `GET /api/processes/signals` returns available signal whitelist (SIGHUP through SIGTSTP)
+- **Named signal endpoint**: `POST /api/processes/signal` accepts `{ pid, signal: "SIGTERM" }` with validation against whitelist
+- **Rate limiting on kill**: Max 10 signal sends per minute per session (in-memory rolling window)
+- **Kill result verification**: Backend checks `kill()` exit code and stderr, throws on failure
+- **Stats header**: Total processes, total CPU%, total MEM%, top CPU consumer, top MEM consumer
+- **Sort controls**: Click PID/User/CPU%/MEM%/RSS/Command headers to toggle asc/desc sort
+- **Search/filter bar**: 300ms debounced filter by PID, username, or command string
+- **Pagination**: 50 processes per page with prev/next controls and page indicator
+- **CPU/MEM visual bars**: Inline bar indicators with color gradient (green/yellow/red for CPU, blue/yellow/red for MEM)
+- **Kill confirmation modal**: Shows process info (PID, user, CPU, MEM, command) with signal selector (SIGTERM/SIGKILL/SIGHUP/SIGUSR1/SIGSTOP)
+- **Process detail modal**: Click PID to view full details from `/proc` (PPID, state, threads, RSS, virtual size, open FDs, full command)
+- **Process tree view**: Toggle button switches between flat list and `pstree` output in styled `<pre>` container
+- **Smart polling**: Auto-refresh pauses when view is hidden, configurable intervals (5s/10s/30s/Off)
+- **Loading skeleton**: Animated shimmer rows during initial data fetch
+- **Toast notifications**: Non-blocking success/error feedback on kill actions
+- **Error state with retry**: Visible error message with Retry button when API fails
+- **Light theme support**: 15+ light theme CSS overrides for all new components
+
+### Fixed
+- **CRITICAL: `ps aux` whitespace parsing**: Leading whitespace in `ps aux` output caused all fields to shift by one — PID was empty, user was PID, etc. Fixed with `line.trimStart()` before splitting
+- **CRITICAL: Kill signal double-dash**: Frontend sent `{ signal: '-15' }` (string with dash), backend prepended another dash producing `--15`. Frontend now sends `{ signal: 15 }` (number). Backend validates as integer 1-31
+- **CRITICAL: Bulk selection caused by empty PID**: All processes had empty/null PID from parsing bug, so `state.selected.has("")` matched every row when any checkbox was clicked
+- **Status 404 from malformed URL**: Empty PID produced URL `/api/processes//status` which Express normalized to `/api/services/status`, routing to wrong handler
+- **Kill silently succeeds on failure**: Backend now checks `runSafeSync` exit code and stderr, returns error on failure
+- **Silent error swallowing**: Frontend empty `catch {}` replaced with error state display and toast notifications
+- **Global function pollution**: All functions encapsulated in IIFE, only `window.initProcesses` and `window.procCleanup` exposed
+- **Inline onclick XSS risk**: All `onclick="procKill(...)"` handlers replaced with `data-action` event delegation
+- **Fixed 5s polling when hidden**: Now checks `viewProcesses` visibility before polling
+- **No confirmation on kill**: Replaced bare `confirm()` with styled modal showing process details and signal choice
+
+### Changed
+- **Backend rewritten**: `list()` returns structured objects with 11 fields, `kill()` returns result with signal info, new `details()`/`sendSignal()`/`tree()`/`listSignals()` functions
+- **Routes expanded**: 6 endpoints (list, tree, signals, details, kill, signal) with admin-only on mutation routes
+- **Frontend rewritten as IIFE**: 466 lines, all functions private, event delegation on document
+- **HTML expanded**: 75 lines with search input, sort bar, view toggle (List/Tree), stats area, pagination, toast, kill modal, detail modal
+- **CSS expanded**: 95+ new lines — sort bar, bars, modals, toasts, loading skeleton, tree view, detail grid, pagination, responsive mobile
+
 ## [1.20.0] - 2026-07-24
 ### Added
 - **Admin-only API access**: All service endpoints (list, status, action) now require admin role
