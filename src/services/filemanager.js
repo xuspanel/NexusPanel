@@ -515,6 +515,7 @@ async function checkConflicts(sources, destDir, user) {
     }
   }
   return {
+    hasConflicts: conflicts.length > 0,
     conflicts,
     noConflicts,
     totalSourceSize,
@@ -524,6 +525,7 @@ async function checkConflicts(sources, destDir, user) {
     conflictCount: conflicts.length,
     noConflictCount: noConflicts.length,
     totalEntries: conflicts.length + noConflicts.length,
+    entryCount: conflicts.length + noConflicts.length,
   };
 }
 
@@ -567,6 +569,7 @@ async function checkExtractConflicts(archivePath, destDir, user) {
     }
   }
   return {
+    hasConflicts: conflicts.length > 0,
     entries,
     conflicts,
     noConflicts,
@@ -577,6 +580,7 @@ async function checkExtractConflicts(archivePath, destDir, user) {
     conflictCount: conflicts.length,
     noConflictCount: noConflicts.length,
     totalEntries: entries.length,
+    entryCount: entries.length,
   };
 }
 

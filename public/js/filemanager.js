@@ -1585,14 +1585,14 @@ function fmShowConflictModal(conflicts, totalCount, operation, callback) {
     <div class="fm-compare-row">
       <div class="fm-compare-col">
         <div class="fm-compare-label">Source</div>
-        <div class="fm-compare-detail">${escapeHtml(c.sourcePath || c.name)}</div>
-        <div class="fm-compare-detail">${formatSizeStr(c.sourceSize)} &middot; ${c.sourceModified || ''}</div>
+        <div class="fm-compare-detail">${escapeHtml(c.sourcePath || c.source || c.name)}</div>
+        <div class="fm-compare-detail">${formatSizeStr(c.sourceSize)} &middot; ${c.sourceModifiedFormatted || (c.sourceModified ? new Date(c.sourceModified).toLocaleString() : '')}</div>
       </div>
       <div class="fm-compare-vs">→</div>
       <div class="fm-compare-col">
         <div class="fm-compare-label">Destination</div>
-        <div class="fm-compare-detail">${escapeHtml(c.destPath || c.name)}</div>
-        <div class="fm-compare-detail">${formatSizeStr(c.destSize)} &middot; ${c.destModified || ''}</div>
+        <div class="fm-compare-detail">${escapeHtml(c.destPath || c.dest || c.name)}</div>
+        <div class="fm-compare-detail">${formatSizeStr(c.destSize)} &middot; ${c.destModifiedFormatted || (c.destModified ? new Date(c.destModified).toLocaleString() : '')}</div>
       </div>
     </div>
   `).join('');
@@ -1642,19 +1642,22 @@ async function fmLoadBin() {
     actionsEl.style.display = '';
     let html = '';
     for (const batch of batches) {
+      const files = batch.files || [];
+      const timeStr = batch.deletedAt || batch.timestamp || '';
       html += `<div class="fm-bin-batch" data-batch-id="${escapeAttr(batch.batchId)}">
         <div class="fm-bin-batch-header">
-          <span class="fm-bin-batch-time">${escapeHtml(new Date(batch.timestamp).toLocaleString())}</span>
-          <span class="fm-bin-batch-count">${batch.entries.length} file(s)</span>
+          <span class="fm-bin-batch-time">${timeStr ? escapeHtml(new Date(timeStr).toLocaleString()) : 'Unknown'}</span>
+          <span class="fm-bin-batch-count">${files.length} file(s)</span>
         </div>
         <div class="fm-bin-batch-files">`;
-      for (const entry of batch.entries) {
+      for (const entry of files) {
+        const fname = entry.name || entry.fileName || '';
         html += `<div class="fm-bin-file">
-          <span class="fm-bin-file-name">${escapeHtml(entry.fileName)}</span>
-          <span class="fm-bin-file-size">${formatSizeStr(entry.size)}</span>
+          <span class="fm-bin-file-name">${escapeHtml(fname)}</span>
+          <span class="fm-bin-file-size">${formatSizeStr(entry.size || 0)}</span>
           <div class="fm-bin-file-actions">
-            <button class="fm-btn fm-btn-sm fm-bin-restore" data-batch="${escapeAttr(batch.batchId)}" data-file="${escapeAttr(entry.fileName)}" title="Restore">↩</button>
-            <button class="fm-btn fm-btn-sm fm-btn-danger fm-bin-delete" data-batch="${escapeAttr(batch.batchId)}" data-file="${escapeAttr(entry.fileName)}" title="Delete permanently">✕</button>
+            <button class="fm-btn fm-btn-sm fm-bin-restore" data-batch="${escapeAttr(batch.batchId)}" data-file="${escapeAttr(fname)}" title="Restore">↩</button>
+            <button class="fm-btn fm-btn-sm fm-btn-danger fm-bin-delete" data-batch="${escapeAttr(batch.batchId)}" data-file="${escapeAttr(fname)}" title="Delete permanently">✕</button>
           </div>
         </div>`;
       }
