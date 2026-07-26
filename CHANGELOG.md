@@ -1,5 +1,47 @@
 # Changelog
 
+## [1.23.0] - 2026-07-26
+### Added
+- **Cron expression validation**: All 5 schedule fields validated (ranges 0-59/0-23/1-31/1-12/0-7, steps, commas, dashes)
+- **Command validation**: Non-empty, max 2048 chars
+- **In-memory locking per owner**: Prevents concurrent read-modify-write race conditions
+- **File locking for /etc/cron.d**: Atomic writes with `.lock` files and 10s timeout
+- **Secure temp files**: Random suffix via `crypto.randomBytes(8)` in `os.tmpdir()` with mode 0o600
+- **@reboot/@yearly/@monthly/@weekly/@daily/@hourly shorthand support**: Full parsing and formatting
+- **Enable/disable toggle**: Comment/uncomment entries without deleting (`PUT /:owner/:index/toggle`)
+- **Human-readable schedule descriptions**: "Every minute", "Daily at 02:00", "Every Sunday at midnight"
+- **Next run time calculation**: Computes next execution from cron fields with `formatDuration()`
+- **/etc/cron.d system crontab management**: List, read, save, delete system cron files (`/cron/cron-d/*`)
+- **Optimized owner detection**: Reads `/etc/passwd` once, caches user list, sorts alphabetically
+- **Admin-only all routes**: GET endpoints now require admin role (crontab contents are sensitive)
+- **Audit logging captures full entry**: Schedule fields and command included in audit details
+- **Stats header**: Total jobs, active count, disabled count, owners count
+- **Search/filter**: Filter by command text, description, or shorthand (250ms debounce)
+- **Sorting**: By command, schedule, next run, enabled status
+- **Pagination**: 50 entries per page with full page navigation
+- **Schedule frequency color coding**: 8 color variants (every=red, minute=orange, hourly=blue, daily=green, weekly=purple, monthly=yellow, yearly=cyan, reboot=pink)
+- **Detail modal**: Full entry view with all schedule fields, description, status, next run, quick actions
+- **Confirm modal**: Replaces browser `confirm()` dialogs
+- **Quick presets**: One-click buttons for minute/hourly/daily/weekly/monthly schedules
+- **Shorthand selector**: Checkbox toggle between @reboot/@yearly/@monthly/@weekly/@daily/@hourly presets
+- **Live description preview**: Updates human-readable description as schedule fields change
+- **Toast notifications**: Success/error feedback on all mutations
+- **Loading skeleton**: Animated shimmer rows during data fetch
+- **Error state with retry**: Failed loads show error message with retry button
+- **Empty state**: Dedicated empty state with icon for no-cron scenarios
+### Changed
+- **Full IIFE rewrite**: All functions scoped, no global namespace pollution
+- **Event delegation**: All 9 inline onclick/onchange handlers replaced with `data-cron-action` attribute delegation
+- **Owner dropdown shows counts**: "root (3)" format instead of just "root"
+- **Schedule badge with frequency label**: Compact visual indicator alongside raw schedule text
+- **Entry hover effects**: Subtle background and border color transitions
+- **Disabled entries dimmed**: 55% opacity with hover restore
+### Fixed
+- **XSS in owner dropdown**: Owner names now HTML-escaped in `<option>` rendering
+- **Race condition on concurrent saves**: In-memory lock prevents overlapping crontab writes
+- **Temp file predictability**: Random suffix prevents path guessing
+- **Audit log missing cron fields**: Now captures full schedule + command in audit records
+
 ## [1.22.0] - 2026-07-26
 ### Added
 - **Subdirectory scanning**: Scans `/var/log/nginx/`, `/var/log/audit/`, `/var/log/httpd/`, `/var/log/php-fpm/`, `/var/log/nexuspanel/` in addition to flat files — exposes 335+ log files

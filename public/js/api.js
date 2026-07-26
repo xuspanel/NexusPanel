@@ -387,6 +387,12 @@ const API = {
     add: (owner, entry) => API.request('POST', '/cron/' + encodeURIComponent(owner), entry),
     update: (owner, idx, entry) => API.request('PUT', '/cron/' + encodeURIComponent(owner) + '/' + idx, entry),
     del: (owner, idx) => API.request('DELETE', '/cron/' + encodeURIComponent(owner) + '/' + idx),
+    toggle: (owner, idx) => API.request('PUT', '/cron/' + encodeURIComponent(owner) + '/' + idx + '/toggle'),
+    describe: (entry) => API.request('GET', '/cron/describe?' + new URLSearchParams(entry).toString()),
+    listCronD: () => API.request('GET', '/cron/cron-d'),
+    readCronD: (file) => API.request('GET', '/cron/cron-d/' + encodeURIComponent(file)),
+    saveCronD: (file, content) => API.request('PUT', '/cron/cron-d/' + encodeURIComponent(file), { content }),
+    deleteCronD: (file) => API.request('DELETE', '/cron/cron-d/' + encodeURIComponent(file)),
   },
   firewall: {
     list: () => API.request('GET', '/firewall'),

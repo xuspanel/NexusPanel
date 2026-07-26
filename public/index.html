@@ -2169,9 +2169,125 @@
     </div>
     <!-- Cron Jobs View -->
     <main class="dashboard-content" id="viewCron" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⏰</span><div class="db-header-info"><div class="db-header-title">Cron Jobs</div><div class="db-header-subtitle">Scheduled task manager</div></div></div><div class="db-header-right"><span style="font-size:12px;color:var(--text-tertiary)">Owner:</span><select id="cronOwnerSel" class="db-search-input" onchange="cronOwnerChange()" style="width:120px"></select><button class="db-btn db-btn-primary" onclick="cronAddForm()">+ Add Job</button><button class="db-btn db-btn-icon" onclick="loadCron()" title="Refresh">↻</button></div></div>
-      <div id="cronList" class="cron-list"></div>
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">&#9200;</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Cron Jobs</div>
+            <div class="db-header-subtitle">Scheduled task manager</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <select id="cronOwnerSel" class="db-search-input" data-cron-action="owner-change" style="width:130px"></select>
+          <button class="db-btn" data-cron-action="system-cron-d" title="System cron.d files">/etc/cron.d</button>
+          <button class="db-btn db-btn-primary" data-cron-action="add">+ Add Job</button>
+          <button class="db-btn db-btn-icon" data-cron-action="refresh" title="Refresh">&#8635;</button>
+        </div>
+      </div>
+      <div id="cronStats" class="cron-stats" style="display:none;"></div>
+      <div class="cron-toolbar">
+        <input type="text" id="cronSearch" class="db-search-input" data-cron-action="search" placeholder="Search commands or schedules..." style="flex:1;max-width:320px;">
+      </div>
+      <div id="cronLoading" class="db-loading" style="display:none;">Loading cron jobs...</div>
+      <div id="cronError" class="db-error" style="display:none;"></div>
+      <div id="cronContent" style="display:none;">
+        <div id="cronList" class="cron-list"></div>
+        <div id="cronPagination" class="cron-pagination" style="display:none;"></div>
+      </div>
+      <div id="cronEmpty" class="db-empty" style="display:none;"></div>
     </main>
+
+    <!-- Cron Add/Edit Modal -->
+    <div class="fm-modal-overlay" id="cronModalOverlay" style="display:none;" data-cron-action="modal-backdrop">
+      <div class="fm-modal" style="max-width:560px;">
+        <div class="fm-modal-header">
+          <span class="fm-modal-title" id="cronModalTitle">Add Cron Job</span>
+          <button class="fm-modal-close" data-cron-action="modal-close">&#10005;</button>
+        </div>
+        <div class="fm-modal-body">
+          <input type="hidden" id="cronEditIndex" value="-1">
+          <div class="cron-shorthand-row">
+            <label class="cron-shorthand-label">
+              <input type="checkbox" id="cronUseShorthand" data-cron-action="toggle-shorthand"> Use preset
+            </label>
+            <select id="cronShorthand" class="db-search-input" data-cron-action="shorthand-select" style="display:none;width:160px;">
+              <option value="@reboot">@reboot</option>
+              <option value="@yearly">@yearly</option>
+              <option value="@monthly">@monthly</option>
+              <option value="@weekly">@weekly</option>
+              <option value="@daily" selected>@daily</option>
+              <option value="@hourly">@hourly</option>
+            </select>
+          </div>
+          <div id="cronScheduleFields" class="cron-grid">
+            <div><label class="mime-form-label">Minute</label><input class="mime-form-input" id="cronMinute" placeholder="0-59" data-cron-field="minute"></div>
+            <div><label class="mime-form-label">Hour</label><input class="mime-form-input" id="cronHour" placeholder="0-23" data-cron-field="hour"></div>
+            <div><label class="mime-form-label">Day</label><input class="mime-form-input" id="cronDom" placeholder="1-31" data-cron-field="dom"></div>
+            <div><label class="mime-form-label">Month</label><input class="mime-form-input" id="cronMonth" placeholder="1-12" data-cron-field="month"></div>
+            <div><label class="mime-form-label">Weekday</label><input class="mime-form-input" id="cronDow" placeholder="0-7" data-cron-field="dow"></div>
+          </div>
+          <div id="cronDescription" class="cron-description" style="display:none;"></div>
+          <div class="mime-form-group" style="margin-top:12px;">
+            <label class="mime-form-label">Command</label>
+            <input class="mime-form-input" id="cronCommand" placeholder="/usr/bin/script.sh" style="font-family:var(--font-mono);font-size:13px;">
+          </div>
+          <div class="cron-preset-row">
+            <span class="cron-preset-label">Quick presets:</span>
+            <button class="cron-preset-btn" data-cron-action="preset" data-preset="minute">Every minute</button>
+            <button class="cron-preset-btn" data-cron-action="preset" data-preset="hourly">Hourly</button>
+            <button class="cron-preset-btn" data-cron-action="preset" data-preset="daily">Daily</button>
+            <button class="cron-preset-btn" data-cron-action="preset" data-preset="weekly">Weekly</button>
+            <button class="cron-preset-btn" data-cron-action="preset" data-preset="monthly">Monthly</button>
+          </div>
+          <div class="mime-form-actions">
+            <button class="fm-btn" data-cron-action="modal-close">Cancel</button>
+            <button class="fm-btn fm-btn-primary" data-cron-action="save">Save</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cron Detail Modal -->
+    <div class="fm-modal-overlay" id="cronDetailOverlay" style="display:none;" data-cron-action="detail-backdrop">
+      <div class="fm-modal" style="max-width:500px;">
+        <div class="fm-modal-header">
+          <span class="fm-modal-title">Cron Job Details</span>
+          <button class="fm-modal-close" data-cron-action="detail-close">&#10005;</button>
+        </div>
+        <div class="fm-modal-body" id="cronDetailBody"></div>
+      </div>
+    </div>
+
+    <!-- Cron Confirm Modal -->
+    <div class="fm-modal-overlay" id="cronConfirmOverlay" style="display:none;" data-cron-action="confirm-backdrop">
+      <div class="fm-modal" style="max-width:400px;">
+        <div class="fm-modal-header">
+          <span class="fm-modal-title" id="cronConfirmTitle">Confirm</span>
+          <button class="fm-modal-close" data-cron-action="confirm-close">&#10005;</button>
+        </div>
+        <div class="fm-modal-body">
+          <p id="cronConfirmMsg" class="cron-confirm-msg"></p>
+          <div class="mime-form-actions">
+            <button class="fm-btn" data-cron-action="confirm-cancel">Cancel</button>
+            <button class="fm-btn fm-btn-danger" data-cron-action="confirm-ok">Confirm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Cron System cron.d Modal -->
+    <div class="fm-modal-overlay" id="cronSystemOverlay" style="display:none;" data-cron-action="system-backdrop">
+      <div class="fm-modal" style="max-width:640px;">
+        <div class="fm-modal-header">
+          <span class="fm-modal-title">/etc/cron.d System Files</span>
+          <button class="fm-modal-close" data-cron-action="system-close">&#10005;</button>
+        </div>
+        <div class="fm-modal-body" id="cronSystemBody">
+          <div id="cronSystemList"></div>
+        </div>
+      </div>
+    </div>
+
     <!-- Firewall Rules View -->
     <main class="dashboard-content" id="viewFirewall" style="display:none;">
       <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🛡</span><div class="db-header-info"><div class="db-header-title">Firewall Rules</div><div class="db-header-subtitle">iptables chain & rule manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="fwAddForm()">+ Add Rule</button><button class="db-btn db-btn-icon" onclick="loadFirewall()" title="Refresh">↻</button></div></div>
@@ -2198,24 +2314,6 @@
       <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⚙️</span><div class="db-header-info"><div class="db-header-title">Settings</div><div class="db-header-subtitle">Panel configuration</div></div></div></div>
       <div id="settingsContent"><div class="db-loading">Loading settings...</div></div>
     </main>
-    <!-- Cron Modal -->
-    <div class="fm-modal-overlay" id="cronModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('cronModalOverlay').style.display='none'">
-      <div class="fm-modal" style="max-width:520px;">
-        <div class="fm-modal-header"><span class="fm-modal-title" id="cronModalTitle">Add Cron Job</span><button class="fm-modal-close" onclick="document.getElementById('cronModalOverlay').style.display='none'">✕</button></div>
-        <div class="fm-modal-body">
-          <input type="hidden" id="cronEditIndex" value="-1">
-          <div class="cron-grid">
-            <div><label class="mime-form-label">Minute</label><input class="mime-form-input" id="cronMinute" placeholder="*"></div>
-            <div><label class="mime-form-label">Hour</label><input class="mime-form-input" id="cronHour" placeholder="*"></div>
-            <div><label class="mime-form-label">Day</label><input class="mime-form-input" id="cronDom" placeholder="*"></div>
-            <div><label class="mime-form-label">Month</label><input class="mime-form-input" id="cronMonth" placeholder="*"></div>
-            <div><label class="mime-form-label">Weekday</label><input class="mime-form-input" id="cronDow" placeholder="*"></div>
-          </div>
-          <div class="mime-form-group" style="margin-top:12px"><label class="mime-form-label">Command</label><input class="mime-form-input" id="cronCommand" placeholder="/usr/bin/script.sh"></div>
-          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('cronModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="cronSave()">💾 Save</button></div>
-        </div>
-      </div>
-    </div>
     <!-- Firewall Modal -->
     <div class="fm-modal-overlay" id="fwModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('fwModalOverlay').style.display='none'">
       <div class="fm-modal" style="max-width:520px;">
