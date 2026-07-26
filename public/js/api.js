@@ -372,8 +372,14 @@ const API = {
   },
   logs: {
     list: () => API.request('GET', '/logs'),
+    categories: () => API.request('GET', '/logs/categories'),
     read: (file, tail) => API.request('GET', '/logs/read/' + encodeURIComponent(file) + '?tail=' + (tail || 500)),
-    search: (file, q) => API.request('GET', '/logs/search/' + encodeURIComponent(file) + '?q=' + encodeURIComponent(q)),
+    tail: (file, lines) => API.request('GET', '/logs/tail/' + encodeURIComponent(file) + '?lines=' + (lines || 100)),
+    search: (file, q, regex) => API.request('GET', '/logs/search/' + encodeURIComponent(file) + '?q=' + encodeURIComponent(q) + (regex ? '&regex=true' : '')),
+    searchMulti: (files, query, opts) => API.request('POST', '/logs/search-multi', { files: files, query: query, limit: opts && opts.limit, regex: opts && opts.regex }),
+    stream: (file) => '/api/logs/stream/' + encodeURIComponent(file),
+    download: (file) => '/api/logs/download/' + encodeURIComponent(file),
+    linecount: (file) => API.request('GET', '/logs/linecount/' + encodeURIComponent(file)),
   },
   cron: {
     getOwners: () => API.request('GET', '/cron/owners'),

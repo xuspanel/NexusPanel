@@ -1,5 +1,62 @@
 # Changelog
 
+## [1.22.0] - 2026-07-26
+### Added
+- **Subdirectory scanning**: Scans `/var/log/nginx/`, `/var/log/audit/`, `/var/log/httpd/`, `/var/log/php-fpm/`, `/var/log/nexuspanel/` in addition to flat files — exposes 335+ log files
+- **Gzip decompression**: Reads `.gz` rotated logs on-the-fly via `zlib.createGunzip()` — access 257+ historical nginx logs
+- **Log categorization**: Files grouped into System, Nginx, Audit, FTP, Panel, Packages, Other with collapsible category headers and file counts
+- **Pinned/quick-access logs**: Important logs (messages, secure, nginx/access.log, nginx/error.log, nexuspanel.log, vsftpd.log) pinned at top of sidebar
+- **File metadata**: Each file includes name, path, size, modified timestamp, category, isGzipped flag, readable flag
+- **Streaming reverse-file read**: `tailReverse()` reads last N lines from end of file in 64KB chunks — never loads full file into memory. Handles 14MB+ syslog and 37K-line nginx logs
+- **Streaming gzip tail**: `tailGzipped()` decompresses and collects last N lines using readline interface
+- **Line count endpoint**: `GET /api/logs/linecount/:file` — efficient counting without full file load
+- **SSE live tail stream**: `GET /api/logs/stream/:file` — Server-Sent Events push new lines every second, 30s auto-timeout
+- **Download endpoint**: `GET /api/logs/download/:file` — streams file as attachment download
+- **Multi-file search**: `POST /api/logs/search-multi` — search across multiple files, return results grouped by file
+- **Admin-only on list**: All log endpoints now require admin role
+- **File info bar**: Shows filename, size, line count, last modified, compressed status when viewing a log
+- **Line numbers toggle**: Optional line number gutter in the viewer
+- **Search highlighting**: Matched terms highlighted with `<mark>` elements, match count displayed
+- **Search navigation**: Prev/Next buttons to jump between matches, current match highlighted
+- **Regex search**: Toggle between plain text and regex search modes
+- **Tail count selector**: Dropdown to choose 100/500/1000/5000 lines
+- **Live follow mode**: SSE-powered auto-scroll with "Following..." indicator
+- **Word wrap toggle**: Switch between pre-wrap and nowrap
+- **Nginx table view**: Parse combined log format into sortable table (IP, Method, URL, Status, Size, Referer)
+- **Log comparison modal**: Side-by-side diff of two log files with add/remove highlighting
+- **Category sidebar search**: Filter sidebar files by name in real-time
+- **Stats header**: Total files, total size, per-category counts
+- **Toast notifications**: Success/error feedback on all actions
+- **Loading skeleton**: Animated shimmer rows during data fetch
+- **Error state with retry**: Visible error message with Retry button
+- **Level coloring**: error/fail → red, warn/warning → yellow, notice/ok/success → green
+- **Scroll position memory**: Remembers scroll position per file across switches (sessionStorage)
+- **Responsive redesign**: Sidebar becomes stacked on mobile, toolbar wraps, compare modal responsive
+
+### Fixed
+- **Dead `execSync` import removed**: Was imported but never used
+- **Memory exhaustion on large files**: Files >10MB now use streaming reverse read instead of `readFileSync`
+- **No file size guard**: Added 10MB limit with clear error message
+- **Entire file read for search**: Now uses streaming readline for large files, never loads full content into memory
+- **Inline onclick handlers (4)**: All replaced with `data-action` event delegation
+- **Global function pollution**: Full IIFE encapsulation, only `window.initLogs` exposed
+- **`esc()` incomplete**: Added `"` and `'` to escape set
+- **Silent error swallowing**: Empty `catch {}` replaced with toast notifications and error state display
+- **No loading indicator**: Added loading skeleton
+- **Search had no match count**: Now shows "N/M" navigation
+- **No search highlighting**: Matched terms now highlighted with `<mark>` elements
+- **Fixed 500-line tail hardcoded**: Now configurable via dropdown
+- **List endpoint not admin-only**: All endpoints now require admin role
+- **No audit logging**: Log access now logged via `routeLogger` middleware
+
+### Changed
+- **Backend rewritten**: 37→300+ lines, streaming reads, gz support, subdirectory scan, categories, 9 endpoints
+- **Routes expanded**: 3→9 endpoints (list, categories, read, tail, search, search-multi, stream, download, linecount)
+- **Frontend rewritten as IIFE**: 38→500+ lines, event delegation, all features encapsulated
+- **HTML expanded**: 3→90+ lines with sidebar search, file info bar, toolbar controls, compare modal
+- **CSS expanded**: 11→200+ rules — categories, info bar, table view, highlights, modals, loading, responsive
+- **API client**: 3→9 methods (list, categories, read, tail, search, searchMulti, stream, download, linecount)
+
 ## [1.21.0] - 2026-07-24
 ### Added
 - **Process Details endpoint**: `GET /api/processes/:pid/details` reads `/proc/<pid>/status`, fd count, full command

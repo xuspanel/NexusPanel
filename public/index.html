@@ -38,7 +38,7 @@
   <script defer src="/js/audit.js?v=1.1.0"></script>
   <script defer src="/js/services.js?v=1.1.0"></script>
   <script defer src="/js/processes.js?v=1.21.0"></script>
-  <script defer src="/js/logs.js?v=1.1.0"></script>
+  <script defer src="/js/logs.js?v=1.22.0"></script>
   <script defer src="/js/cron.js?v=1.1.0"></script>
   <script defer src="/js/firewall.js?v=1.1.0"></script>
   <script defer src="/js/ssl.js?v=1.1.0"></script>
@@ -2094,9 +2094,79 @@
     </div>
     <!-- Log Viewer -->
     <main class="dashboard-content" id="viewLogs" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">📝</span><div class="db-header-info"><div class="db-header-title">Log Viewer</div><div class="db-header-subtitle">System log browser</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="loadLogList()" title="Refresh">↻</button></div></div>
-      <div class="log-layout"><div class="log-sidebar" id="logFileList"></div><div class="log-main"><div class="log-toolbar"><input type="text" id="logSearchInput" class="db-search-input" placeholder="Search in log..." onkeydown="if(event.key==='Enter')logSearch()" style="flex:1"><button class="fm-btn fm-btn-sm" onclick="logSearch()">🔍</button></div><pre class="log-viewer" id="logViewerContent"></pre></div></div>
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">📝</span>
+          <div class="db-header-info">
+            <div class="db-header-title">Log Viewer</div>
+            <div class="db-header-subtitle">System & service log browser</div>
+          </div>
+        </div>
+        <div class="db-header-right">
+          <span id="logStats" class="log-stats"></span>
+          <button class="db-btn db-btn-sm" data-action="compare" title="Compare files">⇋ Compare</button>
+        </div>
+      </div>
+      <div class="log-layout">
+        <div class="log-sidebar">
+          <div class="log-sidebar-search">
+            <input type="text" id="logSidebarSearch" class="db-search-input" placeholder="Filter files...">
+          </div>
+          <div class="log-sidebar-list" id="logFileList"></div>
+        </div>
+        <div class="log-main">
+          <div class="log-info-bar" id="logInfoBar" style="display:none;"></div>
+          <div class="log-toolbar">
+            <input type="text" id="logSearchInput" class="db-search-input" placeholder="Search in log..." style="flex:1">
+            <button class="db-btn db-btn-sm" data-action="search" title="Search">🔍</button>
+            <button class="db-btn db-btn-sm" id="logRegexBtn" data-action="toggle-regex" title="Regex mode">.*</button>
+            <span class="log-search-count" id="logSearchCount" style="display:none"></span>
+            <button class="db-btn db-btn-sm" data-action="prev-match" title="Previous match (Shift+Enter)">‹</button>
+            <button class="db-btn db-btn-sm" data-action="next-match" title="Next match (Enter)">›</button>
+            <span class="log-toolbar-sep"></span>
+            <select id="logTailSelect" class="db-search-input log-tail-select" title="Tail lines">
+              <option value="100">100</option>
+              <option value="500" selected>500</option>
+              <option value="1000">1000</option>
+              <option value="5000">5000</option>
+            </select>
+            <button class="db-btn db-btn-sm" id="logWrapBtn" data-action="toggle-wrap" title="Toggle word wrap">↔</button>
+            <button class="db-btn db-btn-sm" id="logLinesBtn" data-action="toggle-lines" title="Toggle line numbers">#</button>
+            <button class="db-btn db-btn-sm" id="logFollowBtn" data-action="toggle-follow" title="Live tail follow">⬇ Follow</button>
+            <button class="db-btn db-btn-sm" data-action="download" title="Download log file">⬇</button>
+            <button class="db-btn db-btn-sm" data-action="toggle-view" title="Toggle table view" id="logViewBtn">☰</button>
+          </div>
+          <div class="log-viewer-wrap">
+            <div class="log-viewer" id="logViewerContent"></div>
+          </div>
+          <div class="log-results" id="logResults" style="display:none;">
+            <div class="log-results-header">
+              <span>Search Results</span>
+              <button class="db-btn db-btn-sm" data-action="close-multi">✕</button>
+            </div>
+            <div class="log-results-body" id="logResultsBody"></div>
+          </div>
+        </div>
+      </div>
+      <div id="logToast" class="log-toast" style="display:none;"></div>
     </main>
+
+    <!-- Compare Modal -->
+    <div class="modal-overlay" id="logCompareModal" style="display:none;">
+      <div class="log-compare-modal">
+        <div class="log-compare-header">
+          <h3>Compare Log Files</h3>
+          <button class="db-btn db-btn-sm" data-action="close-compare">&#x2715;</button>
+        </div>
+        <div class="log-compare-selectors">
+          <select id="logCompareFile1" class="db-search-input" style="flex:1"></select>
+          <span class="log-compare-vs">vs</span>
+          <select id="logCompareFile2" class="db-search-input" style="flex:1"></select>
+          <button class="db-btn db-btn-primary" data-action="do-compare">Compare</button>
+        </div>
+        <div class="log-compare-output" id="logCompareOutput"></div>
+      </div>
+    </div>
     <!-- Cron Jobs View -->
     <main class="dashboard-content" id="viewCron" style="display:none;">
       <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⏰</span><div class="db-header-info"><div class="db-header-title">Cron Jobs</div><div class="db-header-subtitle">Scheduled task manager</div></div></div><div class="db-header-right"><span style="font-size:12px;color:var(--text-tertiary)">Owner:</span><select id="cronOwnerSel" class="db-search-input" onchange="cronOwnerChange()" style="width:120px"></select><button class="db-btn db-btn-primary" onclick="cronAddForm()">+ Add Job</button><button class="db-btn db-btn-icon" onclick="loadCron()" title="Refresh">↻</button></div></div>
