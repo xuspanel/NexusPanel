@@ -238,6 +238,13 @@ const API = {
     gitCommit: (p, msg) => API.request('POST', '/files/git/commit', { path: p, message: msg }),
     gitPush: (p) => API.request('POST', '/files/git/push', { path: p }),
     gitPull: (p) => API.request('POST', '/files/git/pull', { path: p }),
+    extractPreview: (d) => API.request('POST', '/files/extract-preview', d),
+    checkConflicts: (d) => API.request('POST', '/files/check-conflicts', d),
+    checkExtractConflicts: (d) => API.request('POST', '/files/check-extract-conflicts', d),
+    getBin: () => API.request('GET', '/files/bin'),
+    restoreBin: (d) => API.request('POST', '/files/bin/restore', d),
+    permanentDeleteBin: (d) => API.request('DELETE', '/files/bin/permanent', d),
+    emptyBin: () => API.request('DELETE', '/files/bin/empty'),
     upload: async (path, files) => {
       const form = new FormData();
       form.append('path', path);

@@ -363,9 +363,6 @@ function fmShowCopyTo(path, name) {
       <label class="fm-form-label">Destination</label>
       <input class="fm-form-input" id="fmCopyDest" value="${escapeAttr(path)}" placeholder="/new/path">
     </div>
-    <div class="fm-form-group">
-      <label class="fm-form-label">Overwrite existing? <input type="checkbox" id="fmCopyOverwrite"></label>
-    </div>
     <div class="fm-form-actions">
       <button class="fm-btn fm-btn-cancel">Cancel</button>
       <button class="fm-btn fm-btn-primary" id="fmCopySubmit">Copy</button>
@@ -375,9 +372,23 @@ function fmShowCopyTo(path, name) {
     const dest = document.getElementById('fmCopyDest').value.trim();
     if (!dest) return;
     try {
-      await API.file.copy({ source: path, destination: dest, overwrite: document.getElementById('fmCopyOverwrite').checked });
-      closeFmModal();
-      await fmLoadDirectory();
+      const conflicts = await API.file.checkConflicts({ sources: [path], dest });
+      if (conflicts.hasConflicts) {
+        fmShowConflictModal(conflicts.conflicts, 1, 'copy', async (strategy) => {
+          try {
+            await API.file.copyto({ source: path, destination: dest, strategy });
+            closeFmModal();
+            await fmLoadDirectory();
+            fmRefreshBin();
+            fmShowToast('Copied successfully', 'success');
+          } catch (e) { fmShowToast(e.message, 'error'); }
+        });
+      } else {
+        await API.file.copyto({ source: path, destination: dest, overwrite: false });
+        closeFmModal();
+        await fmLoadDirectory();
+        fmShowToast('Copied successfully', 'success');
+      }
     } catch (e) { fmShowToast(e.message, 'error'); closeFmModal(); }
   });
 }
@@ -388,9 +399,6 @@ function fmShowMoveTo(path, name) {
       <label class="fm-form-label">Destination</label>
       <input class="fm-form-input" id="fmMoveDest" value="${escapeAttr(path)}" placeholder="/new/path">
     </div>
-    <div class="fm-form-group">
-      <label class="fm-form-label">Overwrite existing? <input type="checkbox" id="fmMoveOverwrite"></label>
-    </div>
     <div class="fm-form-actions">
       <button class="fm-btn fm-btn-cancel">Cancel</button>
       <button class="fm-btn fm-btn-primary" id="fmMoveSubmit">Move</button>
@@ -400,9 +408,23 @@ function fmShowMoveTo(path, name) {
     const dest = document.getElementById('fmMoveDest').value.trim();
     if (!dest) return;
     try {
-      await API.file.move({ source: path, destination: dest, overwrite: document.getElementById('fmMoveOverwrite').checked });
-      closeFmModal();
-      await fmLoadDirectory();
+      const conflicts = await API.file.checkConflicts({ sources: [path], dest });
+      if (conflicts.hasConflicts) {
+        fmShowConflictModal(conflicts.conflicts, 1, 'move', async (strategy) => {
+          try {
+            await API.file.moveto({ source: path, destination: dest, strategy });
+            closeFmModal();
+            await fmLoadDirectory();
+            fmRefreshBin();
+            fmShowToast('Moved successfully', 'success');
+          } catch (e) { fmShowToast(e.message, 'error'); }
+        });
+      } else {
+        await API.file.moveto({ source: path, destination: dest, overwrite: false });
+        closeFmModal();
+        await fmLoadDirectory();
+        fmShowToast('Moved successfully', 'success');
+      }
     } catch (e) { fmShowToast(e.message, 'error'); closeFmModal(); }
   });
 }
@@ -497,11 +519,11 @@ async function fmShowRename(path, currentName) {
 /* ─── Delete Confirmation ─── */
 async function fmShowDelete(paths) {
   const names = paths.map(p => escapeHtml(p.split('/').pop())).join(', ');
-  openFmModal('🗑 Confirm Delete', `
-    <p style="color:var(--text-secondary);margin-bottom:16px;">Are you sure you want to delete <strong style="color:var(--accent-red)">${names}</strong>?</p>
+  openFmModal('🗑 Move to Bin', `
+    <p style="color:var(--text-secondary);margin-bottom:16px;">Move <strong style="color:var(--accent-gold)">${names}</strong> to bin?</p>
     <div class="fm-form-actions">
       <button class="fm-btn fm-btn-cancel">Cancel</button>
-      <button class="fm-btn" style="background:linear-gradient(135deg,rgba(239,68,68,0.2),rgba(217,70,239,0.1));border-color:rgba(239,68,68,0.3);color:#fca5a5;" id="fmDeleteSubmit">Delete</button>
+      <button class="fm-btn fm-btn-primary" id="fmDeleteSubmit">Move to Bin</button>
     </div>
   `);
   document.getElementById('fmDeleteSubmit').addEventListener('click', async () => {
@@ -509,6 +531,8 @@ async function fmShowDelete(paths) {
       for (const p of paths) await API.file.del({ path: p });
       closeFmModal();
       await fmLoadDirectory();
+      fmRefreshBin();
+      fmShowToast('Moved to bin', 'success');
     } catch (e) { fmShowToast(e.message, 'error'); closeFmModal(); }
   });
 }
@@ -677,10 +701,25 @@ async function fmShowExtract(path) {
   `);
   document.getElementById('fmExtractSubmit').addEventListener('click', async () => {
     const dest = document.getElementById('fmExtractDest').value.trim();
+    if (!dest) return;
     try {
-      await API.file.extract({ archive: path, destination: dest });
-      closeFmModal();
-      await fmLoadDirectory();
+      const conflicts = await API.file.checkExtractConflicts({ archive: path, dest });
+      if (conflicts.hasConflicts) {
+        fmShowConflictModal(conflicts.conflicts, conflicts.entryCount, 'extract', async (strategy) => {
+          try {
+            await API.file.extract({ archive: path, destination: dest, strategy });
+            closeFmModal();
+            await fmLoadDirectory();
+            fmRefreshBin();
+            fmShowToast('Archive extracted successfully', 'success');
+          } catch (e) { fmShowToast(e.message, 'error'); }
+        });
+      } else {
+        await API.file.extract({ archive: path, destination: dest });
+        closeFmModal();
+        await fmLoadDirectory();
+        fmShowToast('Archive extracted successfully', 'success');
+      }
     } catch (e) { fmShowToast(e.message, 'error'); closeFmModal(); }
   });
 }
@@ -1415,6 +1454,29 @@ async function initFileManager() {
     document.getElementById('fmPathInput').dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
   });
 
+  /* Bin toggle */
+  document.getElementById('fmBinToggle').addEventListener('click', fmToggleBin);
+
+  /* Bin actions (delegated) */
+  document.getElementById('fmBinContainer').addEventListener('click', (e) => {
+    const restoreBtn = e.target.closest('.fm-bin-restore');
+    if (restoreBtn) {
+      fmRestoreBinItem(restoreBtn.dataset.batch, restoreBtn.dataset.file);
+      return;
+    }
+    const deleteBtn = e.target.closest('.fm-bin-delete');
+    if (deleteBtn) {
+      fmPermanentDeleteBinItem(deleteBtn.dataset.batch, deleteBtn.dataset.file);
+      return;
+    }
+  });
+
+  document.getElementById('fmBinEmptyBtn').addEventListener('click', () => {
+    if (confirm('Empty entire bin? This cannot be undone.')) fmEmptyBin();
+  });
+
+  /* Conflict modal tab switching is handled inline in fmShowConflictModal */
+
   await fmLoadDirectory();
 }
 
@@ -1425,9 +1487,6 @@ function fmShowMoveToBatch(paths) {
       <label class="fm-form-label">Move ${paths.length} items to:</label>
       <input class="fm-form-input" id="fmMoveDest" value="${escapeAttr(fmState.currentPath)}" placeholder="/destination">
     </div>
-    <div class="fm-form-group">
-      <label class="fm-form-label">Overwrite existing? <input type="checkbox" id="fmMoveOverwrite"></label>
-    </div>
     <div class="fm-form-actions">
       <button class="fm-btn fm-btn-cancel">Cancel</button>
       <button class="fm-btn fm-btn-primary" id="fmMoveSubmit">Move All</button>
@@ -1437,12 +1496,27 @@ function fmShowMoveToBatch(paths) {
     const dest = document.getElementById('fmMoveDest').value.trim();
     if (!dest) return;
     try {
-      for (const p of paths) {
-        const name = p.split('/').pop();
-        await API.file.moveto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, overwrite: document.getElementById('fmMoveOverwrite').checked });
+      const sources = paths.map(p => p);
+      const conflicts = await API.file.checkConflicts({ sources, dest });
+      if (conflicts.hasConflicts) {
+        fmShowConflictModal(conflicts.conflicts, paths.length, 'move', async (strategy) => {
+          try {
+            for (const p of paths) {
+              const name = p.split('/').pop();
+              await API.file.moveto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, strategy });
+            }
+            closeFmModal(); await fmLoadDirectory(); fmRefreshBin();
+            fmShowToast(`Moved ${paths.length} items`, 'success');
+          } catch (e) { fmShowToast(e.message, 'error'); }
+        });
+      } else {
+        for (const p of paths) {
+          const name = p.split('/').pop();
+          await API.file.moveto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, overwrite: false });
+        }
+        closeFmModal(); await fmLoadDirectory();
+        fmShowToast(`Moved ${paths.length} items`, 'success');
       }
-      closeFmModal(); await fmLoadDirectory();
-      fmShowToast(`Moved ${paths.length} items`, 'success');
     } catch (e) { fmShowToast(e.message, 'error'); closeFmModal(); }
   });
 }
@@ -1454,9 +1528,6 @@ function fmShowCopyToBatch(paths) {
       <label class="fm-form-label">Copy ${paths.length} items to:</label>
       <input class="fm-form-input" id="fmCopyDest" value="${escapeAttr(fmState.currentPath)}" placeholder="/destination">
     </div>
-    <div class="fm-form-group">
-      <label class="fm-form-label">Overwrite existing? <input type="checkbox" id="fmCopyOverwrite"></label>
-    </div>
     <div class="fm-form-actions">
       <button class="fm-btn fm-btn-cancel">Cancel</button>
       <button class="fm-btn fm-btn-primary" id="fmCopySubmit">Copy All</button>
@@ -1466,14 +1537,172 @@ function fmShowCopyToBatch(paths) {
     const dest = document.getElementById('fmCopyDest').value.trim();
     if (!dest) return;
     try {
-      for (const p of paths) {
-        const name = p.split('/').pop();
-        await API.file.copyto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, overwrite: document.getElementById('fmCopyOverwrite').checked });
+      const sources = paths.map(p => p);
+      const conflicts = await API.file.checkConflicts({ sources, dest });
+      if (conflicts.hasConflicts) {
+        fmShowConflictModal(conflicts.conflicts, paths.length, 'copy', async (strategy) => {
+          try {
+            for (const p of paths) {
+              const name = p.split('/').pop();
+              await API.file.copyto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, strategy });
+            }
+            closeFmModal(); await fmLoadDirectory(); fmRefreshBin();
+            fmShowToast(`Copied ${paths.length} items`, 'success');
+          } catch (e) { fmShowToast(e.message, 'error'); }
+        });
+      } else {
+        for (const p of paths) {
+          const name = p.split('/').pop();
+          await API.file.copyto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, overwrite: false });
+        }
+        closeFmModal(); await fmLoadDirectory();
+        fmShowToast(`Copied ${paths.length} items`, 'success');
       }
-      closeFmModal(); await fmLoadDirectory();
-      fmShowToast(`Copied ${paths.length} items`, 'success');
     } catch (e) { fmShowToast(e.message, 'error'); closeFmModal(); }
   });
+}
+
+/* ── Conflict Resolution Modal ── */
+function fmShowConflictModal(conflicts, totalCount, operation, callback) {
+  const overlay = document.getElementById('fmConflictOverlay');
+  const desc = document.getElementById('fmConflictDesc');
+  const list = document.getElementById('fmConflictList');
+  const compareList = document.getElementById('fmConflictCompareList');
+  const strategy = document.getElementById('fmConflictStrategy');
+
+  desc.textContent = `${conflicts.length} file(s) conflict out of ${totalCount} total.`;
+  strategy.value = 'skip';
+
+  list.innerHTML = conflicts.map(c => `
+    <div class="fm-conflict-row">
+      <span class="fm-conflict-name">${escapeHtml(c.name)}</span>
+      <span class="fm-conflict-info">Source: ${formatSizeStr(c.sourceSize)} &middot; Dest: ${formatSizeStr(c.destSize)}</span>
+      <span class="fm-conflict-badge">${c.different ? 'Different' : 'Same'}</span>
+    </div>
+  `).join('');
+
+  compareList.innerHTML = conflicts.map(c => `
+    <div class="fm-compare-row">
+      <div class="fm-compare-col">
+        <div class="fm-compare-label">Source</div>
+        <div class="fm-compare-detail">${escapeHtml(c.sourcePath || c.name)}</div>
+        <div class="fm-compare-detail">${formatSizeStr(c.sourceSize)} &middot; ${c.sourceModified || ''}</div>
+      </div>
+      <div class="fm-compare-vs">→</div>
+      <div class="fm-compare-col">
+        <div class="fm-compare-label">Destination</div>
+        <div class="fm-compare-detail">${escapeHtml(c.destPath || c.name)}</div>
+        <div class="fm-compare-detail">${formatSizeStr(c.destSize)} &middot; ${c.destModified || ''}</div>
+      </div>
+    </div>
+  `).join('');
+
+  overlay.style.display = 'flex';
+
+  const tabs = overlay.querySelectorAll('.fm-tab');
+  const tabPanels = overlay.querySelectorAll('.fm-tab-panel');
+  tabs.forEach(tab => {
+    tab.onclick = () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tabPanels.forEach(p => p.style.display = 'none');
+      tab.classList.add('active');
+      document.getElementById(tab.dataset.tab).style.display = '';
+    };
+  });
+
+  document.getElementById('fmConflictApply').onclick = () => {
+    overlay.style.display = 'none';
+    callback(strategy.value);
+  };
+  document.getElementById('fmConflictCancel').onclick = () => {
+    overlay.style.display = 'none';
+  };
+  document.getElementById('fmConflictClose').onclick = () => {
+    overlay.style.display = 'none';
+  };
+}
+
+/* ── Bin Sidebar ── */
+async function fmLoadBin() {
+  try {
+    const data = await API.file.getBin();
+    const batches = data.batches || [];
+    const listEl = document.getElementById('fmBinList');
+    const emptyEl = document.getElementById('fmBinEmpty');
+    const actionsEl = document.getElementById('fmBinActions');
+
+    if (!batches.length) {
+      listEl.innerHTML = '';
+      emptyEl.style.display = '';
+      actionsEl.style.display = 'none';
+      return;
+    }
+
+    emptyEl.style.display = 'none';
+    actionsEl.style.display = '';
+    let html = '';
+    for (const batch of batches) {
+      html += `<div class="fm-bin-batch" data-batch-id="${escapeAttr(batch.batchId)}">
+        <div class="fm-bin-batch-header">
+          <span class="fm-bin-batch-time">${escapeHtml(new Date(batch.timestamp).toLocaleString())}</span>
+          <span class="fm-bin-batch-count">${batch.entries.length} file(s)</span>
+        </div>
+        <div class="fm-bin-batch-files">`;
+      for (const entry of batch.entries) {
+        html += `<div class="fm-bin-file">
+          <span class="fm-bin-file-name">${escapeHtml(entry.fileName)}</span>
+          <span class="fm-bin-file-size">${formatSizeStr(entry.size)}</span>
+          <div class="fm-bin-file-actions">
+            <button class="fm-btn fm-btn-sm fm-bin-restore" data-batch="${escapeAttr(batch.batchId)}" data-file="${escapeAttr(entry.fileName)}" title="Restore">↩</button>
+            <button class="fm-btn fm-btn-sm fm-btn-danger fm-bin-delete" data-batch="${escapeAttr(batch.batchId)}" data-file="${escapeAttr(entry.fileName)}" title="Delete permanently">✕</button>
+          </div>
+        </div>`;
+      }
+      html += '</div></div>';
+    }
+    listEl.innerHTML = html;
+  } catch (e) { console.warn('fmLoadBin:', e); }
+}
+
+function fmRefreshBin() {
+  fmLoadBin().catch(() => {});
+}
+
+async function fmRestoreBinItem(batchId, fileName) {
+  try {
+    await API.file.restoreBin({ batchId, fileName });
+    fmShowToast('File restored', 'success');
+    fmRefreshBin();
+    fmLoadDirectory();
+  } catch (e) { fmShowToast(e.message, 'error'); }
+}
+
+async function fmPermanentDeleteBinItem(batchId, fileName) {
+  try {
+    await API.file.permanentDeleteBin({ batchId, fileName });
+    fmShowToast('File permanently deleted', 'success');
+    fmRefreshBin();
+  } catch (e) { fmShowToast(e.message, 'error'); }
+}
+
+async function fmEmptyBin() {
+  try {
+    await API.file.emptyBin();
+    fmShowToast('Bin emptied', 'success');
+    fmRefreshBin();
+  } catch (e) { fmShowToast(e.message, 'error'); }
+}
+
+function fmToggleBin() {
+  const container = document.getElementById('fmBinContainer');
+  const header = document.getElementById('fmBinToggle');
+  header.classList.toggle('open');
+  if (container.style.display === 'none') {
+    container.style.display = '';
+    fmLoadBin();
+  } else {
+    container.style.display = 'none';
+  }
 }
 
 /* ── Batch Rename ── */
@@ -1677,6 +1906,41 @@ async function fmClipboardPaste() {
   const { action, paths } = fmState.clipboard;
   const dest = fmState.currentPath;
   const results = [];
+
+  try {
+    const conflicts = await API.file.checkConflicts({ sources: paths, dest });
+    if (conflicts.hasConflicts) {
+      fmShowConflictModal(conflicts.conflicts, paths.length, action === 'copy' ? 'copy' : 'move', async (strategy) => {
+        const innerResults = [];
+        for (const src of paths) {
+          const name = src.split('/').pop();
+          const target = dest.replace(/\/$/, '') + '/' + name;
+          try {
+            if (action === 'copy') {
+              await API.file.copyto({ source: src, destination: target, strategy });
+            } else {
+              await API.file.moveto({ source: src, destination: target, strategy });
+            }
+            innerResults.push({ src, ok: true });
+          } catch (e) {
+            innerResults.push({ src, ok: false, error: e.message });
+          }
+        }
+        fmState.clipboard = null;
+        document.getElementById('fmCtxPaste').style.display = 'none';
+        try { await fmLoadDirectory(); } catch (e) { console.warn('fmClipboardPaste: reload failed', e); }
+        const ok = innerResults.filter(r => r.ok).length;
+        const fail = innerResults.filter(r => !r.ok).length;
+        if (fail > 0) {
+          fmShowToast(`${action === 'copy' ? 'Copied' : 'Moved'} ${ok}, ${fail} failed`, 'error');
+        } else {
+          fmShowToast(`${action === 'copy' ? 'Copied' : 'Moved'} ${ok} item(s)`, 'success');
+        }
+      });
+      return;
+    }
+  } catch (e) { fmShowToast(e.message, 'error'); return; }
+
   for (const src of paths) {
     const name = src.split('/').pop();
     const target = dest.replace(/\/$/, '') + '/' + name;
@@ -1793,6 +2057,8 @@ function fmShowCreateFolder() {
 window.initFileManager = initFileManager;
 window.closeFmModal = closeFmModal;
 window.closeFmPreview = closeFmPreview;
+window.fmToggleBin = fmToggleBin;
+window.fmEmptyBin = fmEmptyBin;
 
 /* ─── Git Integration ─── */
 var fmGitOpen = false;

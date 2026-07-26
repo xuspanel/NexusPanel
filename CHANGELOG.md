@@ -1,5 +1,22 @@
 # Changelog
 
+## [1.24.0] - 2026-07-26
+### Added
+- **Bin/Trash feature for File Manager**: Deleted files moved to `data/filebin/` with metadata manifest, restore, permanent delete, and empty bin operations
+- **Conflict detection for copy/move**: Automatic conflict check before operations with per-file source vs destination comparison
+- **Conflict resolution modal**: Combined modal with Files tab (conflict list with sizes) and Comparison tab (side-by-side source vs dest details)
+- **Global conflict strategy**: Overwrite All / Skip All / Rename All selection applied to entire batch
+- **Archive extract preview with conflict detection**: Extract flow checks for conflicts before extraction and presents unified modal with archive contents + conflict resolution
+- **Bin sidebar section**: Collapsible Bin section in File Manager sidebar showing deleted files grouped by batch with restore and permanent delete buttons
+- **Backend conflict resolution functions**: `checkConflicts`, `checkExtractConflicts`, `extractArchiveWithStrategy`, `copyEntryWithStrategy`, `moveEntryWithStrategy`
+- **Backend bin operations**: `deleteToBin`, `listBin`, `restoreFromBin`, `permanentDeleteBin`, `emptyBin` — files stored with timestamped batches and metadata JSON
+- **API endpoints**: `POST /files/extract-preview`, `POST /files/check-conflicts`, `POST /files/check-extract-conflicts`, `GET /files/bin`, `POST /files/bin/restore`, `DELETE /files/bin/permanent`, `DELETE /files/bin/empty`
+- **Frontend API methods**: `extractPreview`, `checkConflicts`, `checkExtractConflicts`, `getBin`, `restoreBin`, `permanentDeleteBin`, `emptyBin`
+- **Modified delete flow**: Delete confirmation now says "Move to Bin" with gold-colored file names
+- **Modified copy/move flows**: All copy, move, clipboard paste operations now detect conflicts before executing and present strategy selection
+- **Light theme support**: All new components styled for both dark and light themes
+- **Responsive support**: Wide modal and tab panels adapted for mobile viewports
+
 ## [1.23.0] - 2026-07-26
 ### Added
 - **Cron expression validation**: All 5 schedule fields validated (ranges 0-59/0-23/1-31/1-12/0-7, steps, commas, dashes)

@@ -410,13 +410,514 @@ async function getDetails(targetPath, user) {
   };
 }
 
+/* ─── Archive Preview (list entries without extracting) ─── */
+async function listArchiveEntries(archivePath, user) {
+  const safeArchive = safeResolve(archivePath, user);
+  const ext = path.extname(safeArchive).toLowerCase();
+  const entries = [];
+  if (ext === '.zip') {
+    const { default: AdmZip } = await import('adm-zip');
+    const zip = new AdmZip(safeArchive);
+    for (const entry of zip.getEntries()) {
+      entries.push({
+        name: entry.entryName,
+        size: entry.header.size,
+        compressedSize: entry.header.compressedSize,
+        type: entry.isDirectory ? 'directory' : 'file',
+        modified: entry.header.time ? new Date(entry.header.time).getTime() : null,
+      });
+    }
+  } else if (ext === '.gz' || ext === '.tgz' || ext === '.tar') {
+    const { createGunzip } = require('zlib');
+    const { tar } = require('tar-stream');
+    const extract = tar.extract();
+    const source = ext === '.gz' || ext === '.tgz'
+      ? createReadStream(safeArchive).pipe(createGunzip())
+      : createReadStream(safeArchive);
+    await new Promise((resolve, reject) => {
+      extract.on('entry', (header, stream, next) => {
+        entries.push({
+          name: header.name,
+          size: header.size,
+          compressedSize: header.size,
+          type: header.type === 'directory' ? 'directory' : 'file',
+          modified: header.mtime ? new Date(header.mtime).getTime() : null,
+        });
+        stream.resume();
+        next();
+      });
+      extract.on('finish', resolve);
+      extract.on('error', reject);
+      source.pipe(extract);
+    });
+  } else {
+    throw new Error('Unsupported archive format: ' + ext);
+  }
+  entries.sort((a, b) => a.name.localeCompare(b.name));
+  return entries;
+}
+
+/* ─── Conflict Detection ─── */
+function getBinRoot() {
+  return path.join(__dirname, '../../data/filebin');
+}
+
+function generateRenamePath(destPath) {
+  const dir = path.dirname(destPath);
+  const ext = path.extname(destPath);
+  const base = path.basename(destPath, ext);
+  let counter = 1;
+  let newPath;
+  do {
+    newPath = path.join(dir, base + '_' + counter + ext);
+    counter++;
+  } while (fs.existsSync(newPath));
+  return newPath;
+}
+
+async function checkConflicts(sources, destDir, user) {
+  const conflicts = [];
+  const noConflicts = [];
+  let totalSourceSize = 0;
+  let totalDestSize = 0;
+  for (const src of sources) {
+    const safeSrc = safeResolve(src, user);
+    const safeDestDir = safeResolve(destDir, user);
+    const name = path.basename(safeSrc);
+    const destPath = path.join(safeDestDir, name);
+    try {
+      const srcStat = await fsp.stat(safeSrc);
+      totalSourceSize += srcStat.size;
+      if (fs.existsSync(destPath)) {
+        const destStat = await fsp.stat(destPath);
+        totalDestSize += destStat.size;
+        const different = srcStat.size !== destStat.size || Math.abs(srcStat.mtimeMs - destStat.mtimeMs) > 1000;
+        conflicts.push({
+          source: safeSrc,
+          dest: destPath,
+          name: name,
+          sourceSize: srcStat.size,
+          destSize: destStat.size,
+          sourceSizeFormatted: formatSize(srcStat.size),
+          destSizeFormatted: formatSize(destStat.size),
+          sourceModified: srcStat.mtimeMs,
+          destModified: destStat.mtimeMs,
+          sourceModifiedFormatted: formatDate(srcStat.mtime),
+          destModifiedFormatted: formatDate(destStat.mtime),
+          type: srcStat.isDirectory() ? 'directory' : 'file',
+          different: different,
+        });
+      } else {
+        noConflicts.push({ source: safeSrc, dest: destPath, name: name });
+      }
+    } catch (e) {
+      noConflicts.push({ source: safeSrc, dest: destPath, name: name, error: e.message });
+    }
+  }
+  return {
+    conflicts,
+    noConflicts,
+    totalSourceSize,
+    totalDestSize,
+    totalSourceSizeFormatted: formatSize(totalSourceSize),
+    totalDestSizeFormatted: formatSize(totalDestSize),
+    conflictCount: conflicts.length,
+    noConflictCount: noConflicts.length,
+    totalEntries: conflicts.length + noConflicts.length,
+  };
+}
+
+async function checkExtractConflicts(archivePath, destDir, user) {
+  const entries = await listArchiveEntries(archivePath, user);
+  const safeDestDir = safeResolve(destDir, user);
+  const conflicts = [];
+  const noConflicts = [];
+  let totalSourceSize = 0;
+  let totalDestSize = 0;
+  for (const entry of entries) {
+    if (!entry.name || entry.name.endsWith('/')) continue;
+    const baseName = path.basename(entry.name);
+    const destPath = path.join(safeDestDir, baseName);
+    totalSourceSize += entry.size || 0;
+    try {
+      if (fs.existsSync(destPath)) {
+        const destStat = await fsp.stat(destPath);
+        totalDestSize += destStat.size;
+        const different = (entry.size || 0) !== destStat.size;
+        conflicts.push({
+          source: entry.name,
+          dest: destPath,
+          name: baseName,
+          sourceSize: entry.size || 0,
+          destSize: destStat.size,
+          sourceSizeFormatted: formatSize(entry.size || 0),
+          destSizeFormatted: formatSize(destStat.size),
+          sourceModified: entry.modified,
+          destModified: destStat.mtimeMs,
+          sourceModifiedFormatted: entry.modified ? formatDate(new Date(entry.modified)) : '—',
+          destModifiedFormatted: formatDate(destStat.mtime),
+          type: entry.type,
+          different: different,
+        });
+      } else {
+        noConflicts.push({ source: entry.name, dest: destPath, name: baseName, size: entry.size, type: entry.type });
+      }
+    } catch {
+      noConflicts.push({ source: entry.name, dest: destPath, name: baseName, size: entry.size, type: entry.type });
+    }
+  }
+  return {
+    entries,
+    conflicts,
+    noConflicts,
+    totalSourceSize,
+    totalDestSize,
+    totalSourceSizeFormatted: formatSize(totalSourceSize),
+    totalDestSizeFormatted: formatSize(totalDestSize),
+    conflictCount: conflicts.length,
+    noConflictCount: noConflicts.length,
+    totalEntries: entries.length,
+  };
+}
+
+/* ─── Strategy-Based Operations ─── */
+function applyStrategy(srcPath, destDir, strategy) {
+  const name = path.basename(srcPath);
+  const destPath = path.join(destDir, name);
+  if (!fs.existsSync(destPath)) return { destPath, action: 'write' };
+  switch (strategy) {
+    case 'skip':
+      return { destPath, action: 'skip' };
+    case 'rename':
+      return { destPath: generateRenamePath(destPath), action: 'rename' };
+    case 'overwrite':
+    default:
+      return { destPath, action: 'overwrite' };
+  }
+}
+
+async function extractArchiveWithStrategy(archivePath, destDir, strategy, user) {
+  const safeArchive = safeResolve(archivePath, user);
+  const safeDest = safeResolve(destDir, user);
+  await fsp.mkdir(safeDest, { recursive: true });
+  const ext = path.extname(safeArchive).toLowerCase();
+  const results = [];
+  let extracted = 0, skipped = 0, renamed = 0, totalSize = 0;
+  function handleEntry(entryName, entrySize, isDir, readFn) {
+    const cleanName = entryName.replace(/\/$/, '');
+    if (!cleanName) return;
+    const baseName = path.basename(cleanName);
+    if (!baseName) return;
+    const { destPath, action } = applyStrategy(path.join(safeDest, baseName), safeDest, strategy);
+    if (isDir) {
+      fs.mkdirSync(destPath, { recursive: true });
+      results.push({ name: cleanName, path: destPath, status: 'extracted', size: 0 });
+      extracted++;
+      return;
+    }
+    if (action === 'skip') {
+      results.push({ name: cleanName, path: destPath, status: 'skipped', size: entrySize || 0 });
+      skipped++;
+      return;
+    }
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    if (readFn) {
+      readFn(destPath);
+    }
+    const status = action === 'rename' ? 'renamed' : 'extracted';
+    if (action === 'rename') renamed++; else extracted++;
+    totalSize += entrySize || 0;
+    results.push({ name: cleanName, path: destPath, status, size: entrySize || 0 });
+  }
+  if (ext === '.zip') {
+    const { default: AdmZip } = await import('adm-zip');
+    const zip = new AdmZip(safeArchive);
+    for (const entry of zip.getEntries()) {
+      const entryName = entry.entryName;
+      if (entry.isDirectory) {
+        handleEntry(entryName, 0, true, null);
+      } else {
+        const { destPath, action } = applyStrategy(path.join(safeDest, path.basename(entryName)), safeDest, strategy);
+        if (action === 'skip') {
+          results.push({ name: entryName, path: destPath, status: 'skipped', size: entry.header.size || 0 });
+          skipped++;
+        } else {
+          fs.mkdirSync(path.dirname(destPath), { recursive: true });
+          fs.writeFileSync(destPath, entry.getData());
+          const status = action === 'rename' ? 'renamed' : 'extracted';
+          if (action === 'rename') renamed++; else extracted++;
+          totalSize += entry.header.size || 0;
+          results.push({ name: entryName, path: destPath, status, size: entry.header.size || 0 });
+        }
+      }
+    }
+  } else if (ext === '.gz' || ext === '.tgz' || ext === '.tar') {
+    const { createGunzip } = require('zlib');
+    const { tar } = require('tar-stream');
+    const extract = tar.extract();
+    const source = ext === '.gz' || ext === '.tgz'
+      ? createReadStream(safeArchive).pipe(createGunzip())
+      : createReadStream(safeArchive);
+    await new Promise((resolve, reject) => {
+      extract.on('entry', (header, stream, next) => {
+        const cleanName = header.name.replace(/\/$/, '');
+        const baseName = path.basename(cleanName);
+        if (!baseName || header.type === 'directory') {
+          if (baseName) {
+            const dirPath = path.join(safeDest, baseName);
+            fs.mkdirSync(dirPath, { recursive: true });
+            results.push({ name: cleanName, path: dirPath, status: 'extracted', size: 0 });
+            extracted++;
+          }
+          stream.resume();
+          next();
+          return;
+        }
+        const { destPath, action } = applyStrategy(path.join(safeDest, baseName), safeDest, strategy);
+        if (action === 'skip') {
+          results.push({ name: cleanName, path: destPath, status: 'skipped', size: header.size || 0 });
+          skipped++;
+          stream.resume();
+          next();
+          return;
+        }
+        fs.mkdirSync(path.dirname(destPath), { recursive: true });
+        const ws = createWriteStream(destPath);
+        stream.pipe(ws);
+        ws.on('finish', () => {
+          const status = action === 'rename' ? 'renamed' : 'extracted';
+          if (action === 'rename') renamed++; else extracted++;
+          totalSize += header.size || 0;
+          results.push({ name: cleanName, path: destPath, status, size: header.size || 0 });
+          next();
+        });
+      });
+      extract.on('finish', resolve);
+      extract.on('error', reject);
+      source.pipe(extract);
+    });
+  } else {
+    throw new Error('Unsupported archive format: ' + ext);
+  }
+  return { extracted, skipped, renamed, totalSize, totalSizeFormatted: formatSize(totalSize), files: results };
+}
+
+async function copyEntryWithStrategy(source, destination, strategy, user) {
+  const safeSource = safeResolve(source, user);
+  const destDir = safeResolve(destination, user);
+  const name = path.basename(safeSource);
+  const { destPath, action } = applyStrategy(path.join(destDir, name), destDir, strategy || 'overwrite');
+  if (action === 'skip') return { path: destPath, action: 'skip' };
+  const stat = await fsp.stat(safeSource);
+  if (stat.isDirectory()) {
+    await fsp.mkdir(destPath, { recursive: true });
+    const entries = await fsp.readdir(safeSource, { withFileTypes: true });
+    for (const entry of entries) {
+      await copyEntryWithStrategy(path.join(safeSource, entry.name), destPath, strategy, user);
+    }
+  } else {
+    await fsp.mkdir(path.dirname(destPath), { recursive: true });
+    await fsp.copyFile(safeSource, destPath);
+  }
+  return { path: destPath, action: action === 'rename' ? 'renamed' : 'copied' };
+}
+
+async function moveEntryWithStrategy(source, destination, strategy, user) {
+  const safeSource = safeResolve(source, user);
+  const destDir = safeResolve(destination, user);
+  const name = path.basename(safeSource);
+  const { destPath, action } = applyStrategy(path.join(destDir, name), destDir, strategy || 'overwrite');
+  if (action === 'skip') return { path: destPath, action: 'skip' };
+  try {
+    await fsp.rename(safeSource, destPath);
+  } catch (err) {
+    if (err.code === 'EXDEV') {
+      await copyEntryWithStrategy(source, path.dirname(destPath), strategy, user);
+      await deleteEntryPermanent(safeSource);
+    } else {
+      throw err;
+    }
+  }
+  return { path: destPath, action: action === 'rename' ? 'renamed' : 'moved' };
+}
+
+/* ─── Bin / Trash ─── */
+const BIN_ROOT = getBinRoot();
+
+function ensureBinRoot() {
+  fs.mkdirSync(BIN_ROOT, { recursive: true });
+}
+
+async function deleteToBin(paths, user) {
+  ensureBinRoot();
+  const batchId = String(Date.now());
+  const batchDir = path.join(BIN_ROOT, batchId);
+  fs.mkdirSync(batchDir, { recursive: true });
+  const manifest = { batchId, deletedAt: new Date().toISOString(), files: [] };
+  for (const p of paths) {
+    const safePath = safeResolve(p, user);
+    if (!fs.existsSync(safePath)) continue;
+    const stat = await fsp.stat(safePath);
+    const name = path.basename(safePath);
+    const destPath = path.join(batchDir, name);
+    if (stat.isDirectory()) {
+      await fsp.cp(safePath, destPath, { recursive: true });
+      await fsp.rm(safePath, { recursive: true, force: true });
+      let childCount = 0;
+      try {
+        const walk = async (dir) => {
+          const entries = await fsp.readdir(dir, { withFileTypes: true });
+          for (const e of entries) {
+            childCount++;
+            if (e.isDirectory()) await walk(path.join(dir, e.name));
+          }
+        };
+        await walk(destPath);
+      } catch {}
+      manifest.files.push({
+        originalPath: safePath,
+        name,
+        relativePath: name,
+        size: 0,
+        type: 'directory',
+        childCount,
+        deletedAt: new Date().toISOString(),
+      });
+    } else {
+      await fsp.copyFile(safePath, destPath);
+      await fsp.unlink(safePath);
+      manifest.files.push({
+        originalPath: safePath,
+        name,
+        relativePath: name,
+        size: stat.size,
+        type: 'file',
+        deletedAt: new Date().toISOString(),
+      });
+    }
+  }
+  if (manifest.files.length === 0) {
+    try { fs.rmdirSync(batchDir); } catch {}
+    return { moved: 0 };
+  }
+  fs.writeFileSync(path.join(batchDir, '.manifest.json'), JSON.stringify(manifest, null, 2));
+  return { moved: manifest.files.length, batchId };
+}
+
+async function listBin() {
+  ensureBinRoot();
+  const batches = [];
+  try {
+    const dirs = await fsp.readdir(BIN_ROOT, { withFileTypes: true });
+    for (const dir of dirs) {
+      if (!dir.isDirectory()) continue;
+      const manifestPath = path.join(BIN_ROOT, dir.name, '.manifest.json');
+      try {
+        const raw = await fsp.readFile(manifestPath, 'utf8');
+        const manifest = JSON.parse(raw);
+        batches.push(manifest);
+      } catch {}
+    }
+  } catch {}
+  batches.sort((a, b) => new Date(b.deletedAt) - new Date(a.deletedAt));
+  return batches;
+}
+
+async function restoreFromBin(batchId, fileName, user) {
+  const safeBatchId = batchId.replace(/[^a-zA-Z0-9]/g, '');
+  const manifestPath = path.join(BIN_ROOT, safeBatchId, '.manifest.json');
+  if (!fs.existsSync(manifestPath)) throw new Error('Bin batch not found');
+  const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
+  const fileIdx = manifest.files.findIndex(f => f.name === fileName);
+  if (fileIdx === -1) throw new Error('File not found in bin');
+  const fileEntry = manifest.files[fileIdx];
+  const srcPath = path.join(BIN_ROOT, safeBatchId, fileEntry.name);
+  const destDir = path.dirname(fileEntry.originalPath);
+  await fsp.mkdir(destDir, { recursive: true });
+  if (fileEntry.type === 'directory') {
+    await fsp.cp(srcPath, fileEntry.originalPath, { recursive: true });
+    await fsp.rm(srcPath, { recursive: true, force: true });
+  } else {
+    await fsp.copyFile(srcPath, fileEntry.originalPath);
+    await fsp.unlink(srcPath);
+  }
+  manifest.files.splice(fileIdx, 1);
+  if (manifest.files.length === 0) {
+    await fsp.rm(path.join(BIN_ROOT, safeBatchId), { recursive: true, force: true });
+  } else {
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  }
+  return { restored: fileEntry.originalPath };
+}
+
+async function permanentDeleteBin(batchId, fileName) {
+  const safeBatchId = batchId.replace(/[^a-zA-Z0-9]/g, '');
+  const manifestPath = path.join(BIN_ROOT, safeBatchId, '.manifest.json');
+  if (!fs.existsSync(manifestPath)) throw new Error('Bin batch not found');
+  const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
+  const fileIdx = manifest.files.findIndex(f => f.name === fileName);
+  if (fileIdx === -1) throw new Error('File not found in bin');
+  const fileEntry = manifest.files[fileIdx];
+  const filePath = path.join(BIN_ROOT, safeBatchId, fileEntry.name);
+  try {
+    if (fileEntry.type === 'directory') {
+      await fsp.rm(filePath, { recursive: true, force: true });
+    } else {
+      await fsp.unlink(filePath);
+    }
+  } catch {}
+  manifest.files.splice(fileIdx, 1);
+  if (manifest.files.length === 0) {
+    await fsp.rm(path.join(BIN_ROOT, safeBatchId), { recursive: true, force: true });
+  } else {
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2));
+  }
+  return { deleted: fileName };
+}
+
+async function emptyBin() {
+  ensureBinRoot();
+  const dirs = await fsp.readdir(BIN_ROOT, { withFileTypes: true });
+  let count = 0;
+  for (const dir of dirs) {
+    if (dir.isDirectory()) {
+      try {
+        const manifestPath = path.join(BIN_ROOT, dir.name, '.manifest.json');
+        if (fs.existsSync(manifestPath)) {
+          const manifest = JSON.parse(await fsp.readFile(manifestPath, 'utf8'));
+          count += manifest.files.length;
+        }
+        await fsp.rm(path.join(BIN_ROOT, dir.name), { recursive: true, force: true });
+      } catch {}
+    }
+  }
+  return { deleted: count };
+}
+
+async function deleteEntryPermanent(targetPath) {
+  const stat = await fsp.stat(targetPath);
+  if (stat.isDirectory()) {
+    await fsp.rm(targetPath, { recursive: true, force: true });
+  } else {
+    await fsp.unlink(targetPath);
+  }
+}
+
+async function deleteEntry(targetPath, user) {
+  const safePath = safeResolve(targetPath, user);
+  return deleteToBin([safePath], user);
+}
+
 module.exports = {
   gitStatus, gitStage, gitUnstage, gitCommit, gitPush, gitPull, gitLog,
   listDirectory, readFile, createEntry, renameEntry, deleteEntry,
   copyEntry, moveEntry, duplicateEntry, searchFiles,
   createArchive, extractArchive, changePermissions, getDetails,
-  safeResolve, formatSize,
+  safeResolve, formatSize, formatMode, formatDate,
   copyEntryWithOverwrite, moveEntryWithOverwrite,
+  listArchiveEntries, checkConflicts, checkExtractConflicts,
+  extractArchiveWithStrategy, copyEntryWithStrategy, moveEntryWithStrategy,
+  deleteToBin, listBin, restoreFromBin, permanentDeleteBin, emptyBin,
 };
 
 /* ─── Git Integration ─── */

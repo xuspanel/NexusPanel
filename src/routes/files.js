@@ -364,6 +364,124 @@ function buildHunks(sourceLines, targetLines, lcs) {
   return hunks;
 }
 
+router.post('/extract-preview', async (req, res) => {
+  try {
+    const { archive: archivePath } = req.body;
+    if (!archivePath) return res.status(400).json({ error: 'archive path required' });
+    const entries = await fm.listArchiveEntries(archivePath, req.user);
+    res.json({ entries });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/check-conflicts', async (req, res) => {
+  try {
+    const { sources, dest } = req.body;
+    if (!sources || !sources.length || !dest) return res.status(400).json({ error: 'sources and dest required' });
+    const result = await fm.checkConflicts(sources, dest, req.user);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/check-extract-conflicts', async (req, res) => {
+  try {
+    const { archive: archivePath, dest } = req.body;
+    if (!archivePath || !dest) return res.status(400).json({ error: 'archive and dest required' });
+    const result = await fm.checkExtractConflicts(archivePath, dest, req.user);
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/extract', async (req, res) => {
+  try {
+    const { archive: archivePath, destination, strategy } = req.body;
+    if (!archivePath || !destination) return res.status(400).json({ error: 'archive and destination required' });
+    const result = strategy
+      ? await fm.extractArchiveWithStrategy(archivePath, destination, strategy, req.user)
+      : await fm.extractArchive(archivePath, destination, req.user);
+    audit.log('file.extract', req, { archive: archivePath, destination, strategy });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/copyto', async (req, res) => {
+  try {
+    const { source, destination, overwrite, strategy } = req.body;
+    if (!source || !destination) return res.status(400).json({ error: 'source and destination required' });
+    const result = strategy
+      ? await fm.copyEntryWithStrategy(source, destination, strategy, req.user)
+      : await fm.copyEntryWithOverwrite(source, destination, overwrite || false, req.user);
+    audit.log('file.copyto', req, { source, destination, strategy });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/moveto', async (req, res) => {
+  try {
+    const { source, destination, overwrite, strategy } = req.body;
+    if (!source || !destination) return res.status(400).json({ error: 'source and destination required' });
+    const result = strategy
+      ? await fm.moveEntryWithStrategy(source, destination, strategy, req.user)
+      : await fm.moveEntryWithOverwrite(source, destination, overwrite || false, req.user);
+    audit.log('file.moveto', req, { source, destination, strategy });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/bin', async (req, res) => {
+  try {
+    const batches = await fm.listBin();
+    res.json({ batches });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/bin/restore', async (req, res) => {
+  try {
+    const { batchId, fileName } = req.body;
+    if (!batchId || !fileName) return res.status(400).json({ error: 'batchId and fileName required' });
+    const result = await fm.restoreFromBin(batchId, fileName, req.user);
+    audit.log('file.bin.restore', req, { batchId, fileName });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/bin/permanent', async (req, res) => {
+  try {
+    const { batchId, fileName } = req.body;
+    if (!batchId || !fileName) return res.status(400).json({ error: 'batchId and fileName required' });
+    const result = await fm.permanentDeleteBin(batchId, fileName);
+    audit.log('file.bin.permanent', req, { batchId, fileName });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.delete('/bin/empty', async (req, res) => {
+  try {
+    const result = await fm.emptyBin();
+    audit.log('file.bin.empty', req, {});
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 router.get('/git/status', (req, res) => {
   try { const stat = fm.gitStatus(req.query.path || '/', req.user); res.json(stat || { isRepo: false }); }
   catch (e) { res.status(400).json({ error: e.message }); }

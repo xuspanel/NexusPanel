@@ -1687,6 +1687,15 @@
           <div class="fm-sidebar-divider"></div>
           <div class="fm-sidebar-section-header" id="fmTreeToggle">🌳 Directory Tree <span class="fm-sidebar-toggle-icon">▸</span></div>
           <div class="fm-sidebar-tree" id="fmTreeContainer"></div>
+          <div class="fm-sidebar-divider"></div>
+          <div class="fm-sidebar-section-header" id="fmBinToggle">🗑 Bin <span class="fm-sidebar-toggle-icon">▸</span></div>
+          <div class="fm-sidebar-tree" id="fmBinContainer" style="display:none;">
+            <div class="fm-bin-empty" id="fmBinEmpty">No deleted files</div>
+            <div id="fmBinList"></div>
+            <div class="fm-bin-actions" id="fmBinActions" style="display:none;">
+              <button class="fm-btn fm-btn-sm fm-btn-danger" id="fmBinEmptyBtn">Empty All</button>
+            </div>
+          </div>
         </div>
         <div class="fm-main" id="fmMain">
           <div class="fm-loading" id="fmLoading">
@@ -2434,6 +2443,58 @@
   <div id="fmToast" class="fm-toast">
     <span id="fmToastIcon"></span>
     <span id="fmToastMsg"></span>
+  </div>
+
+  <!-- Conflict Resolution Modal -->
+  <div class="fm-modal-overlay" id="fmConflictOverlay" style="display:none;">
+    <div class="fm-modal fm-modal-wide" id="fmConflictModal">
+      <div class="fm-modal-header">
+        <span class="fm-modal-title">⚠️ File Conflicts Detected</span>
+        <button class="fm-modal-close" id="fmConflictClose">✕</button>
+      </div>
+      <div class="fm-modal-body">
+        <div class="fm-conflict-desc" id="fmConflictDesc"></div>
+        <div class="fm-conflict-tabs">
+          <button class="fm-tab active" data-tab="fmConflictFiles">Files</button>
+          <button class="fm-tab" data-tab="fmConflictCompare">Comparison</button>
+        </div>
+        <div class="fm-tab-panel active" id="fmConflictFiles">
+          <div class="fm-conflict-list" id="fmConflictList"></div>
+        </div>
+        <div class="fm-tab-panel" id="fmConflictCompare" style="display:none;">
+          <div class="fm-conflict-compare" id="fmConflictCompareList"></div>
+        </div>
+        <div class="fm-conflict-strategy">
+          <label class="fm-conflict-strategy-label">Resolution:</label>
+          <select id="fmConflictStrategy" class="fm-form-select">
+            <option value="overwrite">Overwrite all existing files</option>
+            <option value="skip">Skip all existing files</option>
+            <option value="rename">Rename all (add _1, _2, etc.)</option>
+          </select>
+        </div>
+        <div class="fm-modal-actions">
+          <button class="fm-btn" id="fmConflictCancel">Cancel</button>
+          <button class="fm-btn fm-btn-primary" id="fmConflictApply">Apply to All</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Extract Summary Overlay -->
+  <div class="fm-modal-overlay" id="fmExtractOverlay" style="display:none;">
+    <div class="fm-modal fm-modal-wide" id="fmExtractModal">
+      <div class="fm-modal-header">
+        <span class="fm-modal-title">📤 Extract Archive</span>
+        <button class="fm-modal-close" id="fmExtractClose">✕</button>
+      </div>
+      <div class="fm-modal-body">
+        <div class="fm-extract-summary" id="fmExtractSummary"></div>
+        <div class="fm-modal-actions">
+          <button class="fm-btn" id="fmExtractCancel">Cancel</button>
+          <button class="fm-btn fm-btn-primary" id="fmExtractConfirm">Extract</button>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Reboot Overlay -->
