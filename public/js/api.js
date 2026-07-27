@@ -434,8 +434,17 @@ const API = {
   },
   ssl: {
     list: () => API.request('GET', '/ssl'),
-    issue: (domain, email) => API.request('POST', '/ssl/issue', { domain, email }),
+    detail: (name) => API.request('GET', '/ssl/' + encodeURIComponent(name)),
+    config: (name) => API.request('GET', '/ssl/' + encodeURIComponent(name) + '/config'),
+    search: (q) => API.request('GET', '/ssl/search?q=' + encodeURIComponent(q)),
+    issue: (domain, opts) => API.request('POST', '/ssl/issue', Object.assign({ domain }, opts || {})),
     renew: (domain) => API.request('POST', '/ssl/renew/' + encodeURIComponent(domain)),
+    renewAll: () => API.request('POST', '/ssl/renew-all'),
+    revoke: (domain) => API.request('POST', '/ssl/revoke/' + encodeURIComponent(domain)),
+    remove: (domain) => API.request('DELETE', '/ssl/' + encodeURIComponent(domain)),
+    autoRenewStatus: () => API.request('GET', '/ssl/auto-renew'),
+    dryRun: () => API.request('POST', '/ssl/dry-run'),
+    nginxOptions: () => API.request('GET', '/ssl/nginx-options'),
   },
   phpfpm: {
     list: () => API.request('GET', '/phpfpm'),

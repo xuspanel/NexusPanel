@@ -10249,15 +10249,63 @@ body::before {
 
 /* ─── SSL ─── */
 .ssl-list { display:flex; flex-direction:column; gap:8px; }
-.ssl-card { display:flex; align-items:center; gap:12px; padding:12px 16px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-md); }
-.ssl-info { flex:1; }
-.ssl-domain { font-size:14px; font-weight:600; color:var(--text-primary); margin-bottom:2px; }
-.ssl-issuer { font-size:11px; color:var(--text-tertiary); }
-.ssl-expiry { flex-shrink:0; }
-.ssl-badge { padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
-.ssl-badge.ok { background:rgba(16,185,129,0.12); color:#10b981; }
-.ssl-badge.warning { background:rgba(245,158,11,0.12); color:#f59e0b; }
-.ssl-badge.danger { background:rgba(239,68,68,0.12); color:#ef4444; }
+.ssl-summary-bar { display:flex; gap:8px; margin-bottom:12px; flex-wrap:wrap; }
+.ssl-stat-badge { display:flex; flex-direction:column; align-items:center; padding:10px 16px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-sm); min-width:70px; }
+.ssl-stat-value { font-size:20px; font-weight:700; color:var(--text-primary); }
+.ssl-stat-label { font-size:10px; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.5px; margin-top:2px; }
+.ssl-stat-expiring .ssl-stat-value { color:#f59e0b; }
+.ssl-stat-expired .ssl-stat-value { color:#ef4444; }
+.ssl-stat-ecdsa .ssl-stat-value { color:#06b6d4; }
+.ssl-stat-rsa .ssl-stat-value { color:#8b5cf6; }
+.ssl-autorenew { display:flex; align-items:center; gap:8px; padding:8px 12px; margin-bottom:12px; background:rgba(255,255,255,0.02); border:1px solid var(--glass-border); border-radius:var(--radius-sm); font-size:12px; }
+.ssl-autorenew-dot { width:8px; height:8px; border-radius:50%; flex-shrink:0; }
+.ssl-autorenew-dot.active { background:#10b981; box-shadow:0 0 6px rgba(16,185,129,0.5); }
+.ssl-autorenew-dot.inactive { background:#ef4444; }
+.ssl-autorenew-label { font-weight:600; color:var(--text-primary); }
+.ssl-autorenew-schedule { color:var(--text-secondary); }
+.ssl-autorenew-last { color:var(--text-tertiary); margin-left:auto; }
+.ssl-toolbar { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
+.ssl-search { flex:1; padding:8px 12px; background:rgba(255,255,255,0.04); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text-primary); font-size:13px; outline:none; }
+.ssl-search:focus { border-color:var(--accent-cyan); }
+.ssl-sort-group { display:flex; gap:4px; }
+.ssl-sort-btn { padding:6px 10px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-sm); color:var(--text-secondary); font-size:11px; cursor:pointer; transition:all 0.15s; }
+.ssl-sort-btn:hover { background:rgba(255,255,255,0.06); color:var(--text-primary); }
+.ssl-sort-btn.active { background:rgba(6,182,212,0.12); border-color:rgba(6,182,212,0.3); color:#06b6d4; }
+.ssl-card { padding:12px 16px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-md); }
+.ssl-card-main { display:flex; align-items:center; justify-content:space-between; gap:12px; }
+.ssl-card-left { flex:1; min-width:0; }
+.ssl-domain { font-size:14px; font-weight:600; color:var(--text-primary); margin-bottom:4px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.ssl-meta { display:flex; align-items:center; gap:6px; flex-wrap:wrap; }
+.ssl-badge { padding:2px 8px; border-radius:12px; font-size:10px; font-weight:600; white-space:nowrap; }
+.ssl-badge.keytype-ecdsa { background:rgba(6,182,212,0.12); color:#06b6d4; }
+.ssl-badge.keytype-rsa { background:rgba(139,92,246,0.12); color:#8b5cf6; }
+.ssl-serial { font-size:10px; color:var(--text-tertiary); font-family:monospace; }
+.ssl-card-right { display:flex; align-items:center; gap:12px; flex-shrink:0; }
+.ssl-expiry-block { text-align:right; }
+.ssl-badge.ssl-badge-expiry { padding:3px 10px; border-radius:20px; font-size:11px; font-weight:600; }
+.ssl-badge.ssl-badge-expiry.ok { background:rgba(16,185,129,0.12); color:#10b981; }
+.ssl-badge.ssl-badge-expiry.warning { background:rgba(245,158,11,0.12); color:#f59e0b; }
+.ssl-badge.ssl-badge-expiry.danger { background:rgba(239,68,68,0.12); color:#ef4444; }
+.ssl-actions { display:flex; gap:4px; }
+.ssl-detail-grid { display:flex; flex-direction:column; gap:0; }
+.ssl-detail-row { display:flex; align-items:flex-start; padding:8px 0; border-bottom:1px solid var(--glass-border); }
+.ssl-detail-row:last-child { border-bottom:none; }
+.ssl-detail-label { width:120px; flex-shrink:0; font-size:12px; font-weight:600; color:var(--text-tertiary); }
+.ssl-detail-value { font-size:13px; color:var(--text-primary); word-break:break-all; flex:1; }
+.ssl-fingerprint { font-family:monospace; font-size:11px; color:var(--text-secondary); }
+.ssl-dryrun-header { margin-bottom:12px; }
+.ssl-dryrun-list { display:flex; flex-direction:column; gap:4px; }
+.ssl-dryrun-row { display:flex; align-items:center; gap:8px; padding:6px 8px; background:rgba(255,255,255,0.02); border-radius:var(--radius-sm); }
+.ssl-dryrun-icon { font-size:14px; flex-shrink:0; }
+.ssl-dryrun-icon:first-child { color:#10b981; }
+.ssl-dryrun-cert { font-weight:600; font-size:13px; color:var(--text-primary); white-space:nowrap; }
+.ssl-dryrun-msg { font-size:12px; color:var(--text-secondary); }
+.ssl-toast { position:fixed; bottom:24px; right:24px; padding:10px 16px; border-radius:var(--radius-sm); font-size:13px; font-weight:500; z-index:9999; animation:sslToastIn 0.2s ease; }
+.ssl-toast.success { background:#065f46; color:#6ee7b7; border:1px solid rgba(16,185,129,0.3); }
+.ssl-toast.error { background:#7f1d1d; color:#fca5a5; border:1px solid rgba(239,68,68,0.3); }
+.ssl-toast.info { background:#1e3a5f; color:#93c5fd; border:1px solid rgba(59,130,246,0.3); }
+.ssl-toast.warning { background:#78350f; color:#fcd34d; border:1px solid rgba(245,158,11,0.3); }
+@keyframes sslToastIn { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
 
 /* ─── PHP-FPM ─── */
 .phpfpm-list { display:flex; flex-direction:column; gap:6px; }
@@ -10468,6 +10516,16 @@ body::before {
 [data-theme="light"] .fw-log-entry { border-color: rgba(0,0,0,0.05); }
 [data-theme="light"] .fw-log-entry:hover { background: rgba(0,0,0,0.02); }
 [data-theme="light"] .ssl-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .ssl-stat-badge { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .ssl-autorenew { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .ssl-search { background: rgba(0,0,0,0.03); border-color: rgba(0,0,0,0.1); color: #1e293b; }
+[data-theme="light"] .ssl-sort-btn { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); color: #64748b; }
+[data-theme="light"] .ssl-dryrun-row { background: rgba(0,0,0,0.02); }
+[data-theme="light"] .ssl-detail-row { border-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .ssl-toast.success { background:#d1fae5; color:#065f46; border-color:rgba(16,185,129,0.3); }
+[data-theme="light"] .ssl-toast.error { background:#fee2e2; color:#7f1d1d; border-color:rgba(239,68,68,0.3); }
+[data-theme="light"] .ssl-toast.info { background:#dbeafe; color:#1e3a5f; border-color:rgba(59,130,246,0.3); }
+[data-theme="light"] .ssl-toast.warning { background:#fef3c7; color:#78350f; border-color:rgba(245,158,11,0.3); }
 [data-theme="light"] .phpfpm-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .upd-item { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .notif-bell:hover { background: rgba(0,0,0,0.04); }

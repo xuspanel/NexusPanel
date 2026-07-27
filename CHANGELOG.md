@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.28.0] - 2026-07-28
+### Changed
+- **SSL Certificates module complete rewrite** — 49 lines → 350 lines (backend), 39 → 500 lines (frontend), 19 → 120 lines (routes), 11 → 120 lines (CSS)
+### Added
+- **Certificate detail view**: Full cert info via openssl x509 — subject, issuer, serial, key type/size, SANs, SHA-256 fingerprint, valid from/until, cert/key paths
+- **Certificate deletion**: Remove certificate files via `certbot delete`
+- **Certificate revocation**: Revoke with Let's Encrypt via `certbot revoke`
+- **Bulk renew all**: Force-renew all 32 certificates with summary (renewed/failed/skipped counts)
+- **Dry-run testing**: Simulate renewal for all certs, per-cert pass/fail results
+- **Auto-renewal status**: Shows certbot-renew.timer status, cron schedule, last run time
+- **Renewal config viewer**: Parse `/etc/letsencrypt/renewal/*.conf` for authenticator, key_type, server
+- **nginx SSL options**: Read options-ssl-nginx.conf — protocols, ciphers, HSTS, OCSP stapling
+- **Summary bar**: Total / Expiring / Expired / ECDSA / RSA stat badges
+- **Search/filter**: Real-time search by domain, serial, key type
+- **Sort controls**: Sort by expiry date, domain name, days left, key type
+- **Event delegation**: All buttons use `data-ssl-action` attributes (XSS-safe)
+- **Loading/error/empty states**: Proper state management with spinner, error display, empty message
+- **Toast notifications**: Replace all `alert()` calls with styled toast messages
+- **Confirmation modals**: Replace all `confirm()` calls with custom confirm dialogs
+- **Issue certificate modal**: Domain, email, staging checkbox for testing
+- **Light theme support**: Full light theme variants for all new selectors
+- **12 backend functions**: list, detail, getConfig, issue, renew, renewAll, remove, revoke, autoRenewStatus, dryRun, nginxOptions, search
+- **12 API endpoints**: Complete REST API for SSL certificate management
+- **12 frontend API methods**: Full coverage of all endpoints
+### Fixed
+- **SSL issuance mode**: Changed from `--standalone` (requires port 80, conflicts with nginx) to `--webroot` mode
+- **Certificate list parsing**: Now uses `certbot certificates` output (1 process) instead of N openssl calls per cert
+- **Inline onclick handlers**: Replaced with event delegation pattern matching firewall module
+
 ## [1.27.0] - 2026-07-28
 ### Added
 - **Live rule stats with auto-refresh**: Monitoring tab with real-time packet/byte counters per chain, auto-refreshes every 5 seconds

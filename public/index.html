@@ -41,7 +41,7 @@
   <script defer src="/js/logs.js?v=1.22.0"></script>
   <script defer src="/js/cron.js?v=1.1.0"></script>
   <script defer src="/js/firewall.js?v=1.27.0"></script>
-  <script defer src="/js/ssl.js?v=1.1.0"></script>
+  <script defer src="/js/ssl.js?v=1.28.0"></script>
   <script defer src="/js/phpfpm.js?v=1.1.0"></script>
   <script defer src="/js/updates.js?v=1.1.0"></script>
   <script defer src="/js/settings.js?v=1.6.1"></script>
@@ -2305,8 +2305,10 @@
     </main>
     <!-- SSL Certificates View -->
     <main class="dashboard-content" id="viewSSL" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔒</span><div class="db-header-info"><div class="db-header-title">SSL Certificates</div><div class="db-header-subtitle">Let's Encrypt certificate manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="sslIssueForm()">+ Issue Certificate</button><button class="db-btn db-btn-icon" onclick="loadSSL()" title="Refresh">↻</button></div></div>
-      <div id="sslList" class="ssl-list"></div>
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔒</span><div class="db-header-info"><div class="db-header-title">SSL Certificates</div><div class="db-header-subtitle">Let's Encrypt certificate manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" id="sslIssueBtn">+ Issue Certificate</button><button class="db-btn" id="sslRenewAllBtn">Renew All</button><button class="db-btn" id="sslDryRunBtn">Dry Run</button><button class="db-btn db-btn-icon" id="sslRefreshBtn" title="Refresh">&#8635;</button></div></div>
+      <div id="sslContent"><div class="db-loading"><div class="db-loading-spinner"></div><div class="db-loading-text">Loading certificates...</div></div></div>
+      <div id="sslList" style="display:none;"></div>
+      <div id="sslToast" class="ssl-toast" style="display:none;"></div>
     </main>
     <!-- PHP-FPM View -->
     <main class="dashboard-content" id="viewPhpFPM" style="display:none;">
@@ -2405,15 +2407,41 @@
     </div>
       </div>
     </div>
-    <!-- SSL Modal -->
-    <div class="fm-modal-overlay" id="sslModalOverlay" style="display:none;" onclick="if(event.target===this)document.getElementById('sslModalOverlay').style.display='none'">
+    <!-- SSL Issue Modal -->
+    <div class="fm-modal-overlay" id="sslModalOverlay" style="display:none;">
       <div class="fm-modal" style="max-width:480px;">
-        <div class="fm-modal-header"><span class="fm-modal-title">Issue SSL Certificate</span><button class="fm-modal-close" onclick="document.getElementById('sslModalOverlay').style.display='none'">✕</button></div>
+        <div class="fm-modal-header"><span class="fm-modal-title">Issue SSL Certificate</span><button class="fm-modal-close" id="sslModalClose">&#10005;</button></div>
         <div class="fm-modal-body">
           <div class="mime-form-group"><label class="mime-form-label">Domain</label><input class="mime-form-input" id="sslDomain" placeholder="example.com"></div>
           <div class="mime-form-group"><label class="mime-form-label">Email (optional)</label><input class="mime-form-input" id="sslEmail" placeholder="admin@example.com"></div>
-          <div class="mime-form-actions"><button class="fm-btn" onclick="document.getElementById('sslModalOverlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="sslIssue()">Issue</button></div>
+          <div class="mime-form-group"><label class="form-checkbox-label"><input type="checkbox" id="sslStaging"> Use staging (testing only)</label></div>
+          <div class="ssl-issue-error" id="sslIssueError" style="display:none;color:#ef4444;font-size:12px;margin-bottom:8px;"></div>
+          <div class="fm-modal-actions"><button class="fm-btn" id="sslModalCancel">Cancel</button><button class="fm-btn fm-btn-primary" id="sslModalSubmit">Issue Certificate</button></div>
         </div>
+      </div>
+    </div>
+    <!-- SSL Detail Modal -->
+    <div class="fm-modal-overlay" id="sslDetailOverlay" style="display:none;">
+      <div class="fm-modal" style="max-width:560px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Certificate Details</span><button class="fm-modal-close" id="sslDetailClose">&#10005;</button></div>
+        <div class="fm-modal-body" id="sslDetailContent"></div>
+      </div>
+    </div>
+    <!-- SSL Confirm Modal -->
+    <div class="fm-modal-overlay" id="sslConfirmOverlay" style="display:none;">
+      <div class="fm-modal" style="max-width:400px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Confirm</span></div>
+        <div class="fm-modal-body">
+          <p id="sslConfirmMsg" style="margin:0 0 16px;color:var(--text-secondary);"></p>
+          <div class="fm-modal-actions"><button class="fm-btn" id="sslConfirmNo">Cancel</button><button class="fm-btn fm-btn-danger" id="sslConfirmYes">Confirm</button></div>
+        </div>
+      </div>
+    </div>
+    <!-- SSL Dry Run Modal -->
+    <div class="fm-modal-overlay" id="sslDryRunOverlay" style="display:none;">
+      <div class="fm-modal" style="max-width:560px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Renewal Test Results</span><button class="fm-modal-close" id="sslDryRunClose">&#10005;</button></div>
+        <div class="fm-modal-body" id="sslDryRunContent"></div>
       </div>
     </div>
   </div><!-- /dashboardPage -->
