@@ -154,30 +154,6 @@ router.post('/move', async (req, res) => {
   }
 });
 
-router.post('/copyto', async (req, res) => {
-  try {
-    const { source, destination, overwrite } = req.body;
-    if (!source || !destination) return res.status(400).json({ error: 'source and destination required' });
-    const result = await fm.copyEntryWithOverwrite(source, destination, overwrite || false, req.user);
-    audit.log('file.copyto', req, { source, destination, overwrite });
-    res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-router.post('/moveto', async (req, res) => {
-  try {
-    const { source, destination, overwrite } = req.body;
-    if (!source || !destination) return res.status(400).json({ error: 'source and destination required' });
-    const result = await fm.moveEntryWithOverwrite(source, destination, overwrite || false, req.user);
-    audit.log('file.moveto', req, { source, destination, overwrite });
-    res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
 router.post('/duplicate', async (req, res) => {
   try {
     const { path: filePath } = req.body;
@@ -210,18 +186,6 @@ router.post('/archive', async (req, res) => {
     if (!paths || !paths.length || !destination) return res.status(400).json({ error: 'paths and destination required' });
     const result = await fm.createArchive(paths, destination, format || 'zip', req.user);
     audit.log('file.archive', req, { paths, destination, format });
-    res.json(result);
-  } catch (err) {
-    res.status(400).json({ error: err.message });
-  }
-});
-
-router.post('/extract', async (req, res) => {
-  try {
-    const { archive: archivePath, destination } = req.body;
-    if (!archivePath || !destination) return res.status(400).json({ error: 'archive and destination required' });
-    const result = await fm.extractArchive(archivePath, destination, req.user);
-    audit.log('file.extract', req, { archive: archivePath, destination });
     res.json(result);
   } catch (err) {
     res.status(400).json({ error: err.message });

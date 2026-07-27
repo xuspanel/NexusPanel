@@ -1,5 +1,15 @@
 # Changelog
 
+## [1.24.2] - 2026-07-27
+### Fixed
+- **Conflict resolution strategies not working**: Duplicate route handlers for `/copyto`, `/moveto`, `/extract` in `files.js` — old handlers registered first and silently ignored the `strategy` parameter, causing all conflict operations to fail
+- **Double-append of filename in batch copy/move/clipboard**: Backend functions treat `destination` as a directory and append `basename(source)`, but batch handlers were also appending the filename, resulting in wrong destination paths
+- **Single copy/move destination defaults**: `fmShowCopyTo`/`fmShowMoveTo` now pre-fill destination with the parent directory instead of the full source path
+- **Duplicate `deleteEntry` function in filemanager.js**: Removed dead-code permanent-delete version that was shadowed by the bin version via JS hoisting
+- **Cross-device `moveEntry` using bin instead of permanent delete**: Now calls `deleteEntryPermanent()` directly for EXDEV fallback
+- **`copyEntryWithOverwrite`/`moveEntryWithOverwrite` inconsistent destination handling**: Now treat `destination` as a directory (append source basename), consistent with `checkConflicts` and strategy functions
+- **Bin not loading on File Manager init**: Added `fmLoadBin()` call to `initFileManager()`
+
 ## [1.24.0] - 2026-07-26
 ### Added
 - **Bin/Trash feature for File Manager**: Deleted files moved to `data/filebin/` with metadata manifest, restore, permanent delete, and empty bin operations

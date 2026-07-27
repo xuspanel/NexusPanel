@@ -143,7 +143,7 @@ async function moveEntry(source, destination, user) {
   } catch (err) {
     if (err.code === 'EXDEV') {
       await copyEntry(source, destination, user);
-      await deleteEntry(source, user);
+      await deleteEntryPermanent(safeSrc);
     } else {
       throw err;
     }
@@ -175,7 +175,9 @@ async function duplicateEntry(targetPath, user) {
 
 async function copyEntryWithOverwrite(source, destination, overwrite, user) {
   const safeSource = safeResolve(source, user);
-  const safeDest = safeResolve(destination, user);
+  const destDir = safeResolve(destination, user);
+  const name = path.basename(safeSource);
+  const safeDest = path.join(destDir, name);
   
   if (fs.existsSync(safeDest) && !overwrite) {
     throw new Error('Destination already exists. Use overwrite=true to replace.');
@@ -197,7 +199,7 @@ async function copyEntryWithOverwrite(source, destination, overwrite, user) {
     for (const entry of entries) {
       const srcPath = path.join(safeSource, entry.name);
       const destPath = path.join(safeDest, entry.name);
-      await copyEntryWithOverwrite(srcPath, destPath, overwrite, user);
+      await copyEntryWithOverwrite(srcPath, path.dirname(destPath), overwrite, user);
     }
   } else {
     await fsp.mkdir(path.dirname(safeDest), { recursive: true });
@@ -209,7 +211,9 @@ async function copyEntryWithOverwrite(source, destination, overwrite, user) {
 
 async function moveEntryWithOverwrite(source, destination, overwrite, user) {
   const safeSource = safeResolve(source, user);
-  const safeDest = safeResolve(destination, user);
+  const destDir = safeResolve(destination, user);
+  const name = path.basename(safeSource);
+  const safeDest = path.join(destDir, name);
 
   if (fs.existsSync(safeDest) && !overwrite) {
     throw new Error('Destination already exists. Use overwrite=true to replace.');
@@ -230,7 +234,7 @@ async function moveEntryWithOverwrite(source, destination, overwrite, user) {
     for (const entry of entries) {
       const srcPath = path.join(safeSource, entry.name);
       const destPath = path.join(safeDest, entry.name);
-      await moveEntryWithOverwrite(srcPath, destPath, overwrite, user);
+      await moveEntryWithOverwrite(srcPath, path.dirname(destPath), overwrite, user);
     }
     await fsp.rm(safeSource, { recursive: true });
   } else {
@@ -285,17 +289,6 @@ async function searchFiles(rootPath, query, includePatterns, excludePatterns, us
   }
   await walk(safeRoot, 0);
   return results;
-}
-
-async function deleteEntry(targetPath, user) {
-  const safePath = safeResolve(targetPath, user);
-  const stat = await fsp.stat(safePath);
-  if (stat.isDirectory()) {
-    await fsp.rm(safePath, { recursive: true, force: true });
-  } else {
-    await fsp.unlink(safePath);
-  }
-  return { success: true };
 }
 
 async function createArchive(paths, destination, format, user) {

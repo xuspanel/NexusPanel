@@ -358,10 +358,11 @@ function openFmModal(title, bodyHtml) {
 }
 
 function fmShowCopyTo(path, name) {
+  const parentDir = path.substring(0, path.lastIndexOf('/')) || '/';
   openFmModal('📋 Copy to...', `
     <div class="fm-form-group">
       <label class="fm-form-label">Destination</label>
-      <input class="fm-form-input" id="fmCopyDest" value="${escapeAttr(path)}" placeholder="/new/path">
+      <input class="fm-form-input" id="fmCopyDest" value="${escapeAttr(parentDir)}" placeholder="/new/path">
     </div>
     <div class="fm-form-actions">
       <button class="fm-btn fm-btn-cancel">Cancel</button>
@@ -394,10 +395,11 @@ function fmShowCopyTo(path, name) {
 }
 
 function fmShowMoveTo(path, name) {
+  const parentDir = path.substring(0, path.lastIndexOf('/')) || '/';
   openFmModal('✂️ Move to...', `
     <div class="fm-form-group">
       <label class="fm-form-label">Destination</label>
-      <input class="fm-form-input" id="fmMoveDest" value="${escapeAttr(path)}" placeholder="/new/path">
+      <input class="fm-form-input" id="fmMoveDest" value="${escapeAttr(parentDir)}" placeholder="/new/path">
     </div>
     <div class="fm-form-actions">
       <button class="fm-btn fm-btn-cancel">Cancel</button>
@@ -1478,6 +1480,7 @@ async function initFileManager() {
   /* Conflict modal tab switching is handled inline in fmShowConflictModal */
 
   await fmLoadDirectory();
+  fmLoadBin();
 }
 
 /* ── Batch Move To ── */
@@ -1502,8 +1505,7 @@ function fmShowMoveToBatch(paths) {
         fmShowConflictModal(conflicts.conflicts, paths.length, 'move', async (strategy) => {
           try {
             for (const p of paths) {
-              const name = p.split('/').pop();
-              await API.file.moveto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, strategy });
+              await API.file.moveto({ source: p, destination: dest, strategy });
             }
             closeFmModal(); await fmLoadDirectory(); fmRefreshBin();
             fmShowToast(`Moved ${paths.length} items`, 'success');
@@ -1511,8 +1513,7 @@ function fmShowMoveToBatch(paths) {
         });
       } else {
         for (const p of paths) {
-          const name = p.split('/').pop();
-          await API.file.moveto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, overwrite: false });
+          await API.file.moveto({ source: p, destination: dest, overwrite: false });
         }
         closeFmModal(); await fmLoadDirectory();
         fmShowToast(`Moved ${paths.length} items`, 'success');
@@ -1543,8 +1544,7 @@ function fmShowCopyToBatch(paths) {
         fmShowConflictModal(conflicts.conflicts, paths.length, 'copy', async (strategy) => {
           try {
             for (const p of paths) {
-              const name = p.split('/').pop();
-              await API.file.copyto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, strategy });
+              await API.file.copyto({ source: p, destination: dest, strategy });
             }
             closeFmModal(); await fmLoadDirectory(); fmRefreshBin();
             fmShowToast(`Copied ${paths.length} items`, 'success');
@@ -1552,8 +1552,7 @@ function fmShowCopyToBatch(paths) {
         });
       } else {
         for (const p of paths) {
-          const name = p.split('/').pop();
-          await API.file.copyto({ source: p, destination: dest.replace(/\/$/, '') + '/' + name, overwrite: false });
+          await API.file.copyto({ source: p, destination: dest, overwrite: false });
         }
         closeFmModal(); await fmLoadDirectory();
         fmShowToast(`Copied ${paths.length} items`, 'success');
@@ -1916,13 +1915,11 @@ async function fmClipboardPaste() {
       fmShowConflictModal(conflicts.conflicts, paths.length, action === 'copy' ? 'copy' : 'move', async (strategy) => {
         const innerResults = [];
         for (const src of paths) {
-          const name = src.split('/').pop();
-          const target = dest.replace(/\/$/, '') + '/' + name;
           try {
             if (action === 'copy') {
-              await API.file.copyto({ source: src, destination: target, strategy });
+              await API.file.copyto({ source: src, destination: dest, strategy });
             } else {
-              await API.file.moveto({ source: src, destination: target, strategy });
+              await API.file.moveto({ source: src, destination: dest, strategy });
             }
             innerResults.push({ src, ok: true });
           } catch (e) {
@@ -1945,13 +1942,11 @@ async function fmClipboardPaste() {
   } catch (e) { fmShowToast(e.message, 'error'); return; }
 
   for (const src of paths) {
-    const name = src.split('/').pop();
-    const target = dest.replace(/\/$/, '') + '/' + name;
     try {
       if (action === 'copy') {
-        await API.file.copyto({ source: src, destination: target, overwrite: false });
+        await API.file.copyto({ source: src, destination: dest, overwrite: false });
       } else {
-        await API.file.moveto({ source: src, destination: target, overwrite: false });
+        await API.file.moveto({ source: src, destination: dest, overwrite: false });
       }
       results.push({ src, ok: true });
     } catch (e) {
