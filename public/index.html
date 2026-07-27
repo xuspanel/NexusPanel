@@ -43,7 +43,7 @@
   <script defer src="/js/firewall.js?v=1.27.0"></script>
   <script defer src="/js/ssl.js?v=1.28.0"></script>
   <script defer src="/js/phpfpm.js?v=1.29.0"></script>
-  <script defer src="/js/updates.js?v=1.1.0"></script>
+  <script defer src="/js/updates.js?v=1.30.0"></script>
   <script defer src="/js/settings.js?v=1.6.1"></script>
   <script defer src="/js/search.js?v=1.9.6"></script>
   <script defer src="/js/notifications.js?v=1.1.0"></script>
@@ -2316,9 +2316,16 @@
     </main>
     <!-- System Updates View -->
     <main class="dashboard-content" id="viewUpdates" style="display:none;">
-        <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔄</span><div class="db-header-info"><div class="db-header-title">System Updates</div><div class="db-header-subtitle">Package manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" onclick="checkUpdates()" title="Refresh">↻</button></div></div>
-      <div id="panelUpdateInfo" style="margin-bottom:16px"></div>
-      <div id="updList" class="upd-list"></div>
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🔄</span><div class="db-header-info"><div class="db-header-title">System Updates</div><div class="db-header-subtitle">Package manager</div></div></div><div class="db-header-right"><button class="db-btn db-btn-icon" data-action="refresh-updates" title="Refresh">↻</button></div></div>
+      <div id="updatesContent">
+        <div id="updSummaryBar" class="upd-summary-bar"></div>
+        <div id="panelUpdateCard" class="upd-panel-card"></div>
+        <div class="upd-search-bar"><input type="text" id="updSearchInput" class="db-input" placeholder="Search system packages..." autocomplete="off"><button class="db-btn" data-action="clear-search">Clear</button></div>
+        <div id="updSearchResults" class="upd-search-results"></div>
+        <div id="updList" class="upd-list"></div>
+        <div class="upd-section"><div class="upd-section-header"><span class="upd-section-title">🛡️ Security Advisories</span><button class="db-btn db-btn-sm" data-action="check-security">Check</button></div><div id="updSecuritySection" class="upd-section-body"><div class="upd-empty">Click Check to scan for security advisories</div></div></div>
+        <div class="upd-section"><div class="upd-section-header"><span class="upd-section-title">📋 Update History</span><button class="db-btn db-btn-sm" data-action="check-history">Load</button></div><div id="updHistorySection" class="upd-section-body"><div class="upd-empty">Click Load to view update history</div></div></div>
+      </div>
     </main>
     <!-- Settings View -->
     <main class="dashboard-content" id="viewSettings" style="display:none;">

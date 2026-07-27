@@ -469,6 +469,11 @@ const API = {
     applySingle: (name) => API.request('POST', '/updates/apply/' + encodeURIComponent(name)),
     panelCheck: (force) => API.request('GET', '/updates/panel-check' + (force ? '?force=true' : '')),
     panelApply: () => API.request('POST', '/updates/panel-apply'),
+    search: (q) => API.request('GET', '/updates/search?q=' + encodeURIComponent(q)),
+    info: (name) => API.request('GET', '/updates/info/' + encodeURIComponent(name)),
+    security: () => API.request('GET', '/updates/security'),
+    history: () => API.request('GET', '/updates/history'),
+    changelog: () => API.request('GET', '/updates/changelog'),
   },
   settings: {
     get: () => API.request('GET', '/settings'),

@@ -1,5 +1,56 @@
 # Changelog
 
+## [1.30.0] - 2026-07-28
+### Changed
+- **Updates Module complete rewrite** — 191 lines → 430 lines (backend), 147 → 620 lines (frontend), 22 → 130 lines (routes), 30 → 120 lines (CSS)
+### Added
+- Backend: `searchPackages()` — dnf/apt package search with sanitized input
+- Backend: `getPackageInfo()` — detailed package metadata via dnf info/apt-cache show
+- Backend: `getSecurityAdvisories()` — dnf security advisory parsing with severity levels
+- Backend: `getUpdateHistory()` — persistent update log in `data/update-history.json` (max 100 entries)
+- Backend: `recordUpdate()` — auto-records all update operations with timestamp and results
+- Backend: `spawnPanelUpdateStream()` — child process spawner for SSE streaming
+- Backend: Atomic file writes (temp + rename) for history and cache files
+- Backend: Strict package name validation (rejects `..`, `/`, shell metacharacters, >200 chars)
+- Backend: HTTPS timeout on remote version fetch (10s)
+- Routes: `GET /search` — package search endpoint
+- Routes: `GET /info/:name` — package detail endpoint
+- Routes: `GET /security` — security advisories endpoint
+- Routes: `GET /history` — update history endpoint
+- Routes: `GET /changelog` — panel changelog endpoint
+- Routes: `GET /panel-update-stream` — SSE endpoint for real-time panel update progress
+- Routes: Audit logging on all apply operations with results
+- Frontend: IIFE pattern (matches all other modules)
+- Frontend: Event delegation with `data-action` attributes (no inline onclick)
+- Frontend: Summary bar with 4 stat cards (updates, security, history, panel version)
+- Frontend: Panel update card with SSE-driven real-time progress display
+- Frontend: System updates with search bar, select-all checkbox, per-package update
+- Frontend: Security advisories section with severity badges (critical/important/moderate/low)
+- Frontend: Update history section with success/fail icons and timestamps
+- Frontend: Debounced search (300ms) for system packages
+- Frontend: Package detail modal with metadata grid
+- Frontend: Confirm modals for bulk apply and panel update
+- Frontend: Progress modal with live output stream
+- Frontend: Toast notification system (success/error/info)
+- Frontend: Loading/error/empty states for all async operations
+- Frontend: Checkbox components with custom styling
+- CSS: Summary bar grid layout
+- CSS: Security severity badges with color coding
+- CSS: Update history timeline styling
+- CSS: Progress stream display (monospace, scrollable)
+- CSS: Modal content layouts (changelog, package list, info grid)
+- CSS: Toast notification animation
+- CSS: Spinner animation for loading states
+- CSS: Light theme overrides for all new components
+- CSS: Mobile responsive (2-column stat grid, stacked toolbar, wrapped items)
+### Fixed
+- Backend: `execSync` replaced with `runSafeSync` (prevents server hang on slow network)
+- Backend: `applyPanelUpdate` now returns Promise instead of callback
+- Frontend: Removed all `alert()`/`confirm()` calls — replaced with proper modals
+- Frontend: Removed all inline `onclick` handlers — replaced with event delegation
+- Frontend: Panel update now streams progress via SSE instead of blind fire-and-forget
+- Frontend: Removed global function pollution (IIFE encapsulation)
+
 ## [1.29.0] - 2026-07-28
 ### Changed
 - **PHP-FPM Manager module complete rewrite** — 43 lines → 400 lines (backend), 29 → 550 lines (frontend), 11 → 100 lines (routes), 7 → 120 lines (CSS)
