@@ -1,6 +1,6 @@
 {
   "name": "nexuspanel",
-  "version": "1.24.2",
+  "version": "1.24.3",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",

@@ -201,16 +201,15 @@
     }
 
     showContent();
-    el.innerHTML = pageEntries.map(function (e, i) {
-      var realIdx = start + i;
+    el.innerHTML = pageEntries.map(function (e) {
+      var entryIdx = e.index;
       var freqClass = getFreqClass(e);
       var freqLabel = getFreqLabel(e);
       var scheduleText = e.shorthand || (e.minute + ' ' + e.hour + ' ' + e.dom + ' ' + e.month + ' ' + e.dow);
       var nextStr = '';
       if (e.nextRunFormatted && e.enabled) nextStr = '<div class="cron-next">in ' + esc(e.nextRunFormatted) + '</div>';
       var disabledCls = e.enabled ? '' : ' cron-disabled';
-      return '<div class="cron-entry' + disabledCls + '" data-cron-idx="' + realIdx + '">' +
-        '<input type="checkbox" class="cron-entry-select" data-cron-action="select" data-idx="' + realIdx + '">' +
+      return '<div class="cron-entry' + disabledCls + '">' +
         '<div style="flex:1;min-width:0;">' +
           '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">' +
             '<span class="cron-schedule-badge ' + freqClass + '">' + esc(freqLabel) + '</span>' +
@@ -221,10 +220,10 @@
           '<div class="cron-desc">' + esc(e.description || '') + '</div>' +
         '</div>' +
         '<div class="cron-actions">' +
-          '<button class="cron-btn" data-cron-action="detail" data-idx="' + realIdx + '" title="View details">&#8505;</button>' +
-          '<button class="cron-btn" data-cron-action="toggle" data-idx="' + realIdx + '" title="' + (e.enabled ? 'Disable' : 'Enable') + '">' + (e.enabled ? '&#9646;&#9646;' : '&#9654;') + '</button>' +
-          '<button class="cron-btn" data-cron-action="edit" data-idx="' + realIdx + '" title="Edit">&#9998;</button>' +
-          '<button class="cron-btn cron-btn-danger" data-cron-action="delete" data-idx="' + realIdx + '" title="Delete">&#128465;</button>' +
+          '<button class="cron-btn" data-cron-action="detail" data-idx="' + entryIdx + '" title="View details">&#8505;</button>' +
+          '<button class="cron-btn" data-cron-action="toggle" data-idx="' + entryIdx + '" title="' + (e.enabled ? 'Disable' : 'Enable') + '">' + (e.enabled ? '&#9646;&#9646;' : '&#9654;') + '</button>' +
+          '<button class="cron-btn" data-cron-action="edit" data-idx="' + entryIdx + '" title="Edit">&#9998;</button>' +
+          '<button class="cron-btn cron-btn-danger" data-cron-action="delete" data-idx="' + entryIdx + '" title="Delete">&#128465;</button>' +
         '</div>' +
         '</div>';
     }).join('');
@@ -281,9 +280,6 @@
         cronState.owner = cronState.owners[0].name;
       }
       cronState.entries = await API.cron.list(cronState.owner);
-      for (var i = 0; i < cronState.entries.length; i++) {
-        cronState.entries[i].index = i;
-      }
       render();
     } catch (e) {
       cronState.error = e.message || 'Failed to load cron jobs';

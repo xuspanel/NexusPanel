@@ -46,13 +46,12 @@ router.get('/:owner/describe', adminOnly, (req, res) => {
 router.get('/:owner', adminOnly, (req, res) => {
   try {
     const entries = cron.list(req.params.owner);
-    const enriched = entries.map((e, i) => ({
-      ...e,
-      index: i,
-      description: cron.describeSchedule(e),
-      nextRun: cron.calcNextRun(e),
-      nextRunFormatted: cron.calcNextRun(e) ? cron.formatDuration(cron.calcNextRun(e) - new Date()) : null,
-    }));
+    const enriched = entries.map((e, i) => {
+      const description = cron.describeSchedule(e);
+      const nextRun = cron.calcNextRun(e);
+      const nextRunFormatted = nextRun ? cron.formatDuration(nextRun - new Date()) : null;
+      return { ...e, index: i, description, nextRun, nextRunFormatted };
+    });
     res.json(enriched);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });

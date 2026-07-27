@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.24.3] - 2026-07-27
+### Fixed
+- **Cron Jobs — critical index mismatch (operated on wrong job)**: Frontend `data-idx` attributes used filtered/sorted positions to look up the unsorted `entries` array — toggling, editing, or deleting operated on the wrong cron job when sorted. Now uses backend `.index` property as stable identifier
+- **Cron Jobs — shorthand entries saved as `* * * * *` (every minute)**: `validateEntry()` discarded the `shorthand` property, causing `@daily`, `@reboot`, etc. entries to fall through to field-based scheduling with empty defaults. Now preserves `shorthand` through validation
+- **Cron Jobs — triple `calcNextRun` per entry on list endpoint**: `describeSchedule`, `calcNextRun`, and `formatDuration` each called `calcNextRun` separately. Now computed once and reused
+- **Cron Jobs — dead code removed**: Select checkboxes (no-op), `data-cron-idx` attribute (unused), `.index` overwrite loop in `loadCron()` (clobbered backend's stable index)
+
 ## [1.24.2] - 2026-07-27
 ### Fixed
 - **Conflict resolution strategies not working**: Duplicate route handlers for `/copyto`, `/moveto`, `/extract` in `files.js` — old handlers registered first and silently ignored the `strategy` parameter, causing all conflict operations to fail

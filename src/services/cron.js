@@ -76,14 +76,28 @@ function validateEntry(entry) {
   if (!cmd || cmd === '*') throw new Error('Command is required');
   if (cmd.length > 2048) throw new Error('Command too long (max 2048 chars)');
 
+  const shorthands = ['@reboot', '@yearly', '@annually', '@monthly', '@weekly', '@daily', '@midnight', '@hourly'];
+  const hasShorthand = shorthands.some(s => cmd.startsWith(s + ' ') || cmd === s);
+
+  if (entry.shorthand) {
+    if (!shorthands.includes(entry.shorthand)) throw new Error('Invalid shorthand: ' + entry.shorthand);
+    return {
+      shorthand: entry.shorthand,
+      minute: '*',
+      hour: '*',
+      dom: '*',
+      month: '*',
+      dow: '*',
+      command: cmd,
+      enabled: entry.enabled !== false,
+    };
+  }
+
   if (!validateCronField(entry.minute, 'minute', 0, 59)) throw new Error('Invalid minute field');
   if (!validateCronField(entry.hour, 'hour', 0, 23)) throw new Error('Invalid hour field');
   if (!validateCronField(entry.dom, 'day of month', 1, 31)) throw new Error('Invalid day of month field');
   if (!validateCronField(entry.month, 'month', 1, 12)) throw new Error('Invalid month field');
   if (!validateCronField(entry.dow, 'day of week', 0, 7)) throw new Error('Invalid day of week field');
-
-  const shorthands = ['@reboot', '@yearly', '@annually', '@monthly', '@weekly', '@daily', '@midnight', '@hourly'];
-  const hasShorthand = shorthands.some(s => cmd.startsWith(s + ' ') || cmd === s);
 
   return {
     minute: sanitizeField(entry.minute),
