@@ -1,18 +1,99 @@
 const express = require('express');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 const fw = require('../services/firewall');
+const audit = require('../services/audit');
 const router = express.Router();
 router.use(authMiddleware);
-const audit = require('../services/audit');
 router.use(audit.routeLogger('firewall'));
-router.get('/', adminOnly, (req, res) => { res.json(fw.listRules()); });
+
+router.get('/', adminOnly, (req, res) => {
+  try { res.json(fw.getOverallInfo()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/backend', adminOnly, (req, res) => {
+  try { res.json({ backend: fw.detectBackend() }); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/services', adminOnly, (req, res) => {
+  try { res.json(fw.getFirewalldServices()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/zone/service', adminOnly, (req, res) => {
+  try { fw.addFirewalldService(req.body.zone, req.body.service); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.delete('/zone/service', adminOnly, (req, res) => {
+  try { fw.removeFirewalldService(req.body.zone, req.body.service); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.post('/zone/port', adminOnly, (req, res) => {
+  try { fw.addFirewalldPort(req.body.zone, req.body.port); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.delete('/zone/port', adminOnly, (req, res) => {
+  try { fw.removeFirewalldPort(req.body.zone, req.body.port); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.post('/zone/rich-rule', adminOnly, (req, res) => {
+  try { fw.addFirewalldRichRule(req.body.zone, req.body.rule); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.delete('/zone/rich-rule', adminOnly, (req, res) => {
+  try { fw.removeFirewalldRichRule(req.body.zone, req.body.rule); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.put('/zone/default', adminOnly, (req, res) => {
+  try { fw.setFirewalldDefaultZone(req.body.zone); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.put('/zone/masquerade', adminOnly, (req, res) => {
+  try { fw.toggleFirewalldMasquerade(req.body.zone, req.body.enable); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.post('/zone/icmp-block', adminOnly, (req, res) => {
+  try { fw.addFirewalldIcmpBlock(req.body.zone, req.body.icmp); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.delete('/zone/icmp-block', adminOnly, (req, res) => {
+  try { fw.removeFirewalldIcmpBlock(req.body.zone, req.body.icmp); res.json({ ok: true }); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 router.post('/rule', adminOnly, (req, res) => {
-  try { res.json(fw.addRule(req.body.chain, req.body.rule)); }
+  try { res.json(fw.addIptablesRule(req.body.chain, req.body.rule)); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
+
+router.put('/policy', adminOnly, (req, res) => {
+  try { res.json(fw.setIptablesPolicy(req.body.chain, req.body.target)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 router.delete('/rule/:chain/:num', adminOnly, (req, res) => {
-  try { res.json(fw.deleteRule(req.params.chain, parseInt(req.params.num))); }
+  try { res.json(fw.deleteIptablesRule(req.params.chain, parseInt(req.params.num))); }
   catch (e) { res.status(400).json({ error: e.message }); }
 });
-router.post('/save', adminOnly, (req, res) => { fw.saveRules(); res.json({ ok: true }); });
+
+router.post('/flush/:chain', adminOnly, (req, res) => {
+  try { res.json(fw.flushIptablesChain(req.params.chain)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.post('/save', adminOnly, (req, res) => {
+  try { res.json(fw.saveIptablesRules()); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 module.exports = router;

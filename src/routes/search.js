@@ -74,13 +74,26 @@ function searchCron(q) {
 
 function searchFirewall(q) {
   try {
+    const fwCheck = execSync("firewall-cmd --state 2>/dev/null", { encoding: 'utf8', timeout: 2000 }).trim();
+    if (fwCheck === 'running') {
+      const zones = execSync("firewall-cmd --get-zones 2>/dev/null", { encoding: 'utf8', timeout: 2000 }).trim().split(/\s+/);
+      const results = [];
+      for (const zone of zones) {
+        if (zone.toLowerCase().includes(q)) results.push({ type: 'firewall', module: 'Firewall', title: 'Zone: ' + zone, desc: 'firewalld zone', view: 'firewall' });
+        try {
+          const svc = execSync("firewall-cmd --zone=" + zone + " --list-services 2>/dev/null", { encoding: 'utf8', timeout: 2000 }).trim();
+          svc.split(/\s+/).filter(Boolean).forEach(s => { if (s.toLowerCase().includes(q)) results.push({ type: 'firewall', module: 'Firewall', title: zone + ' / ' + s, desc: 'firewalld service', view: 'firewall' }); });
+          const ports = execSync("firewall-cmd --zone=" + zone + " --list-ports 2>/dev/null", { encoding: 'utf8', timeout: 2000 }).trim();
+          ports.split(/\s+/).filter(Boolean).forEach(p => { if (p.toLowerCase().includes(q)) results.push({ type: 'firewall', module: 'Firewall', title: zone + ' / ' + p, desc: 'firewalld port', view: 'firewall' }); });
+        } catch {}
+      }
+      return results;
+    }
+  } catch {}
+  try {
     const out = execSync("iptables -L -n --line-numbers 2>/dev/null | head -80", { encoding: 'utf8', timeout: 2000 });
     return out.split('\n').filter(l => l.includes(':') && l.toLowerCase().includes(q)).map(line => ({
-      type: 'firewall',
-      module: 'Firewall',
-      title: line.trim().substring(0, 60),
-      desc: 'iptables rule',
-      view: 'firewall'
+      type: 'firewall', module: 'Firewall', title: line.trim().substring(0, 60), desc: 'iptables rule', view: 'firewall'
     }));
   } catch { return []; }
 }

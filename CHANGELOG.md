@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.25.0] - 2026-07-28
+### Added
+- **Firewall Rules module — complete rewrite**: From 132 lines to full-featured firewall management
+- **Multi-backend firewall detection**: Auto-detects active firewall: firewalld > ufw > nftables > iptables > none
+- **Firewalld zone management**: Full zone listing with default zone indicator, active zone badges, interface assignments
+- **Firewalld service management**: Add/remove services to zones with chip-style UI, confirmation dialogs
+- **Firewalld port management**: Add/remove ports (tcp/udp) to zones with format validation
+- **Firewalld rich rules**: Add/remove rich rules with formatted display
+- **Firewalld masquerade toggle**: Enable/disable masquerade per zone
+- **Firewalld default zone setter**: Change default zone with confirmation
+- **Firewalld ICMP block management**: Add/remove ICMP type blocks
+- **Firewalld zone tabs**: Zones view and Services view tabs for firewalld backend
+- **iptables chain management**: Chain listing with policies, Docker chain badges, rule counts
+- **iptables chain policy editor**: Change INPUT/OUTPUT/FORWARD policy (ACCEPT/DROP/REJECT) with dropdown
+- **iptables chain flush**: Flush all rules in a chain with confirmation
+- **iptables rule deletion**: Delete rules by chain and line number
+- **iptables rule stats**: Human-readable packet/byte counters (B, KB, MB, GB)
+- **UFW status display**: Active/inactive status with default policies
+- **Firewall backend badge**: Header shows which firewall system is active (color-coded)
+- **Zone selector dropdown**: Switch between zones in firewalld mode
+- **Delete confirmation dialogs**: All destructive operations require confirmation
+- **Toast notifications**: Success/error feedback for all operations
+- **Loading/error/empty states**: Consistent with NexusPanel module patterns
+- **Event delegation**: All click handlers use `data-fw-action` attributes (no inline onclick)
+- **Light theme support**: All new components styled for both dark and light themes
+- **Search integration**: Global search now queries firewalld zones, services, and ports
+- **Service grid view**: Overview of all services across zones in a card grid layout
+
+### Fixed
+- **Firewall module operating on wrong backend**: Module only managed raw iptables when firewalld was the actual active firewall. Now detects and integrates with firewalld, ufw, or iptables
+- **`saveRules()` silent failure**: Now returns success/failure status with path or error message
+- **`listRules()` error swallowing**: Now returns meaningful error state instead of empty chains
+- **Docker chain confusion**: Docker-managed chains now show a "Docker" badge to indicate they shouldn't be modified
+
 ## [1.24.3] - 2026-07-27
 ### Fixed
 - **Cron Jobs — critical index mismatch (operated on wrong job)**: Frontend `data-idx` attributes used filtered/sorted positions to look up the unsorted `entries` array — toggling, editing, or deleting operated on the wrong cron job when sorted. Now uses backend `.index` property as stable identifier
