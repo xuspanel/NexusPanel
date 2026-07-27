@@ -129,4 +129,24 @@ router.post('/save', adminOnly, (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+router.get('/stats', adminOnly, (req, res) => {
+  try { res.json(fw.getLiveStats()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/conntrack', adminOnly, (req, res) => {
+  try { res.json(fw.getConntrack(req.query.limit)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/top-talkers', adminOnly, (req, res) => {
+  try { res.json(fw.getTopTalkers(req.query.limit)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/log', adminOnly, (req, res) => {
+  try { res.json(fw.getFirewallLog(req.query.lines)); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.27.0] - 2026-07-28
+### Added
+- **Live rule stats with auto-refresh**: Monitoring tab with real-time packet/byte counters per chain, auto-refreshes every 5 seconds
+- **Conntrack connection viewer**: Active connection tracking table with protocol, source/destination IP+port, TCP state, TTL — parsed from `/proc/net/nf_conntrack` with numeric-to-name TCP state mapping
+- **Top talkers analysis**: Top 20 source and destination IPs by connection count with horizontal bar chart visualization
+- **Firewall log viewer**: Reads journalctl firewall entries (DROP, REJECT, IN_, OUT_, FORWARD patterns) with timestamp and message
+- **Conntrack usage monitor**: Visual progress bar showing conntrack table utilization (count/max with percentage and danger color at >80%)
+- **Monitoring tab**: Sub-tabs (Live Stats / Connections / Top Talkers / Firewall Log) for both firewalld and iptables backends
+- **Chain stats table**: Aggregated packet/byte totals per chain with sortable columns
+- **Conntrack CLI installed**: Added `conntrack-tools` package for enhanced connection tracking
+
 ## [1.26.0] - 2026-07-28
 ### Added
 - **iptables rule editing**: Replace existing rules in-place via Edit button (delete + insert at same position)

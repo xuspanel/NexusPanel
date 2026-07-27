@@ -10199,6 +10199,53 @@ body::before {
 .fw-toast.error { background:rgba(239,68,68,0.9); color:#fff; }
 .fw-toast.info { background:rgba(59,130,246,0.9); color:#fff; }
 @keyframes fw-toast-in { from { opacity:0; transform:translateY(10px); } to { opacity:1; transform:translateY(0); } }
+.fw-monitor { display:flex; flex-direction:column; gap:16px; }
+.fw-monitor-tabs { display:flex; gap:2px; background:rgba(255,255,255,0.03); border-radius:var(--radius-sm); padding:2px; }
+.fw-stats-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:12px; margin-bottom:16px; }
+.fw-stat-card { padding:16px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-md); }
+.fw-stat-label { font-size:11px; font-weight:600; text-transform:uppercase; color:var(--text-tertiary); letter-spacing:0.5px; margin-bottom:6px; }
+.fw-stat-value { font-size:22px; font-weight:700; color:var(--text-primary); }
+.fw-stat-sub { font-size:11px; color:var(--text-muted); margin-top:4px; }
+.fw-stat-bar { height:4px; background:rgba(255,255,255,0.05); border-radius:2px; margin-top:8px; overflow:hidden; }
+.fw-stat-bar-fill { height:100%; background:var(--accent-cyan); border-radius:2px; transition:width 0.5s ease; }
+.fw-stat-bar-danger { background:#ef4444; }
+.fw-stats-table { display:flex; flex-direction:column; border:1px solid var(--glass-border); border-radius:var(--radius-md); overflow:hidden; margin-bottom:12px; }
+.fw-stats-header, .fw-stats-row { display:grid; grid-template-columns:1fr 1fr 1fr 80px; padding:8px 14px; font-size:12px; }
+.fw-stats-header { background:rgba(255,255,255,0.03); font-weight:600; color:var(--text-tertiary); font-size:11px; text-transform:uppercase; letter-spacing:0.3px; }
+.fw-stats-row { border-top:1px solid var(--glass-border); color:var(--text-secondary); }
+.fw-stats-row:hover { background:rgba(255,255,255,0.02); }
+.fw-stats-chain { font-weight:600; color:var(--text-primary); }
+.fw-stats-time { font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:8px; }
+.fw-conntrack-table { display:flex; flex-direction:column; border:1px solid var(--glass-border); border-radius:var(--radius-md); overflow:hidden; max-height:500px; overflow-y:auto; }
+.fw-conntrack-header, .fw-conntrack-row { display:grid; grid-template-columns:60px 1fr 60px 1fr 60px 80px 50px; padding:6px 12px; font-size:11px; align-items:center; }
+.fw-conntrack-header { background:rgba(255,255,255,0.03); font-weight:600; color:var(--text-tertiary); font-size:10px; text-transform:uppercase; letter-spacing:0.3px; position:sticky; top:0; }
+.fw-conntrack-row { border-top:1px solid var(--glass-border); color:var(--text-secondary); }
+.fw-conntrack-row:hover { background:rgba(255,255,255,0.02); }
+.fw-conntrack-ip { font-family:var(--font-mono); }
+.fw-proto-badge { font-size:10px; font-weight:600; padding:1px 6px; border-radius:4px; background:rgba(168,85,247,0.15); color:#a855f7; text-transform:uppercase; }
+.fw-state-badge { font-size:10px; font-weight:600; padding:1px 6px; border-radius:4px; }
+.fw-state-established { background:rgba(34,197,94,0.15); color:#22c55e; }
+.fw-state-syn_sent { background:rgba(234,179,8,0.15); color:#eab308; }
+.fw-state-syn_recv { background:rgba(234,179,8,0.15); color:#eab308; }
+.fw-state-time_wait { background:rgba(107,114,128,0.15); color:#9ca3af; }
+.fw-state-close_wait { background:rgba(249,115,22,0.15); color:#f97316; }
+.fw-state-listen { background:rgba(59,130,246,0.15); color:#3b82f6; }
+.fw-top-talkers { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+.fw-tt-section { border:1px solid var(--glass-border); border-radius:var(--radius-md); overflow:hidden; }
+.fw-tt-title { padding:10px 14px; background:rgba(255,255,255,0.03); font-size:13px; font-weight:600; color:var(--text-primary); }
+.fw-tt-row { display:flex; align-items:center; gap:8px; padding:5px 14px; border-top:1px solid var(--glass-border); }
+.fw-tt-ip { font-family:var(--font-mono); font-size:11px; color:var(--text-secondary); min-width:120px; }
+.fw-tt-bar-wrap { flex:1; height:6px; background:rgba(255,255,255,0.05); border-radius:3px; overflow:hidden; }
+.fw-tt-bar { height:100%; background:var(--accent-cyan); border-radius:3px; transition:width 0.3s; }
+.fw-tt-bar-dst { background:#a855f7; }
+.fw-tt-count { font-size:11px; color:var(--text-muted); font-family:var(--font-mono); min-width:40px; text-align:right; }
+.fw-log-controls { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
+.fw-log-count { font-size:11px; color:var(--text-muted); }
+.fw-log-container { border:1px solid var(--glass-border); border-radius:var(--radius-md); overflow:hidden; max-height:500px; overflow-y:auto; font-family:var(--font-mono); }
+.fw-log-entry { display:flex; gap:10px; padding:4px 12px; font-size:11px; border-top:1px solid var(--glass-border); }
+.fw-log-entry:hover { background:rgba(255,255,255,0.02); }
+.fw-log-time { color:var(--text-muted); white-space:nowrap; min-width:140px; }
+.fw-log-msg { color:var(--text-secondary); word-break:break-all; flex:1; }
 
 /* ─── SSL ─── */
 .ssl-list { display:flex; flex-direction:column; gap:8px; }
@@ -10406,6 +10453,20 @@ body::before {
 [data-theme="light"] .fw-zone-select { background: rgba(255,255,255,0.8); border-color: rgba(0,0,0,0.1); }
 [data-theme="light"] .fw-service-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); }
 [data-theme="light"] .fw-policy-select { background: rgba(255,255,255,0.8); border-color: rgba(0,0,0,0.1); }
+[data-theme="light"] .fw-stat-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.08); }
+[data-theme="light"] .fw-stats-header { background: rgba(0,0,0,0.02); }
+[data-theme="light"] .fw-stats-row { border-color: rgba(0,0,0,0.05); }
+[data-theme="light"] .fw-stats-row:hover { background: rgba(0,0,0,0.02); }
+[data-theme="light"] .fw-conntrack-header { background: rgba(0,0,0,0.02); }
+[data-theme="light"] .fw-conntrack-row { border-color: rgba(0,0,0,0.05); }
+[data-theme="light"] .fw-conntrack-row:hover { background: rgba(0,0,0,0.02); }
+[data-theme="light"] .fw-tt-section { border-color: rgba(0,0,0,0.08); }
+[data-theme="light"] .fw-tt-title { background: rgba(0,0,0,0.02); }
+[data-theme="light"] .fw-tt-row { border-color: rgba(0,0,0,0.05); }
+[data-theme="light"] .fw-tt-bar-wrap { background: rgba(0,0,0,0.05); }
+[data-theme="light"] .fw-log-container { border-color: rgba(0,0,0,0.08); }
+[data-theme="light"] .fw-log-entry { border-color: rgba(0,0,0,0.05); }
+[data-theme="light"] .fw-log-entry:hover { background: rgba(0,0,0,0.02); }
 [data-theme="light"] .ssl-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .phpfpm-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .upd-item { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }

@@ -3,6 +3,8 @@
   var fwView = 'zones';
   var fwFilter = '';
   var _toastTimer = null;
+  var _statsTimer = null;
+  var _monitorSubView = 'stats';
 
   var RULE_TEMPLATES = [
     { label: 'Allow HTTP', rule: '-p tcp --dport 80 -j ACCEPT' },
@@ -89,10 +91,10 @@
     var tabsEl = document.getElementById('fwTabs');
     if (tabsEl) {
       if (fwData.backend === 'firewalld') {
-        tabsEl.innerHTML = '<button class="fw-tab' + (fwView === 'zones' ? ' active' : '') + '" data-fw-tab="zones">Zones</button><button class="fw-tab' + (fwView === 'services' ? ' active' : '') + '" data-fw-tab="services">Services</button>';
+        tabsEl.innerHTML = '<button class="fw-tab' + (fwView === 'zones' ? ' active' : '') + '" data-fw-tab="zones">Zones</button><button class="fw-tab' + (fwView === 'services' ? ' active' : '') + '" data-fw-tab="services">Services</button><button class="fw-tab' + (fwView === 'monitor' ? ' active' : '') + '" data-fw-tab="monitor">Monitoring</button>';
         tabsEl.style.display = '';
       } else if (fwData.backend === 'iptables') {
-        tabsEl.innerHTML = '<button class="fw-tab' + (fwView === 'chains' ? ' active' : '') + '" data-fw-tab="chains">Chains & Rules</button>';
+        tabsEl.innerHTML = '<button class="fw-tab' + (fwView === 'chains' ? ' active' : '') + '" data-fw-tab="chains">Chains & Rules</button><button class="fw-tab' + (fwView === 'monitor' ? ' active' : '') + '" data-fw-tab="monitor">Monitoring</button>';
         tabsEl.style.display = '';
       } else {
         tabsEl.style.display = 'none';
@@ -255,11 +257,14 @@
 
   function renderContent() {
     updateHeader();
+    if (_statsTimer) { clearInterval(_statsTimer); _statsTimer = null; }
     if (fwData.backend === 'firewalld') {
       if (fwView === 'services') renderServices();
+      else if (fwView === 'monitor') renderMonitor();
       else renderZones();
     } else if (fwData.backend === 'iptables') {
-      renderChains();
+      if (fwView === 'monitor') renderMonitor();
+      else renderChains();
     } else if (fwData.backend === 'ufw') {
       renderUfw();
     } else {
@@ -275,6 +280,139 @@
     html += '<div class="fw-ufw-policies">Default: INBOUND ' + esc((fwData.policies || {}).INPUT || '?') + ' / OUTBOUND ' + esc((fwData.policies || {}).OUTPUT || '?') + '</div>';
     html += '</div>';
     el.innerHTML = html;
+  }
+
+  function renderMonitor() {
+    var el = document.getElementById('fwContent');
+    var html = '<div class="fw-monitor">';
+    html += '<div class="fw-monitor-tabs">';
+    html += '<button class="fw-tab' + (_monitorSubView === 'stats' ? ' active' : '') + '" data-fw-mtab="stats">Live Stats</button>';
+    html += '<button class="fw-tab' + (_monitorSubView === 'conntrack' ? ' active' : '') + '" data-fw-mtab="conntrack">Connections</button>';
+    html += '<button class="fw-tab' + (_monitorSubView === 'top' ? ' active' : '') + '" data-fw-mtab="top">Top Talkers</button>';
+    html += '<button class="fw-tab' + (_monitorSubView === 'log' ? ' active' : '') + '" data-fw-mtab="log">Firewall Log</button>';
+    html += '</div>';
+    html += '<div id="fwMonitorContent"><div class="db-loading"><div class="db-loading-spinner"></div><div class="db-loading-text">Loading...</div></div></div>';
+    html += '</div>';
+    el.innerHTML = html;
+    loadMonitorSubView();
+  }
+
+  async function loadMonitorSubView() {
+    var el = document.getElementById('fwMonitorContent');
+    if (!el) return;
+    if (_monitorSubView === 'stats') loadLiveStats();
+    else if (_monitorSubView === 'conntrack') loadConntrack();
+    else if (_monitorSubView === 'top') loadTopTalkers();
+    else if (_monitorSubView === 'log') loadFirewallLog();
+  }
+
+  async function loadLiveStats() {
+    var el = document.getElementById('fwMonitorContent');
+    if (!el) return;
+    try {
+      var stats = await API.firewall.stats();
+      var html = '<div class="fw-stats-grid">';
+      html += '<div class="fw-stat-card"><div class="fw-stat-label">Conntrack</div><div class="fw-stat-value">' + stats.conntrack.count + ' / ' + stats.conntrack.max + '</div><div class="fw-stat-bar"><div class="fw-stat-bar-fill' + (stats.conntrack.usagePct > 80 ? ' fw-stat-bar-danger' : '') + '" style="width:' + Math.min(stats.conntrack.usagePct, 100) + '%"></div></div><div class="fw-stat-sub">' + stats.conntrack.usagePct + '% usage</div></div>';
+      html += '</div>';
+      html += '<div class="fw-stats-table">';
+      html += '<div class="fw-stats-header"><span>Chain</span><span>Total Packets</span><span>Total Bytes</span><span>Rules</span></div>';
+      stats.chains.forEach(function (c) {
+        html += '<div class="fw-stats-row">';
+        html += '<span class="fw-stats-chain">' + esc(c.name) + '</span>';
+        html += '<span>' + c.totalPktsFmt + '</span>';
+        html += '<span>' + c.totalBytesFmt + '</span>';
+        html += '<span>' + c.rules.length + '</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+      html += '<div class="fw-stats-time">Updated: ' + new Date(stats.timestamp).toLocaleTimeString() + ' — <button class="fm-btn fm-btn-sm" data-fw-action="refresh-stats">Refresh</button></div>';
+      el.innerHTML = html;
+      if (_statsTimer) clearInterval(_statsTimer);
+      _statsTimer = setInterval(function () { if (_monitorSubView === 'stats') loadLiveStats(); }, 5000);
+    } catch (e) {
+      el.innerHTML = '<div class="db-error" style="display:flex"><span class="db-error-icon">!</span><span class="db-error-text">' + esc(e.message || 'Failed to load stats') + '</span></div>';
+    }
+  }
+
+  async function loadConntrack() {
+    var el = document.getElementById('fwMonitorContent');
+    if (!el) return;
+    try {
+      var data = await API.firewall.conntrack(200);
+      var html = '<div class="fw-stats-grid"><div class="fw-stat-card"><div class="fw-stat-label">Active Connections</div><div class="fw-stat-value">' + data.count + '</div><div class="fw-stat-sub">of ' + data.max + ' max</div></div></div>';
+      html += '<div class="fw-conntrack-table">';
+      html += '<div class="fw-conntrack-header"><span>Proto</span><span>Source</span><span>Src Port</span><span>Destination</span><span>Dst Port</span><span>State</span><span>TTL</span></div>';
+      data.entries.forEach(function (e) {
+        html += '<div class="fw-conntrack-row">';
+        html += '<span class="fw-proto-badge">' + esc(e.proto) + '</span>';
+        html += '<span class="fw-conntrack-ip">' + esc(e.src) + '</span>';
+        html += '<span>' + esc(e.srcPort) + '</span>';
+        html += '<span class="fw-conntrack-ip">' + esc(e.dst) + '</span>';
+        html += '<span>' + esc(e.dstPort) + '</span>';
+        html += '<span class="fw-state-badge fw-state-' + esc(e.state).toLowerCase() + '">' + esc(e.state) + '</span>';
+        html += '<span>' + e.ttl + 's</span>';
+        html += '</div>';
+      });
+      html += '</div>';
+      if (!data.entries.length) html += '<div class="db-empty">No tracked connections</div>';
+      el.innerHTML = html;
+    } catch (e) {
+      el.innerHTML = '<div class="db-error" style="display:flex"><span class="db-error-icon">!</span><span class="db-error-text">' + esc(e.message || 'Failed to load conntrack') + '</span></div>';
+    }
+  }
+
+  async function loadTopTalkers() {
+    var el = document.getElementById('fwMonitorContent');
+    if (!el) return;
+    try {
+      var data = await API.firewall.topTalkers(2000);
+      var html = '<div class="fw-top-talkers">';
+      html += '<div class="fw-tt-section">';
+      html += '<div class="fw-tt-title">Top Sources</div>';
+      if (data.sources && data.sources.length) {
+        var maxSrc = data.sources[0].count;
+        data.sources.forEach(function (t) {
+          var pct = maxSrc ? Math.round(t.count / maxSrc * 100) : 0;
+          html += '<div class="fw-tt-row"><span class="fw-tt-ip">' + esc(t.ip) + '</span><div class="fw-tt-bar-wrap"><div class="fw-tt-bar" style="width:' + pct + '%"></div></div><span class="fw-tt-count">' + t.count + '</span></div>';
+        });
+      } else { html += '<div class="db-empty">No data</div>'; }
+      html += '</div>';
+      html += '<div class="fw-tt-section">';
+      html += '<div class="fw-tt-title">Top Destinations</div>';
+      if (data.destinations && data.destinations.length) {
+        var maxDst = data.destinations[0].count;
+        data.destinations.forEach(function (t) {
+          var pct = maxDst ? Math.round(t.count / maxDst * 100) : 0;
+          html += '<div class="fw-tt-row"><span class="fw-tt-ip">' + esc(t.ip) + '</span><div class="fw-tt-bar-wrap"><div class="fw-tt-bar fw-tt-bar-dst" style="width:' + pct + '%"></div></div><span class="fw-tt-count">' + t.count + '</span></div>';
+        });
+      } else { html += '<div class="db-empty">No data</div>'; }
+      html += '</div>';
+      html += '</div>';
+      el.innerHTML = html;
+    } catch (e) {
+      el.innerHTML = '<div class="db-error" style="display:flex"><span class="db-error-icon">!</span><span class="db-error-text">' + esc(e.message || 'Failed to load top talkers') + '</span></div>';
+    }
+  }
+
+  async function loadFirewallLog() {
+    var el = document.getElementById('fwMonitorContent');
+    if (!el) return;
+    try {
+      var data = await API.firewall.log(100);
+      var html = '<div class="fw-log-controls"><button class="fm-btn fm-btn-sm" data-fw-action="refresh-log">Refresh</button><span class="fw-log-count">' + data.total + ' entries</span></div>';
+      html += '<div class="fw-log-container">';
+      if (data.entries && data.entries.length) {
+        data.entries.forEach(function (e) {
+          html += '<div class="fw-log-entry"><span class="fw-log-time">' + esc(e.timestamp) + '</span><span class="fw-log-msg">' + esc(e.message) + '</span></div>';
+        });
+      } else {
+        html += '<div class="db-empty">No firewall log entries found (iptables LOG rules may be needed)</div>';
+      }
+      html += '</div>';
+      el.innerHTML = html;
+    } catch (e) {
+      el.innerHTML = '<div class="db-error" style="display:flex"><span class="db-error-icon">!</span><span class="db-error-text">' + esc(e.message || 'Failed to load log') + '</span></div>';
+    }
   }
 
   async function loadFirewall() {
@@ -430,7 +568,15 @@
 
   document.addEventListener('click', function (e) {
     var tab = e.target.closest('[data-fw-tab]');
-    if (!tab) return;
+    if (!tab) {
+      var mtab = e.target.closest('[data-fw-mtab]');
+      if (mtab) { _monitorSubView = mtab.dataset.fwMtab; renderMonitor(); return; }
+      var refreshBtn = e.target.closest('[data-fw-action="refresh-stats"]');
+      if (refreshBtn) { loadLiveStats(); return; }
+      var refreshLog = e.target.closest('[data-fw-action="refresh-log"]');
+      if (refreshLog) { loadFirewallLog(); return; }
+      return;
+    }
     fwView = tab.dataset.fwTab;
     renderContent();
   });

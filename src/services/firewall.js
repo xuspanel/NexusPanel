@@ -425,6 +425,177 @@ function getOverallInfo() {
   return { backend: 'none' };
 }
 
+function getLiveStats() {
+  const result = runSafeSync('iptables', ['-L', '-n', '-v', '--line-numbers'], { timeout: 10000 });
+  if (result.status !== 0) return { chains: [], timestamp: Date.now() };
+  const chains = {};
+  let current = null;
+  (result.stdout || '').split('\n').forEach(line => {
+    const chainMatch = line.match(/^Chain (\w+)/);
+    if (chainMatch) {
+      current = chainMatch[1];
+      chains[current] = { name: current, totalPkts: 0, totalBytes: 0, rules: [] };
+    }
+    if (current && line.match(/^\d+/)) {
+      const p = line.trim().split(/\s+/);
+      if (p.length >= 8) {
+        const pkts = parseInt(p[1]) || 0;
+        const bytes = parseInt(p[2]) || 0;
+        chains[current].totalPkts += pkts;
+        chains[current].totalBytes += bytes;
+        chains[current].rules.push({
+          num: parseInt(p[0]), pkts, bytes,
+          pktsFmt: fmtBytes(p[1]), bytesFmt: fmtBytes(p[2]),
+          target: p[3], prot: p[4], source: p[8] || '', destination: p[9] || '',
+          extra: p.slice(10).join(' ') || '',
+        });
+      }
+    }
+  });
+  const list = [];
+  for (const name in chains) {
+    chains[name].totalPktsFmt = fmtBytes(String(chains[name].totalPkts));
+    chains[name].totalBytesFmt = fmtBytes(String(chains[name].totalBytes));
+    list.push(chains[name]);
+  }
+  const countResult = runSafeSync('cat', ['/proc/sys/net/netfilter/nf_conntrack_count'], { timeout: 2000 });
+  const maxResult = runSafeSync('cat', ['/proc/sys/net/netfilter/nf_conntrack_max'], { timeout: 2000 });
+  const connCount = parseInt(countResult.stdout.trim()) || 0;
+  const connMax = parseInt(maxResult.stdout.trim()) || 0;
+  return {
+    chains: list,
+    conntrack: { count: connCount, max: connMax, usagePct: connMax ? Math.round(connCount / connMax * 100) : 0 },
+    timestamp: Date.now(),
+  };
+}
+
+function getConntrack(limit) {
+  const maxEntries = Math.min(parseInt(limit) || 200, 1000);
+  const result = runSafeSync('conntrack', ['-L', '-o', 'extended', '--read'], { timeout: 5000, maxBuffer: 5 * 1024 * 1024 });
+  if (result.status !== 0) {
+    const raw = runSafeSync('cat', ['/proc/net/nf_conntrack'], { timeout: 5000, maxBuffer: 5 * 1024 * 1024 });
+    if (raw.status !== 0) return { entries: [], count: 0, max: 0 };
+    return parseConntrackRaw(raw.stdout, maxEntries);
+  }
+  return parseConntrackExtended(result.stdout, maxEntries);
+}
+
+function parseConntrackExtended(stdout, limit) {
+  const entries = [];
+  const lines = stdout.split('\n').filter(l => l.trim());
+  for (const line of lines) {
+    if (entries.length >= limit) break;
+    const protoMatch = line.match(/^(\w+)\s+(\d+)\s+(\d+)\s+(\d+)/);
+    if (!protoMatch) continue;
+    const proto = protoMatch[1].toUpperCase();
+    const ttl = parseInt(protoMatch[3]) || 0;
+    const srcMatch = line.match(/src=([\d.]+)/g);
+    const dstMatch = line.match(/dst=([\d.]+)/g);
+    const sportMatch = line.match(/sport=(\d+)/);
+    const dportMatch = line.match(/dport=(\d+)/);
+    const stateMatch = line.match(/\s(\w+)\s*\[/);
+    entries.push({
+      proto,
+      src: srcMatch && srcMatch[0] ? srcMatch[0].replace('src=', '') : '',
+      dst: dstMatch && dstMatch[0] ? dstMatch[0].replace('dst=', '') : '',
+      srcPort: sportMatch ? sportMatch[1] : '',
+      dstPort: dportMatch ? dportMatch[1] : '',
+      state: stateMatch ? stateMatch[1] : '',
+      ttl,
+    });
+  }
+  const countResult = runSafeSync('cat', ['/proc/sys/net/netfilter/nf_conntrack_count'], { timeout: 2000 });
+  const maxResult = runSafeSync('cat', ['/proc/sys/net/netfilter/nf_conntrack_max'], { timeout: 2000 });
+  return {
+    entries,
+    count: parseInt(countResult.stdout.trim()) || 0,
+    max: parseInt(maxResult.stdout.trim()) || 0,
+  };
+}
+
+function parseConntrackRaw(stdout, limit) {
+  const TCP_STATES = { '1': 'SYN_SENT', '2': 'SYN_RECV', '3': 'ESTABLISHED', '4': 'FIN_WAIT', '5': 'CLOSE_WAIT', '6': 'LAST_ACK', '7': 'TIME_WAIT', '8': 'CLOSE', '9': 'LISTEN' };
+  const entries = [];
+  const lines = stdout.split('\n').filter(l => l.trim());
+  for (const line of lines) {
+    if (entries.length >= limit) break;
+    const parts = line.trim().split(/\s+/);
+    if (parts.length < 5) continue;
+    const proto = parts[1] ? parts[1].toUpperCase() : '';
+    const srcMatch = line.match(/src=([\d.]+)/);
+    const dstMatch = line.match(/dst=([\d.]+)/g);
+    const sportMatch = line.match(/sport=(\d+)/);
+    const dportMatch = line.match(/dport=(\d+)/);
+    const stateMatch = line.match(/\s(\w+)\s/);
+    let state = stateMatch ? stateMatch[1] : '';
+    if (proto === 'TCP' && /^\d+$/.test(state)) state = TCP_STATES[state] || state;
+    entries.push({
+      proto,
+      src: srcMatch ? srcMatch[1] : '',
+      dst: dstMatch && dstMatch.length ? dstMatch[0].replace('dst=', '') : '',
+      srcPort: sportMatch ? sportMatch[1] : '',
+      dstPort: dportMatch ? dportMatch[1] : '',
+      state,
+      ttl: parseInt(parts[4]) || 0,
+    });
+  }
+  const countResult = runSafeSync('cat', ['/proc/sys/net/netfilter/nf_conntrack_count'], { timeout: 2000 });
+  const maxResult = runSafeSync('cat', ['/proc/sys/net/netfilter/nf_conntrack_max'], { timeout: 2000 });
+  return {
+    entries,
+    count: parseInt(countResult.stdout.trim()) || 0,
+    max: parseInt(maxResult.stdout.trim()) || 0,
+  };
+}
+
+function getTopTalkers(limit) {
+  const maxEntries = Math.min(parseInt(limit) || 1000, 5000);
+  const raw = runSafeSync('conntrack', ['-L', '-o', 'extended', '--read'], { timeout: 5000, maxBuffer: 5 * 1024 * 1024 });
+  const stdout = raw.status === 0 ? raw.stdout : '';
+  if (!stdout) {
+    const fallback = runSafeSync('cat', ['/proc/net/nf_conntrack'], { timeout: 5000, maxBuffer: 5 * 1024 * 1024 });
+    if (fallback.status !== 0) return { sources: [], destinations: [] };
+    return aggregateFromRaw(fallback.stdout, maxEntries);
+  }
+  return aggregateFromRaw(stdout, maxEntries);
+}
+
+function aggregateFromRaw(stdout, limit) {
+  const srcCount = {};
+  const dstCount = {};
+  const lines = stdout.split('\n').filter(l => l.trim());
+  let count = 0;
+  for (const line of lines) {
+    if (count >= limit) break;
+    const srcMatch = line.match(/src=([\d.]+)/);
+    const dstMatch = line.match(/dst=([\d.]+)/g);
+    if (srcMatch) { const ip = srcMatch[1]; srcCount[ip] = (srcCount[ip] || 0) + 1; }
+    if (dstMatch && dstMatch.length) {
+      const ip = dstMatch[0].replace('dst=', '');
+      dstCount[ip] = (dstCount[ip] || 0) + 1;
+    }
+    count++;
+  }
+  const sources = Object.entries(srcCount).map(([ip, count]) => ({ ip, count })).sort((a, b) => b.count - a.count).slice(0, 20);
+  const destinations = Object.entries(dstCount).map(([ip, count]) => ({ ip, count })).sort((a, b) => b.count - a.count).slice(0, 20);
+  return { sources, destinations };
+}
+
+function getFirewallLog(lines) {
+  const maxLines = Math.min(parseInt(lines) || 100, 500);
+  const result = runSafeSync('journalctl', ['--no-pager', '-n', String(maxLines), '-o', 'short-iso', '-g', 'DROP|REJECT|IN_|OUT_|FORWARD'], { timeout: 5000, maxBuffer: 2 * 1024 * 1024 });
+  if (result.status !== 0) return { entries: [], source: 'journalctl' };
+  const entries = [];
+  (result.stdout || '').split('\n').filter(l => l.trim()).forEach(line => {
+    const isoMatch = line.match(/^(\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2})/);
+    const traditionalMatch = line.match(/^(\w+\s+\d+\s+[\d:]+)/);
+    const timestamp = isoMatch ? isoMatch[1] : traditionalMatch ? traditionalMatch[1] : '';
+    const rest = timestamp ? line.substring(timestamp.length).trim() : line.trim();
+    entries.push({ timestamp, message: rest });
+  });
+  return { entries, source: 'journalctl', total: entries.length };
+}
+
 module.exports = {
   detectBackend,
   invalidateBackendCache,
@@ -457,4 +628,8 @@ module.exports = {
   getIptablesRaw,
   getFirewalldExport,
   getUfwInfo,
+  getLiveStats,
+  getConntrack,
+  getTopTalkers,
+  getFirewallLog,
 };
