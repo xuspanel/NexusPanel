@@ -76,16 +76,18 @@
   function renderCerts() {
     var el = document.getElementById('sslContent');
     if (!el) return;
+    var searchVal = sslState.search;
+    var sortVal = sslState.sort;
     var certs = sslState.certs.slice();
-    if (sslState.search) {
-      var q = sslState.search.toLowerCase();
+    if (searchVal) {
+      var q = searchVal.toLowerCase();
       certs = certs.filter(function (c) {
         return c.domain.toLowerCase().indexOf(q) !== -1 ||
           c.serial.toLowerCase().indexOf(q) !== -1 ||
           c.keyType.toLowerCase().indexOf(q) !== -1;
       });
     }
-    var sortKey = sslState.sort;
+    var sortKey = sortVal;
     certs.sort(function (a, b) {
       if (sortKey === 'domain') return a.domain.localeCompare(b.domain);
       if (sortKey === 'daysLeft') return (a.daysLeft || 0) - (b.daysLeft || 0);
@@ -97,17 +99,17 @@
     var html = renderSummary(sslState.certs);
     html += renderAutoRenew(sslState.autoRenew);
     html += '<div class="ssl-toolbar">';
-    html += '<input class="ssl-search" id="sslSearchInput" type="text" placeholder="Search certificates..." value="' + esc(sslState.search) + '">';
+    html += '<input class="ssl-search" id="sslSearchInput" type="text" placeholder="Search certificates..." value="' + esc(searchVal) + '">';
     html += '<div class="ssl-sort-group">';
     var sortFields = [['expiry', 'Expiry'], ['domain', 'Domain'], ['daysLeft', 'Days Left'], ['keyType', 'Key Type']];
     for (var i = 0; i < sortFields.length; i++) {
       var sf = sortFields[i];
-      var active = sslState.sort === sf[0] ? ' active' : '';
+      var active = sortVal === sf[0] ? ' active' : '';
       html += '<button class="ssl-sort-btn' + active + '" data-ssl-action="sort" data-ssl-sort="' + sf[0] + '">' + sf[1] + '</button>';
     }
     html += '</div></div>';
     if (certs.length === 0) {
-      html += '<div class="db-empty">' + (sslState.search ? 'No certificates match your search' : 'No SSL certificates found') + '</div>';
+      html += '<div class="db-empty">' + (searchVal ? 'No certificates match your search' : 'No SSL certificates found') + '</div>';
     } else {
       html += '<div class="ssl-list">';
       for (var j = 0; j < certs.length; j++) {
@@ -138,6 +140,10 @@
     el.innerHTML = html;
     var searchInput = document.getElementById('sslSearchInput');
     if (searchInput) {
+      searchInput.value = searchVal;
+      searchInput.focus();
+      var len = searchInput.value.length;
+      searchInput.setSelectionRange(len, len);
       searchInput.addEventListener('input', function () {
         sslState.search = this.value;
         renderCerts();
@@ -154,10 +160,10 @@
   };
 
   function bindEvents() {
-    var listEl = document.getElementById('sslList');
-    if (listEl && !listEl._sslBound) {
-      listEl._sslBound = true;
-      listEl.addEventListener('click', function (e) {
+    var contentEl = document.getElementById('sslContent');
+    if (contentEl && !contentEl._sslBound) {
+      contentEl._sslBound = true;
+      contentEl.addEventListener('click', function (e) {
         var btn = e.target.closest('[data-ssl-action]');
         if (!btn) return;
         var action = btn.dataset.sslAction;
