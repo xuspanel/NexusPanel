@@ -42,7 +42,7 @@
   <script defer src="/js/cron.js?v=1.1.0"></script>
   <script defer src="/js/firewall.js?v=1.27.0"></script>
   <script defer src="/js/ssl.js?v=1.28.0"></script>
-  <script defer src="/js/phpfpm.js?v=1.1.0"></script>
+  <script defer src="/js/phpfpm.js?v=1.29.0"></script>
   <script defer src="/js/updates.js?v=1.1.0"></script>
   <script defer src="/js/settings.js?v=1.6.1"></script>
   <script defer src="/js/search.js?v=1.9.6"></script>
@@ -2311,8 +2311,8 @@
     </main>
     <!-- PHP-FPM View -->
     <main class="dashboard-content" id="viewPhpFPM" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🐘</span><div class="db-header-info"><div class="db-header-title">PHP-FPM Manager</div><div class="db-header-subtitle">Pool configuration & status</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" onclick="phpfpmRestart()">🔄 Restart PHP-FPM</button><button class="db-btn db-btn-icon" onclick="loadPhpFPM()" title="Refresh">↻</button></div></div>
-      <div id="phpfpmList" class="phpfpm-list"></div>
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🐘</span><div class="db-header-info"><div class="db-header-title">PHP-FPM Manager</div><div class="db-header-subtitle">Pool configuration & status</div></div></div><div class="db-header-right"><button class="db-btn db-btn-primary" id="fpmRestartBtn">Restart</button><button class="db-btn" id="fpmReloadBtn">Reload</button><button class="db-btn" id="fpmTestBtn">Config Test</button><button class="db-btn db-btn-icon" id="fpmRefreshBtn" title="Refresh">&#8635;</button></div></div>
+      <div id="fpmContent"><div class="db-loading"><div class="db-loading-spinner"></div><div class="db-loading-text">Loading PHP-FPM data...</div></div></div>
     </main>
     <!-- System Updates View -->
     <main class="dashboard-content" id="viewUpdates" style="display:none;">
@@ -2445,6 +2445,35 @@
     </div>
   </div><!-- /dashboardPage -->
 
+    <!-- PHP-FPM Edit Modal -->
+    <div class="fm-modal-overlay" id="fpmEditOverlay" style="display:none;">
+      <div class="fm-modal" style="max-width:440px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Edit Pool: <span id="fpmEditPoolName"></span></span><button class="fm-modal-close" id="fpmEditClose">&#10005;</button></div>
+        <div class="fm-modal-body">
+          <div class="mime-form-group"><label class="mime-form-label">Directive</label><select class="mime-form-input" id="fpmEditDirective"></select></div>
+          <div class="mime-form-group"><label class="mime-form-label">Value</label><input class="mime-form-input" id="fpmEditValue" placeholder="New value"></div>
+          <div id="fpmEditError" style="display:none;color:#ef4444;font-size:12px;margin-bottom:8px;"></div>
+          <div class="fm-modal-actions"><button class="fm-btn" id="fpmEditCancel">Cancel</button><button class="fm-btn fm-btn-primary" id="fpmEditSave">Save</button></div>
+        </div>
+      </div>
+    </div>
+    <!-- PHP-FPM Config Modal -->
+    <div class="fm-modal-overlay" id="fpmConfigOverlay" style="display:none;">
+      <div class="fm-modal" style="max-width:640px;">
+        <div class="fm-modal-header"><span class="fm-modal-title" id="fpmConfigTitle">Pool Config</span><button class="fm-modal-close" id="fpmConfigClose">&#10005;</button></div>
+        <div class="fm-modal-body" id="fpmConfigContent"></div>
+      </div>
+    </div>
+    <!-- PHP-FPM Confirm Modal -->
+    <div class="fm-modal-overlay" id="fpmConfirmOverlay" style="display:none;">
+      <div class="fm-modal" style="max-width:400px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Confirm</span></div>
+        <div class="fm-modal-body">
+          <p id="fpmConfirmMsg" style="margin:0 0 16px;color:var(--text-secondary);"></p>
+          <div class="fm-modal-actions"><button class="fm-btn" id="fpmConfirmNo">Cancel</button><button class="fm-btn fm-btn-danger" id="fpmConfirmYes">Confirm</button></div>
+        </div>
+      </div>
+    </div>
   <!-- File Manager Modals -->
   <div class="fm-modal-overlay" id="fmModalOverlay" style="display:none;">
     <div class="fm-modal" id="fmModal">

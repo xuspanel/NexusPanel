@@ -1,5 +1,39 @@
 # Changelog
 
+## [1.29.0] - 2026-07-28
+### Changed
+- **PHP-FPM Manager module complete rewrite** — 43 lines → 400 lines (backend), 29 → 550 lines (frontend), 11 → 100 lines (routes), 7 → 120 lines (CSS)
+### Added
+- **15 backend functions**: listPools, getStatus, poolStatus, phpVersion, opcacheStatus, globalConfig, poolConfig, editPoolConfig, configTest, restart, reload, phpModules, phpIni, poolLogs, slowLogs
+- **15 API endpoints**: Complete REST API for PHP-FPM management
+- **15 frontend API methods**: Full coverage of all endpoints
+- **Pool config parsing**: Now reads 12+ directives (pm, max_children, start_servers, min/max_spare, user, group, listen, slowlog, timeouts, rlimit, catch_workers_output)
+- **Auto-detect pool directories**: Scans /etc/php* recursively for any PHP version (8.0, 8.1, 8.2, 8.3, etc.)
+- **PHP version display**: Shows PHP version in summary bar
+- **Service status**: Structured status (active/inactive, PID, memory, uptime, active/idle processes, requests, traffic)
+- **Live pool status**: Fetches from pm.status_path via Unix socket
+- **OPcache status**: Memory usage bar, hit rate bar, cached scripts, restarts, interned strings
+- **PHP modules list**: Alphabetical grid of all 46+ installed modules
+- **Pool config viewer**: Raw config display in modal
+- **Pool config editor**: Edit 11 PM/tuning directives with dropdown + value input
+- **Error log viewer**: Last 100 lines from pool error log
+- **Slow log viewer**: Last 20 lines from pool slow log
+- **Config syntax test**: Run `php-fpm -t` before restart
+- **Graceful reload**: Reload without downtime (vs hard restart)
+- **Summary bar**: PHP version, status dot, pool count, total max workers, active/total processes, request count
+- **Tab navigation**: Pools | Status | OPcache | Modules | Logs
+- **Pool cards**: PM mode badge (dynamic/static/ondemand), 12-field grid, action buttons (Config/Logs/Edit)
+- **Event delegation**: All buttons use `data-fpm-action` attributes (XSS-safe)
+- **Loading/error/empty states**: Proper state management
+- **Toast notifications**: Replace all `alert()` calls
+- **Confirmation modals**: Restart/Reload confirmation dialogs
+- **Light theme support**: Full light theme variants for all new selectors
+- **Mobile responsive**: Stacked layout under 640px
+### Fixed
+- **`execSync` replaced with `runSafeSync`**: Proper timeout handling, structured output, consistent with rest of codebase
+- **Pool config parsing**: Now handles inline comments and nested brackets correctly
+- **Missing pool directories**: Auto-detects any PHP version, not just 8.1/8.2/8.3
+
 ## [1.28.0] - 2026-07-28
 ### Changed
 - **SSL Certificates module complete rewrite** — 49 lines → 350 lines (backend), 39 → 500 lines (frontend), 19 → 120 lines (routes), 11 → 120 lines (CSS)
