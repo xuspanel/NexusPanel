@@ -10186,6 +10186,7 @@ body::before {
 .fw-rule-extra { flex:1; font-size:11px; color:var(--text-tertiary); font-family:var(--font-mono); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .fw-rule-stats { font-size:10px; color:var(--text-muted); font-family:var(--font-mono); min-width:60px; text-align:right; }
 .fw-empty { padding:12px 14px; font-size:12px; color:var(--text-tertiary); }
+.fw-search-bar { display:flex; align-items:center; gap:8px; margin-bottom:12px; }
 .fw-services-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px; }
 .fw-service-card { padding:12px 16px; background:rgba(255,255,255,0.03); border:1px solid var(--glass-border); border-radius:var(--radius-md); }
 .fw-service-name { font-size:13px; font-weight:600; color:var(--text-primary); margin-bottom:6px; font-family:var(--font-mono); }

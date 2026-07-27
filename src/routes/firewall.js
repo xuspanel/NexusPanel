@@ -76,6 +76,14 @@ router.post('/rule', adminOnly, (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+router.put('/rule', adminOnly, (req, res) => {
+  try {
+    if (req.body.replace) res.json(fw.replaceIptablesRule(req.body.chain, req.body.num, req.body.rule));
+    else res.json(fw.insertIptablesRule(req.body.chain, req.body.num, req.body.rule));
+  }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 router.put('/policy', adminOnly, (req, res) => {
   try { res.json(fw.setIptablesPolicy(req.body.chain, req.body.target)); }
   catch (e) { res.status(400).json({ error: e.message }); }
@@ -86,9 +94,34 @@ router.delete('/rule/:chain/:num', adminOnly, (req, res) => {
   catch (e) { res.status(400).json({ error: e.message }); }
 });
 
+router.post('/chain', adminOnly, (req, res) => {
+  try { res.json(fw.createIptablesChain(req.body.chain)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.delete('/chain/:chain', adminOnly, (req, res) => {
+  try { res.json(fw.deleteIptablesChain(req.params.chain)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.put('/chain/:chain/rename', adminOnly, (req, res) => {
+  try { res.json(fw.renameIptablesChain(req.params.chain, req.body.newName)); }
+  catch (e) { res.status(400).json({ error: e.message }); }
+});
+
 router.post('/flush/:chain', adminOnly, (req, res) => {
   try { res.json(fw.flushIptablesChain(req.params.chain)); }
   catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.get('/raw', adminOnly, (req, res) => {
+  try { res.type('text').send(fw.getIptablesRaw()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/export', adminOnly, (req, res) => {
+  try { res.type('text').send(fw.getFirewalldExport()); }
+  catch (e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/save', adminOnly, (req, res) => {

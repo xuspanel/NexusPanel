@@ -1,5 +1,19 @@
 # Changelog
 
+## [1.26.0] - 2026-07-28
+### Added
+- **iptables rule editing**: Replace existing rules in-place via Edit button (delete + insert at same position)
+- **iptables rule insertion**: Insert rules at specific position in chain
+- **iptables chain creation**: Create custom chains via header button with name input modal
+- **iptables chain deletion**: Delete custom (non-builtin, non-Docker) chains with confirmation
+- **iptables chain renaming**: Rename custom chains
+- **Rule search/filter**: Live search bar filters iptables rules across all chains by target, protocol, source, destination, and extra fields
+- **Rule templates**: Preset dropdown in Add Rule modal with 13 common rules (HTTP, HTTPS, SSH, FTP, MySQL, PostgreSQL, Redis, DNS, ICMP, loopback, log, block IP, rate limit SSH)
+- **Export rules**: Export firewall rules to downloadable text file
+- **Raw iptables dump**: Backend `GET /firewall/raw` endpoint for iptables-save output
+- **Firewalld export**: Backend `GET /firewall/export` endpoint for human-readable zone summary
+- **Chain management UI**: Create chain modal, delete chain button (with empty check), chain deletion for custom chains
+
 ## [1.25.0] - 2026-07-28
 ### Added
 - **Firewall Rules module — complete rewrite**: From 132 lines to full-featured firewall management

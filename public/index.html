@@ -40,7 +40,7 @@
   <script defer src="/js/processes.js?v=1.21.0"></script>
   <script defer src="/js/logs.js?v=1.22.0"></script>
   <script defer src="/js/cron.js?v=1.1.0"></script>
-  <script defer src="/js/firewall.js?v=1.25.0"></script>
+  <script defer src="/js/firewall.js?v=1.26.0"></script>
   <script defer src="/js/ssl.js?v=1.1.0"></script>
   <script defer src="/js/phpfpm.js?v=1.1.0"></script>
   <script defer src="/js/updates.js?v=1.1.0"></script>
@@ -2299,7 +2299,7 @@
 
     <!-- Firewall Rules View -->
     <main class="dashboard-content" id="viewFirewall" style="display:none;">
-      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🛡</span><div class="db-header-info"><div class="db-header-title">Firewall Rules</div><div class="db-header-subtitle"><span class="fw-backend-badge fw-backend-none" id="fwBackendBadge">loading...</span></div></div></div><div class="db-header-right"><select class="fw-zone-select" id="fwZoneSelect" style="display:none"></select><div id="fwTabs" class="fw-tabs"></div><button class="db-btn db-btn-primary" id="fwAddBtn" style="display:none" data-fw-action="add-iptables-rule">+ Add Rule</button><button class="db-btn db-btn-primary" id="fwAddSvcBtn" style="display:none" data-fw-action="add-service">+ Add Service</button><button class="db-btn db-btn-icon" id="fwSaveBtn" style="display:none" onclick="fwSaveRules()" title="Save rules to disk">💾</button><button class="db-btn db-btn-icon" onclick="loadFirewall()" title="Refresh">↻</button></div></div>
+      <div class="db-header"><div class="db-header-left"><span class="db-header-icon">🛡</span><div class="db-header-info"><div class="db-header-title">Firewall Rules</div><div class="db-header-subtitle"><span class="fw-backend-badge fw-backend-none" id="fwBackendBadge">loading...</span></div></div></div><div class="db-header-right"><input type="text" class="mime-form-input" id="fwSearchBox" style="display:none;width:180px;font-size:12px;padding:5px 10px;" placeholder="Search rules..." oninput="document.getElementById('fwSearchInput').value=this.value;document.getElementById('fwSearchInput').dispatchEvent(new Event('input'))"><input type="hidden" id="fwSearchInput"><select class="fw-zone-select" id="fwZoneSelect" style="display:none"></select><div id="fwTabs" class="fw-tabs"></div><button class="db-btn db-btn-primary" id="fwAddBtn" style="display:none" data-fw-action="add-iptables-rule">+ Add Rule</button><button class="db-btn db-btn-primary" id="fwAddSvcBtn" style="display:none" data-fw-action="add-service">+ Add Service</button><button class="db-btn db-btn-icon" id="fwCreateChainBtn" style="display:none" data-fw-action="create-chain" title="Create chain">⛓</button><button class="db-btn db-btn-icon" id="fwExportBtn" style="display:none" data-fw-action="export" title="Export rules">📥</button><button class="db-btn db-btn-icon" id="fwSaveBtn" style="display:none" onclick="fwSaveRules()" title="Save rules to disk">💾</button><button class="db-btn db-btn-icon" onclick="loadFirewall()" title="Refresh">↻</button></div></div>
       <div id="fwContent" class="fw-content"><div class="db-loading"><div class="db-loading-spinner"></div><div class="db-loading-text">Loading firewall rules...</div></div></div>
       <div class="fw-toast" id="fwToast" style="display:none"></div>
     </main>
@@ -2369,6 +2369,7 @@
         <div class="fm-modal-header"><span class="fm-modal-title">Add iptables Rule</span><button class="fm-modal-close" onclick="this.closest('.fm-modal-overlay').style.display='none'">&#10005;</button></div>
         <div class="fm-modal-body">
           <div class="mime-form-group"><label class="mime-form-label">Chain</label><select class="mime-form-input" id="fwIptChain"><option>INPUT</option><option>OUTPUT</option><option>FORWARD</option></select></div>
+          <div class="mime-form-group"><label class="mime-form-label">Template (optional)</label><select class="mime-form-input" id="fwTemplateSelect"><option value="">-- Select a preset --</option><option value="-p tcp --dport 80 -j ACCEPT">Allow HTTP (80)</option><option value="-p tcp --dport 443 -j ACCEPT">Allow HTTPS (443)</option><option value="-p tcp --dport 22 -j ACCEPT">Allow SSH (22)</option><option value="-p tcp --dport 21 -j ACCEPT">Allow FTP (21)</option><option value="-p tcp --dport 3306 -j ACCEPT">Allow MySQL (3306)</option><option value="-p tcp --dport 5432 -j ACCEPT">Allow PostgreSQL (5432)</option><option value="-p tcp --dport 6379 -j ACCEPT">Allow Redis (6379)</option><option value="-p udp --dport 53 -j ACCEPT">Allow DNS (UDP 53)</option><option value="-p icmp --icmp-type echo-request -j ACCEPT">Allow ICMP (ping)</option><option value="-i lo -j ACCEPT">Allow loopback</option><option value="-j LOG --log-prefix &quot;DROP: &quot; --log-level 4">Log dropped</option></select></div>
           <div class="mime-form-group"><label class="mime-form-label">Rule (iptables arguments)</label><input class="mime-form-input" id="fwIptRule" placeholder="-p tcp --dport 80 -j ACCEPT"></div>
           <div class="fm-modal-actions"><button class="fm-btn" onclick="this.closest('.fm-modal-overlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="fwSubmitAddIptablesRule()">Add Rule</button></div>
         </div>
@@ -2381,6 +2382,24 @@
           <div class="mime-form-group"><label class="mime-form-label">Chain</label><span id="fwPolicyChain" style="font-weight:600;"></span></div>
           <div class="mime-form-group"><label class="mime-form-label">New policy</label><select class="mime-form-input" id="fwPolicyTarget"><option>ACCEPT</option><option>DROP</option><option>REJECT</option></select></div>
           <div class="fm-modal-actions"><button class="fm-btn" onclick="this.closest('.fm-modal-overlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="fwSubmitPolicy()">Apply</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="fm-modal-overlay" id="fwEditRuleOverlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+      <div class="fm-modal" style="max-width:520px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Edit Rule <span id="fwEditChain" style="color:var(--accent-cyan)"></span> <span id="fwEditNum"></span></span><button class="fm-modal-close" onclick="this.closest('.fm-modal-overlay').style.display='none'">&#10005;</button></div>
+        <div class="fm-modal-body">
+          <div class="mime-form-group"><label class="mime-form-label">Rule (iptables arguments, replaces current)</label><input class="mime-form-input" id="fwEditRule" placeholder="-p tcp --dport 80 -j ACCEPT"></div>
+          <div class="fm-modal-actions"><button class="fm-btn" onclick="this.closest('.fm-modal-overlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="fwSubmitEditRule()">Save Changes</button></div>
+        </div>
+      </div>
+    </div>
+    <div class="fm-modal-overlay" id="fwCreateChainOverlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">
+      <div class="fm-modal" style="max-width:400px;">
+        <div class="fm-modal-header"><span class="fm-modal-title">Create Custom Chain</span><button class="fm-modal-close" onclick="this.closest('.fm-modal-overlay').style.display='none'">&#10005;</button></div>
+        <div class="fm-modal-body">
+          <div class="mime-form-group"><label class="mime-form-label">Chain name</label><input class="mime-form-input" id="fwNewChainName" placeholder="MY_CHAIN"></div>
+          <div class="fm-modal-actions"><button class="fm-btn" onclick="this.closest('.fm-modal-overlay').style.display='none'">Cancel</button><button class="fm-btn fm-btn-primary" onclick="fwSubmitCreateChain()">Create Chain</button></div>
         </div>
       </div>
     </div>

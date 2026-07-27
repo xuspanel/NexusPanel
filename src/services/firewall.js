@@ -290,6 +290,94 @@ function flushIptablesChain(chain) {
   return { ok: true };
 }
 
+function insertIptablesRule(chain, num, rule) {
+  if (!CHAIN_RE.test(chain)) throw new Error('Invalid chain name');
+  const numStr = String(num);
+  if (!validators.numeric.test(numStr) || parseInt(numStr) < 1) throw new Error('Invalid rule number');
+  if (!rule || typeof rule !== 'string') throw new Error('Invalid rule');
+  const tokens = rule.trim().split(/\s+/);
+  if (tokens.length === 0) throw new Error('Empty rule');
+  for (const token of tokens) {
+    if (/[;&|`$()]/.test(token)) throw new Error('Invalid character in rule: ' + token);
+  }
+  const result = runSafeSync('iptables', ['-I', chain, numStr, ...tokens]);
+  if (result.status !== 0) throw new Error('iptables failed: ' + (result.stderr || result.stdout));
+  invalidateBackendCache();
+  return { ok: true };
+}
+
+function replaceIptablesRule(chain, num, rule) {
+  if (!CHAIN_RE.test(chain)) throw new Error('Invalid chain name');
+  const numStr = String(num);
+  if (!validators.numeric.test(numStr)) throw new Error('Invalid rule number');
+  if (!rule || typeof rule !== 'string') throw new Error('Invalid rule');
+  const tokens = rule.trim().split(/\s+/);
+  if (tokens.length === 0) throw new Error('Empty rule');
+  for (const token of tokens) {
+    if (/[;&|`$()]/.test(token)) throw new Error('Invalid character in rule: ' + token);
+  }
+  const del = runSafeSync('iptables', ['-D', chain, numStr]);
+  if (del.status !== 0) throw new Error('Failed to delete existing rule: ' + (del.stderr || del.stdout));
+  const ins = runSafeSync('iptables', ['-I', chain, numStr, ...tokens]);
+  if (ins.status !== 0) throw new Error('Failed to insert new rule: ' + (ins.stderr || ins.stdout));
+  invalidateBackendCache();
+  return { ok: true };
+}
+
+function createIptablesChain(chain) {
+  if (!CHAIN_RE.test(chain)) throw new Error('Invalid chain name');
+  const builtin = ['INPUT', 'OUTPUT', 'FORWARD', 'PREROUTING', 'POSTROUTING'];
+  if (builtin.includes(chain)) throw new Error('Cannot create built-in chain');
+  const result = runSafeSync('iptables', ['-N', chain]);
+  if (result.status !== 0) throw new Error('iptables failed: ' + (result.stderr || result.stdout));
+  invalidateBackendCache();
+  return { ok: true };
+}
+
+function deleteIptablesChain(chain) {
+  if (!CHAIN_RE.test(chain)) throw new Error('Invalid chain name');
+  const builtin = ['INPUT', 'OUTPUT', 'FORWARD', 'PREROUTING', 'POSTROUTING'];
+  if (builtin.includes(chain)) throw new Error('Cannot delete built-in chain');
+  const check = runSafeSync('iptables', ['-L', chain, '-n']);
+  if (check.status === 0 && check.stdout.includes('num')) {
+    throw new Error('Chain is not empty — flush it first');
+  }
+  const result = runSafeSync('iptables', ['-X', chain]);
+  if (result.status !== 0) throw new Error('iptables failed: ' + (result.stderr || result.stdout));
+  invalidateBackendCache();
+  return { ok: true };
+}
+
+function renameIptablesChain(chain, newChain) {
+  if (!CHAIN_RE.test(chain)) throw new Error('Invalid chain name');
+  if (!CHAIN_RE.test(newChain)) throw new Error('Invalid new chain name');
+  const builtin = ['INPUT', 'OUTPUT', 'FORWARD', 'PREROUTING', 'POSTROUTING'];
+  if (builtin.includes(chain)) throw new Error('Cannot rename built-in chain');
+  const result = runSafeSync('iptables', ['-E', chain, newChain]);
+  if (result.status !== 0) throw new Error('iptables failed: ' + (result.stderr || result.stdout));
+  invalidateBackendCache();
+  return { ok: true };
+}
+
+function getIptablesRaw() {
+  const result = runSafeSync('iptables-save', [], { timeout: 10000 });
+  return result.status === 0 ? result.stdout : '';
+}
+
+function getFirewalldExport() {
+  const zones = getFirewalldZones();
+  const lines = [];
+  zones.forEach(z => {
+    lines.push('# Zone: ' + z.name + (z.isDefault ? ' (default)' : ''));
+    z.services.forEach(s => lines.push('  service: ' + s));
+    z.ports.forEach(p => lines.push('  port: ' + p));
+    z.protocols.forEach(p => lines.push('  protocol: ' + p));
+    z.richRules.forEach(r => lines.push('  rich-rule: ' + r));
+    if (z.masquerade) lines.push('  masquerade: yes');
+  });
+  return lines.join('\n');
+}
+
 function saveIptablesRules() {
   const result = runSafeSync('iptables-save', [], { timeout: 10000 });
   if (result.status !== 0) return { ok: false, error: 'iptables-save failed' };
@@ -358,8 +446,15 @@ module.exports = {
   listIptablesRules,
   addIptablesRule,
   deleteIptablesRule,
+  insertIptablesRule,
+  replaceIptablesRule,
+  createIptablesChain,
+  deleteIptablesChain,
+  renameIptablesChain,
   setIptablesPolicy,
   flushIptablesChain,
   saveIptablesRules,
+  getIptablesRaw,
+  getFirewalldExport,
   getUfwInfo,
 };
