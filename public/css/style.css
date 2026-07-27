@@ -10420,11 +10420,21 @@ body::before {
 .upd-search-bar .db-input { flex:1; }
 .upd-search-results { display:flex; flex-direction:column; gap:4px; }
 .upd-search-loading, .upd-search-empty { padding:12px; text-align:center; color:var(--text-tertiary); font-size:13px; }
-.upd-search-header { font-size:13px; font-weight:600; color:var(--text-secondary); margin-bottom:4px; }
-.upd-search-item { display:flex; align-items:center; gap:10px; padding:8px 12px; background:var(--bg-card); border:1px solid var(--glass-border); border-radius:var(--radius-sm); font-size:13px; }
-.upd-search-name { font-weight:600; color:var(--text-primary); font-family:var(--font-mono); min-width:120px; }
-.upd-search-ver { color:var(--accent-cyan); font-family:var(--font-mono); font-size:12px; }
-.upd-search-desc { color:var(--text-tertiary); font-size:12px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.upd-search-panel { background:var(--bg-card); border:1px solid var(--glass-border); border-radius:var(--radius-lg); overflow:hidden; }
+.upd-search-toolbar { display:flex; align-items:center; justify-content:space-between; padding:8px 12px; border-bottom:1px solid var(--glass-border); }
+.upd-search-items { display:flex; flex-direction:column; gap:2px; max-height:400px; overflow-y:auto; }
+.upd-search-items::-webkit-scrollbar { width:4px; }
+.upd-search-items::-webkit-scrollbar-thumb { background:rgba(255,255,255,0.1); border-radius:3px; }
+.upd-search-item { display:flex; align-items:center; gap:10px; padding:8px 12px; font-size:13px; border-bottom:1px solid var(--glass-border); transition:background 0.15s; }
+.upd-search-item:last-child { border-bottom:none; }
+.upd-search-item:hover { background:rgba(255,255,255,0.03); }
+.upd-search-item-main { display:flex; align-items:center; gap:8px; flex:1; min-width:0; }
+.upd-search-name { font-weight:600; color:var(--text-primary); font-family:var(--font-mono); cursor:pointer; text-decoration:underline; text-decoration-color:transparent; transition:text-decoration-color 0.15s; white-space:nowrap; }
+.upd-search-name:hover { text-decoration-color:var(--text-tertiary); }
+.upd-search-ver { color:var(--accent-cyan); font-family:var(--font-mono); font-size:12px; white-space:nowrap; }
+.upd-search-desc { color:var(--text-tertiary); font-size:12px; flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-left:26px; }
+.upd-search-actions { display:flex; gap:4px; flex-shrink:0; }
+.upd-info-divider { font-size:11px; font-weight:600; color:var(--text-tertiary); text-transform:uppercase; letter-spacing:0.5px; padding:10px 0 4px; margin-top:4px; border-top:1px solid var(--glass-border); }
 
 .upd-list { display:flex; flex-direction:column; gap:4px; }
 .upd-loading { padding:24px; text-align:center; color:var(--text-tertiary); display:flex; align-items:center; justify-content:center; gap:10px; }
@@ -10683,6 +10693,8 @@ body::before {
 [data-theme="light"] .upd-stat-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .upd-panel-card { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .upd-search-item { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .upd-search-panel { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .upd-search-toolbar { border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .upd-toolbar { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .upd-section { background: rgba(0,0,0,0.02); border-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .upd-stream-pre { background: rgba(0,0,0,0.04); }
@@ -10820,6 +10832,10 @@ body::before {
   .upd-panel-row { flex-wrap: wrap; }
   .upd-panel-btns { width: 100%; justify-content: flex-end; }
   .upd-search-item { flex-wrap: wrap; }
+  .upd-search-item-main { min-width: 100%; }
+  .upd-search-desc { padding-left: 0; }
+  .upd-search-actions { width: 100%; justify-content: flex-end; }
+  .upd-search-toolbar { flex-direction: column; align-items: stretch; gap: 8px; }
   .upd-sec-item { flex-wrap: wrap; }
   .upd-sec-id { min-width: auto; }
   .upd-hist-item { flex-wrap: wrap; }

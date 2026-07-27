@@ -10,6 +10,7 @@
     searchQuery: '',
     searchResults: [],
     searching: false,
+    searchSelected: {},
     selected: {},
     selectAll: false,
     panel: { localVersion: '—', remoteVersion: '—', updateAvailable: false, changelog: [], checking: false },
@@ -20,6 +21,8 @@
   };
 
   var searchTimer = null;
+  var modalConfirmHandler = null;
+  var modalListenerAttached = false;
 
   window.initUpdates = function () {
     checkAuth().then(function (ok) {
@@ -40,6 +43,7 @@
     var el = document.getElementById('updatesContent');
     if (!el) return;
     el.addEventListener('click', handleClick);
+    el.addEventListener('change', handleChange);
     var searchInput = document.getElementById('updSearchInput');
     if (searchInput) {
       searchInput.addEventListener('input', function () {
@@ -47,12 +51,17 @@
         var val = searchInput.value.trim();
         searchTimer = setTimeout(function () { doSearch(val); }, 300);
       });
+      searchInput.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') clearSearch();
+      });
     }
   }
 
   function handleClick(e) {
     var btn = e.target.closest('[data-action]');
     if (!btn) return;
+    e.preventDefault();
+    e.stopPropagation();
     var action = btn.getAttribute('data-action');
     switch (action) {
       case 'refresh-updates': loadAll(); break;
@@ -60,14 +69,35 @@
       case 'apply-panel': confirmPanelUpdate(); break;
       case 'apply-all': confirmApplyAll(); break;
       case 'select-all': toggleSelectAll(); break;
+      case 'select-all-search': toggleSearchSelectAll(); break;
       case 'apply-single': applySingle(btn.getAttribute('data-name')); break;
+      case 'apply-search-single': applySearchSingle(btn.getAttribute('data-name')); break;
+      case 'apply-search-selected': confirmApplySearchSelected(); break;
       case 'view-package': viewPackage(btn.getAttribute('data-name')); break;
+      case 'view-search-package': viewPackage(btn.getAttribute('data-name')); break;
       case 'check-security': loadSecurity(); break;
       case 'check-history': loadHistory(); break;
       case 'close-modal': closeModal(); break;
       case 'confirm-apply': executeApplyAll(); break;
+      case 'confirm-apply-search': executeApplySearchSelected(); break;
       case 'confirm-panel-apply': executePanelUpdate(); break;
       case 'clear-search': clearSearch(); break;
+    }
+  }
+
+  function handleChange(e) {
+    var el = e.target;
+    if (!el.hasAttribute('data-action')) return;
+    var action = el.getAttribute('data-action');
+    var name = el.getAttribute('data-name');
+    if (action === 'select-pkg') {
+      if (el.checked) state.selected[name] = true;
+      else delete state.selected[name];
+      renderUpdates();
+    } else if (action === 'select-search-pkg') {
+      if (el.checked) state.searchSelected[name] = true;
+      else delete state.searchSelected[name];
+      renderSearchResults();
     }
   }
 
@@ -105,7 +135,7 @@
     }
     var versionHtml = 'v' + esc(state.panel.localVersion);
     if (state.panel.updateAvailable) {
-      versionHtml += ' <span class="upd-arrow">→</span> <span class="upd-avail">v' + esc(state.panel.remoteVersion) + '</span>';
+      versionHtml += ' <span class="upd-arrow">\u2192</span> <span class="upd-avail">v' + esc(state.panel.remoteVersion) + '</span>';
     } else {
       versionHtml += ' <span class="upd-up-to-date">Up to date</span>';
     }
@@ -122,10 +152,10 @@
 
     el.innerHTML =
       '<div class="upd-panel-row">' +
-        '<div class="upd-panel-icon">📦</div>' +
+        '<div class="upd-panel-icon">\ud83d\udce6</div>' +
         '<div class="upd-panel-info"><div class="upd-panel-title">NexusPanel</div><div class="upd-panel-ver">' + versionHtml + '</div></div>' +
         '<div class="upd-panel-btns">' +
-          '<button class="db-btn" data-action="refresh-panel" title="Check for updates">↻ Check</button>' +
+          '<button class="db-btn" data-action="refresh-panel" title="Check for updates">\u21bb Check</button>' +
           '<button class="db-btn db-btn-primary" data-action="apply-panel" ' + (!state.panel.updateAvailable ? 'disabled' : '') + '>' +
             (state.panel.updateAvailable ? 'Apply Update' : 'Up to Date') +
           '</button>' +
@@ -144,9 +174,9 @@
     if (state.panel.changelog && state.panel.changelog.length) {
       var latest = state.panel.changelog[0];
       clText = 'Latest: v' + latest.version + ' (' + latest.date + ')\n' +
-        (latest.changes || []).slice(0, 5).map(function (c) { return '• ' + c; }).join('\n');
+        (latest.changes || []).slice(0, 5).map(function (c) { return '\u2022 ' + c; }).join('\n');
     }
-    showModal('confirm', 'Apply Panel Update',
+    showModal('Apply Panel Update',
       '<p>This will update NexusPanel from <strong>v' + esc(state.panel.localVersion) + '</strong> to <strong>v' + esc(state.panel.remoteVersion) + '</strong>.</p>' +
       '<p>The panel will restart and you may be temporarily disconnected.</p>' +
       (clText ? '<div class="modal-changelog"><pre>' + esc(clText) + '</pre></div>' : ''),
@@ -189,7 +219,7 @@
       state.streaming = false;
       state.streamOutput += '\n\nConnection lost. The panel may be restarting...';
       renderPanelCard();
-      toast('Connection lost — panel may be restarting', 'info');
+      toast('Connection lost \u2014 panel may be restarting', 'info');
     };
   }
 
@@ -261,15 +291,6 @@
     }
     html += '</div>';
     el.innerHTML = html;
-
-    el.querySelectorAll('[data-action="select-pkg"]').forEach(function (cb) {
-      cb.addEventListener('change', function () {
-        var pkgName = cb.getAttribute('data-name');
-        if (cb.checked) state.selected[pkgName] = true;
-        else delete state.selected[pkgName];
-        renderUpdates();
-      });
-    });
   }
 
   function getFilteredUpdates() {
@@ -294,10 +315,10 @@
   function confirmApplyAll() {
     var names = state.selectAll ? state.updates.map(function (u) { return u.name; }) : Object.keys(state.selected);
     if (!names.length) return;
-    showModal('confirm', 'Apply System Updates',
+    showModal('Apply System Updates',
       '<p>This will update <strong>' + names.length + '</strong> package' + (names.length > 1 ? 's' : '') + ':</p>' +
-      '<div class="modal-pkg-list">' + names.slice(0, 20).map(function (n) { return '<span class="modal-pkg-tag">' + esc(n) + '</span>'; }).join('') +
-      (names.length > 20 ? '<span class="modal-pkg-more">+' + (names.length - 20) + ' more</span>' : '') + '</div>',
+      '<div class="modal-pkg-list">' + names.slice(0, 30).map(function (n) { return '<span class="modal-pkg-tag">' + esc(n) + '</span>'; }).join('') +
+      (names.length > 30 ? '<span class="modal-pkg-more">+' + (names.length - 30) + ' more</span>' : '') + '</div>',
       'Apply Updates', 'confirm-apply');
   }
 
@@ -313,21 +334,28 @@
     names.forEach(function (name) {
       chain = chain.then(function () {
         return API.updates.applySingle(name).then(function (r) {
-          if (r.ok) results.success++;
-          else { results.failed++; results.errors.push(name + ': ' + (r.error || 'failed')); }
-          appendProgressOutput((r.ok ? '✓' : '✗') + ' ' + name + (r.ok ? '' : ' — ' + (r.error || 'failed')));
+          if (r.ok) {
+            results.success++;
+            appendProgressOutput('\u2713 ' + name + ' \u2014 updated to latest');
+          } else {
+            results.failed++;
+            results.errors.push(name + ': ' + (r.error || 'failed'));
+            appendProgressOutput('\u2717 ' + name + ' \u2014 ' + (r.error || 'failed'));
+          }
         }).catch(function (e) {
           results.failed++;
           results.errors.push(name + ': ' + e.message);
-          appendProgressOutput('✗ ' + name + ' — ' + e.message);
+          appendProgressOutput('\u2717 ' + name + ' \u2014 ' + e.message);
         });
       });
     });
 
     chain.then(function () {
       setProgressDone(results.failed === 0,
-        results.success + ' updated' + (results.failed > 0 ? ', ' + results.failed + ' failed' : ''));
-      toast(results.failed === 0 ? 'All updates applied' : results.success + ' updated, ' + results.failed + ' failed',
+        results.success + ' package' + (results.success !== 1 ? 's' : '') + ' updated' + (results.failed > 0 ? ', ' + results.failed + ' failed' : ''));
+      toast(results.failed === 0
+        ? 'All ' + results.success + ' updates applied successfully'
+        : results.success + ' updated, ' + results.failed + ' failed',
         results.failed === 0 ? 'success' : 'error');
       loadUpdates();
     });
@@ -337,35 +365,62 @@
 
   function applySingle(name) {
     if (!name) return;
-    toast('Updating ' + name + '...', 'info');
+    showProgressModal('Updating Package', 'Updating ' + name + '...');
     API.updates.applySingle(name).then(function (r) {
       if (r.ok) {
+        appendProgressOutput('\u2713 ' + name + ' updated successfully');
+        if (r.output) appendProgressOutput('\n' + r.output);
+        setProgressDone(true, name + ' updated successfully');
         toast(name + ' updated successfully', 'success');
         loadUpdates();
       } else {
+        appendProgressOutput('\u2717 ' + name + ' failed');
+        if (r.error) appendProgressOutput(r.error);
+        if (r.output) appendProgressOutput('\n' + r.output);
+        setProgressDone(false, name + ': ' + (r.error || 'Update failed'));
         toast(name + ': ' + (r.error || 'Failed'), 'error');
       }
     }).catch(function (e) {
+      appendProgressOutput('\u2717 ' + name + ' \u2014 ' + e.message);
+      setProgressDone(false, e.message);
       toast(name + ': ' + e.message, 'error');
     });
   }
 
   function viewPackage(name) {
     if (!name) return;
-    showModal('info', 'Package Details', '<div class="upd-loading"><div class="upd-spinner"></div>Loading...</div>', null, null);
+    var overlay = getOrCreateModal();
+    var bodyHtml = '<div class="upd-loading"><div class="upd-spinner"></div>Loading details for ' + esc(name) + '...</div>';
+    setModalContent('Package Details \u2014 ' + name, bodyHtml, null, null);
+    overlay.style.display = 'flex';
+
     API.updates.info(name).then(function (d) {
+      if (d.error) {
+        updateModalBody('<div class="upd-error">' + esc(d.error) + (d.name ? ' (' + esc(d.name) + ')' : '') + '</div>');
+        return;
+      }
       var info = d.info || {};
       var rows = '';
       var keys = Object.keys(info);
-      for (var i = 0; i < keys.length; i++) {
-        rows += '<div class="modal-info-row"><span class="modal-info-key">' + esc(keys[i]) + '</span><span class="modal-info-val">' + esc(info[keys[i]]) + '</span></div>';
+      if (!keys.length) {
+        updateModalBody('<div class="upd-empty">No details available for this package</div>');
+        return;
       }
-      if (!rows) rows = '<div class="upd-empty">No details available</div>';
-      var modalBody = document.querySelector('.modal-body');
-      if (modalBody) modalBody.innerHTML = '<div class="modal-info-grid">' + rows + '</div>';
+      var important = ['name', 'version', 'release', 'arch', 'summary', 'description', 'size', 'license', 'url', 'repo'];
+      var importantRows = '';
+      var otherRows = '';
+      for (var i = 0; i < keys.length; i++) {
+        var k = keys[i];
+        var v = info[k];
+        var row = '<div class="modal-info-row"><span class="modal-info-key">' + esc(k) + '</span><span class="modal-info-val">' + esc(v) + '</span></div>';
+        if (important.indexOf(k) !== -1) importantRows += row;
+        else otherRows += row;
+      }
+      var html = '<div class="modal-info-grid">' + importantRows + (otherRows ? '<div class="upd-info-divider">Additional Details</div>' + otherRows : '') + '</div>';
+      html += '<div class="modal-footer"><button class="db-btn db-btn-primary" data-action="close-modal">Close</button></div>';
+      updateModalBody(html);
     }).catch(function (e) {
-      var modalBody = document.querySelector('.modal-body');
-      if (modalBody) modalBody.innerHTML = '<div class="upd-error">' + esc(e.message) + '</div>';
+      updateModalBody('<div class="upd-error">Failed to load package details: ' + esc(e.message) + '</div>');
     });
   }
 
@@ -373,21 +428,30 @@
 
   function doSearch(query) {
     state.searchQuery = query;
+    state.searchSelected = {};
     renderUpdates();
-    if (query.length < 2) return;
+    if (query.length < 2) {
+      state.searchResults = [];
+      renderSearchResults();
+      return;
+    }
     state.searching = true;
+    renderSearchResults();
     API.updates.search(query).then(function (d) {
       state.searchResults = d.results || [];
       state.searching = false;
+      state.searchSelected = {};
       renderSearchResults();
     }).catch(function () {
       state.searching = false;
+      renderSearchResults();
     });
   }
 
   function clearSearch() {
     state.searchQuery = '';
     state.searchResults = [];
+    state.searchSelected = {};
     var input = document.getElementById('updSearchInput');
     if (input) input.value = '';
     renderUpdates();
@@ -399,21 +463,136 @@
     var el = document.getElementById('updSearchResults');
     if (!el) return;
     if (state.searching) {
-      el.innerHTML = '<div class="upd-search-loading">Searching packages...</div>';
+      el.innerHTML = '<div class="upd-loading"><div class="upd-spinner"></div>Searching packages...</div>';
+      return;
+    }
+    if (!state.searchQuery || state.searchQuery.length < 2) {
+      el.innerHTML = '';
       return;
     }
     if (!state.searchResults.length) {
-      el.innerHTML = '<div class="upd-search-empty">No packages found</div>';
+      el.innerHTML = '<div class="upd-search-empty">No packages found matching "' + esc(state.searchQuery) + '"</div>';
       return;
     }
-    el.innerHTML = '<div class="upd-search-header">Package Search Results</div>' +
-      state.searchResults.map(function (r) {
-        return '<div class="upd-search-item">' +
-          '<span class="upd-search-name">' + esc(r.name) + '</span>' +
+
+    var selectedCount = Object.keys(state.searchSelected).length;
+    var html = '<div class="upd-search-panel">' +
+      '<div class="upd-search-toolbar">' +
+        '<div class="upd-toolbar-left">' +
+          '<label class="upd-checkbox-wrap"><input type="checkbox" data-action="select-all-search" ' + (selectedCount === state.searchResults.length && state.searchResults.length > 0 ? 'checked' : '') + '><span class="upd-checkmark"></span></label>' +
+          '<span class="upd-count-label">' + state.searchResults.length + ' result' + (state.searchResults.length !== 1 ? 's' : '') + '</span>' +
+          (selectedCount > 0 ? '<span class="upd-selected-count">' + selectedCount + ' selected</span>' : '') +
+        '</div>' +
+        '<div class="upd-toolbar-right">' +
+          (selectedCount > 0 ? '<button class="db-btn db-btn-primary" data-action="apply-search-selected">Update Selected (' + selectedCount + ')</button>' : '') +
+        '</div>' +
+      '</div>' +
+      '<div class="upd-search-items">';
+
+    for (var i = 0; i < state.searchResults.length; i++) {
+      var r = state.searchResults[i];
+      var checked = state.searchSelected[r.name];
+      html += '<div class="upd-search-item' + (checked ? ' upd-item-selected' : '') + '">' +
+        '<label class="upd-checkbox-wrap"><input type="checkbox" data-action="select-search-pkg" data-name="' + esc(r.name) + '"' + (checked ? ' checked' : '') + '><span class="upd-checkmark"></span></label>' +
+        '<div class="upd-search-item-main">' +
+          '<span class="upd-search-name" data-action="view-search-package" data-name="' + esc(r.name) + '" title="View details">' + esc(r.name) + '</span>' +
           (r.version ? '<span class="upd-search-ver">' + esc(r.version) + '</span>' : '') +
-          (r.description ? '<span class="upd-search-desc">' + esc(r.description) + '</span>' : '') +
-        '</div>';
-      }).join('');
+        '</div>' +
+        (r.description ? '<div class="upd-search-desc">' + esc(r.description) + '</div>' : '') +
+        '<div class="upd-search-actions">' +
+          '<button class="db-btn db-btn-sm" data-action="view-search-package" data-name="' + esc(r.name) + '" title="View details">Info</button>' +
+          '<button class="db-btn db-btn-sm db-btn-primary" data-action="apply-search-single" data-name="' + esc(r.name) + '">Update</button>' +
+        '</div>' +
+      '</div>';
+    }
+    html += '</div></div>';
+    el.innerHTML = html;
+  }
+
+  function toggleSearchSelectAll() {
+    var allSelected = Object.keys(state.searchSelected).length === state.searchResults.length && state.searchResults.length > 0;
+    if (allSelected) {
+      state.searchSelected = {};
+    } else {
+      for (var i = 0; i < state.searchResults.length; i++) {
+        state.searchSelected[state.searchResults[i].name] = true;
+      }
+    }
+    renderSearchResults();
+  }
+
+  function confirmApplySearchSelected() {
+    var names = Object.keys(state.searchSelected);
+    if (!names.length) return;
+    showModal('Update Selected Packages',
+      '<p>This will update <strong>' + names.length + '</strong> package' + (names.length > 1 ? 's' : '') + ':</p>' +
+      '<div class="modal-pkg-list">' + names.slice(0, 30).map(function (n) { return '<span class="modal-pkg-tag">' + esc(n) + '</span>'; }).join('') +
+      (names.length > 30 ? '<span class="modal-pkg-more">+' + (names.length - 30) + ' more</span>' : '') + '</div>',
+      'Update Packages', 'confirm-apply-search');
+  }
+
+  function executeApplySearchSelected() {
+    closeModal();
+    var names = Object.keys(state.searchSelected);
+    if (!names.length) return;
+    showProgressModal('Updating Packages', 'Updating ' + names.length + ' package(s)...');
+
+    var chain = Promise.resolve();
+    var results = { success: 0, failed: 0 };
+
+    names.forEach(function (name) {
+      chain = chain.then(function () {
+        return API.updates.applySingle(name).then(function (r) {
+          if (r.ok) {
+            results.success++;
+            appendProgressOutput('\u2713 ' + name + ' \u2014 updated');
+          } else {
+            results.failed++;
+            appendProgressOutput('\u2717 ' + name + ' \u2014 ' + (r.error || 'failed'));
+          }
+        }).catch(function (e) {
+          results.failed++;
+          appendProgressOutput('\u2717 ' + name + ' \u2014 ' + e.message);
+        });
+      });
+    });
+
+    chain.then(function () {
+      setProgressDone(results.failed === 0,
+        results.success + ' package' + (results.success !== 1 ? 's' : '') + ' updated' + (results.failed > 0 ? ', ' + results.failed + ' failed' : ''));
+      toast(results.failed === 0
+        ? 'All ' + results.success + ' updates applied'
+        : results.success + ' updated, ' + results.failed + ' failed',
+        results.failed === 0 ? 'success' : 'error');
+      state.searchSelected = {};
+      loadUpdates();
+      if (state.searchQuery) doSearch(state.searchQuery);
+    });
+  }
+
+  function applySearchSingle(name) {
+    if (!name) return;
+    showProgressModal('Updating Package', 'Updating ' + name + '...');
+    API.updates.applySingle(name).then(function (r) {
+      if (r.ok) {
+        appendProgressOutput('\u2713 ' + name + ' updated successfully');
+        if (r.output) appendProgressOutput('\n' + r.output);
+        setProgressDone(true, name + ' updated successfully');
+        toast(name + ' updated successfully', 'success');
+        loadUpdates();
+        if (state.searchQuery) doSearch(state.searchQuery);
+      } else {
+        appendProgressOutput('\u2717 ' + name + ' failed');
+        if (r.error) appendProgressOutput(r.error);
+        if (r.output) appendProgressOutput('\n' + r.output);
+        setProgressDone(false, name + ': ' + (r.error || 'Update failed'));
+        toast(name + ': ' + (r.error || 'Failed'), 'error');
+      }
+    }).catch(function (e) {
+      appendProgressOutput('\u2717 ' + e.message);
+      setProgressDone(false, e.message);
+      toast(name + ': ' + e.message, 'error');
+    });
   }
 
   /* ─── Security Advisories ─── */
@@ -497,14 +676,14 @@
     }
     el.innerHTML = state.history.entries.map(function (h) {
       var date = '';
-      try { date = new Date(h.timestamp).toLocaleString(); } catch { date = h.timestamp; }
-      var icon = h.success ? '✓' : '✗';
+      try { date = new Date(h.timestamp).toLocaleString(); } catch (err) { date = h.timestamp; }
+      var icon = h.success ? '\u2713' : '\u2717';
       var cls = h.success ? 'upd-hist-ok' : 'upd-hist-fail';
       var detail = '';
       if (h.type === 'panel') detail = 'Panel update';
       else if (h.type === 'single') detail = 'Package: ' + (h.package || '');
       else detail = 'All packages';
-      if (h.error) detail += ' — ' + h.error;
+      if (h.error) detail += ' \u2014 ' + h.error;
       return '<div class="upd-hist-item ' + cls + '">' +
         '<span class="upd-hist-icon">' + icon + '</span>' +
         '<span class="upd-hist-detail">' + esc(detail) + '</span>' +
@@ -519,25 +698,22 @@
     var el = document.getElementById('updSummaryBar');
     if (!el) return;
     var securityCount = state.security.advisories ? state.security.advisories.length : 0;
-    var lastCheck = '';
-    if (state.panel.checking) lastCheck = 'Checking...';
-    else lastCheck = 'Up to date';
 
     el.innerHTML =
       '<div class="upd-stat-card">' +
-        '<div class="upd-stat-icon">📦</div>' +
+        '<div class="upd-stat-icon">\ud83d\udce6</div>' +
         '<div class="upd-stat-info"><div class="upd-stat-val">' + state.count + '</div><div class="upd-stat-label">Updates</div></div>' +
       '</div>' +
       '<div class="upd-stat-card">' +
-        '<div class="upd-stat-icon">🛡️</div>' +
+        '<div class="upd-stat-icon">\ud83d\udee1\ufe0f</div>' +
         '<div class="upd-stat-info"><div class="upd-stat-val">' + securityCount + '</div><div class="upd-stat-label">Security</div></div>' +
       '</div>' +
       '<div class="upd-stat-card">' +
-        '<div class="upd-stat-icon">📋</div>' +
+        '<div class="upd-stat-icon">\ud83d\udccb</div>' +
         '<div class="upd-stat-info"><div class="upd-stat-val">' + (state.history.entries ? state.history.entries.length : 0) + '</div><div class="upd-stat-label">History</div></div>' +
       '</div>' +
       '<div class="upd-stat-card">' +
-        '<div class="upd-stat-icon">🏷️</div>' +
+        '<div class="upd-stat-icon">\ud83c\udff7\ufe0f</div>' +
         '<div class="upd-stat-info"><div class="upd-stat-val">v' + esc(state.panel.localVersion) + '</div><div class="upd-stat-label">Panel</div></div>' +
       '</div>';
   }
@@ -552,7 +728,7 @@
       if (!existing) {
         var badge = document.createElement('span');
         badge.className = 'side-nav-badge';
-        badge.textContent = '●';
+        badge.textContent = '\u25cf';
         item.appendChild(badge);
       }
     } else {
@@ -562,73 +738,81 @@
 
   /* ─── Modals ─── */
 
-  function showModal(type, title, bodyHtml, confirmText, confirmAction) {
+  function getOrCreateModal() {
     var overlay = document.getElementById('updModalOverlay');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'updModalOverlay';
-      overlay.className = 'modal-overlay';
-      document.body.appendChild(overlay);
-    }
+    if (overlay) return overlay;
+    overlay = document.createElement('div');
+    overlay.id = 'updModalOverlay';
+    overlay.className = 'modal-overlay';
+    document.body.appendChild(overlay);
 
+    if (!modalListenerAttached) {
+      overlay.addEventListener('click', function (e) {
+        if (e.target === overlay) { closeModal(); return; }
+        var actionBtn = e.target.closest('[data-action]');
+        if (!actionBtn) return;
+        var act = actionBtn.getAttribute('data-action');
+        if (act === 'close-modal') { closeModal(); return; }
+        if (modalConfirmHandler && act === overlay.getAttribute('data-confirm-action')) {
+          modalConfirmHandler();
+        }
+      });
+      modalListenerAttached = true;
+    }
+    return overlay;
+  }
+
+  function setModalContent(title, bodyHtml, confirmText, confirmAction) {
+    var overlay = document.getElementById('updModalOverlay');
+    if (!overlay) return;
     var footer = '';
     if (confirmText) {
       footer = '<div class="modal-footer">' +
         '<button class="db-btn" data-action="close-modal">Cancel</button>' +
         '<button class="db-btn db-btn-primary" data-action="' + esc(confirmAction) + '">' + esc(confirmText) + '</button>' +
       '</div>';
-    } else {
-      footer = '<div class="modal-footer"><button class="db-btn" data-action="close-modal">Close</button></div>';
     }
-
+    overlay.setAttribute('data-confirm-action', confirmAction || '');
     overlay.innerHTML =
       '<div class="modal-dialog">' +
         '<div class="modal-header"><h3 class="modal-title">' + esc(title) + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
-        '<div class="modal-body">' + bodyHtml + '</div>' +
+        '<div class="modal-body" id="updModalBody">' + bodyHtml + '</div>' +
         footer +
       '</div>';
-    overlay.style.display = 'flex';
-
-    overlay.addEventListener('click', function (e) {
-      if (e.target === overlay) closeModal();
-      var actionBtn = e.target.closest('[data-action]');
-      if (actionBtn) {
-        var act = actionBtn.getAttribute('data-action');
-        if (act === 'close-modal') closeModal();
-        else if (act === confirmAction) {
-          var handler = window._updModalConfirm;
-          if (handler) handler();
-        }
-      }
-    });
-
-    window._updModalConfirm = function () {
+    modalConfirmHandler = function () {
       if (confirmAction === 'confirm-apply') executeApplyAll();
+      else if (confirmAction === 'confirm-apply-search') executeApplySearchSelected();
       else if (confirmAction === 'confirm-panel-apply') executePanelUpdate();
     };
   }
 
+  function updateModalBody(html) {
+    var body = document.getElementById('updModalBody');
+    if (body) body.innerHTML = html;
+  }
+
+  function showModal(title, bodyHtml, confirmText, confirmAction) {
+    var overlay = getOrCreateModal();
+    setModalContent(title, bodyHtml, confirmText, confirmAction);
+    overlay.style.display = 'flex';
+  }
+
   function showProgressModal(title, initialMsg) {
-    var overlay = document.getElementById('updModalOverlay');
-    if (!overlay) {
-      overlay = document.createElement('div');
-      overlay.id = 'updModalOverlay';
-      overlay.className = 'modal-overlay';
-      document.body.appendChild(overlay);
-    }
+    var overlay = getOrCreateModal();
+    overlay.setAttribute('data-confirm-action', '');
     overlay.innerHTML =
       '<div class="modal-dialog">' +
         '<div class="modal-header"><h3 class="modal-title">' + esc(title) + '</h3></div>' +
         '<div class="modal-body"><div class="upd-progress">' +
-          '<div class="upd-progress-status">' + esc(initialMsg) + '</div>' +
-          '<div class="upd-progress-output"></div>' +
+          '<div class="upd-progress-status" id="updProgressStatus">' + esc(initialMsg) + '</div>' +
+          '<div class="upd-progress-output" id="updProgressOutput"></div>' +
         '</div></div>' +
       '</div>';
     overlay.style.display = 'flex';
   }
 
   function appendProgressOutput(text) {
-    var el = document.querySelector('.upd-progress-output');
+    var el = document.getElementById('updProgressOutput');
     if (el) {
       el.textContent += text + '\n';
       el.scrollTop = el.scrollHeight;
@@ -636,22 +820,27 @@
   }
 
   function setProgressDone(success, message) {
-    var status = document.querySelector('.upd-progress-status');
+    var status = document.getElementById('updProgressStatus');
     if (status) {
       status.className = 'upd-progress-status ' + (success ? 'upd-progress-ok' : 'upd-progress-fail');
       status.textContent = message;
     }
+    var existingFooter = document.querySelector('#updModalOverlay .modal-footer');
+    if (existingFooter) existingFooter.remove();
     var footer = document.createElement('div');
     footer.className = 'modal-footer';
     footer.innerHTML = '<button class="db-btn db-btn-primary" data-action="close-modal">Done</button>';
-    var dialog = document.querySelector('.modal-dialog');
+    var dialog = document.querySelector('#updModalOverlay .modal-dialog');
     if (dialog) dialog.appendChild(footer);
   }
 
   function closeModal() {
     var overlay = document.getElementById('updModalOverlay');
-    if (overlay) overlay.style.display = 'none';
-    window._updModalConfirm = null;
+    if (overlay) {
+      overlay.style.display = 'none';
+      overlay.innerHTML = '';
+    }
+    modalConfirmHandler = null;
   }
 
   /* ─── Toast ─── */
@@ -672,7 +861,7 @@
     setTimeout(function () {
       t.classList.remove('toast-show');
       setTimeout(function () { t.remove(); }, 300);
-    }, 3000);
+    }, 3500);
   }
 
   /* ─── Utilities ─── */
