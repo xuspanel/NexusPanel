@@ -6,11 +6,12 @@ const { promisify } = require('util');
 const { runSafeSync, validators } = require('../utils/shell');
 
 const execFileAsync = promisify(execFile);
-const ALLOWED_FIELDS = ['passwordHash', 'email', 'twoFactorSecret', 'twoFactorEnabled'];
+const ALLOWED_FIELDS = ['passwordHash', 'email', 'twoFactorSecret', 'twoFactorEnabled', 'displayName', 'lastLoginAt', 'avatar'];
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
 const USERS_FILE = path.join(DATA_DIR, 'users.json');
 const PROFILE_FILE = path.join(DATA_DIR, 'profile.json');
+const AVATARS_DIR = path.join(DATA_DIR, 'avatars');
 const VALID_HOME_BASES = ['/home', '/var/www'];
 
 let writeLock = false;
@@ -640,6 +641,93 @@ async function getAvailableGroups() {
   }
 }
 
+function getDisplayName(username) {
+  const user = getPanelUser(username);
+  return user ? (user.displayName || username) : username;
+}
+
+function setDisplayName(username, displayName) {
+  const users = loadAll();
+  const user = users[username];
+  if (!user) return false;
+  user.displayName = displayName || username;
+  saveAll(users);
+  return true;
+}
+
+function setAvatar(username, base64Data) {
+  if (!fs.existsSync(AVATARS_DIR)) fs.mkdirSync(AVATARS_DIR, { recursive: true });
+  const match = base64Data.match(/^data:image\/(\w+);base64,(.+)$/);
+  if (!match) return false;
+  const ext = match[1] === 'jpeg' ? 'jpg' : match[1];
+  const buffer = Buffer.from(match[2], 'base64');
+  if (buffer.length > 512 * 1024) return false;
+  const filePath = path.join(AVATARS_DIR, username + '.' + ext);
+  fs.writeFileSync(filePath, buffer);
+  const users = loadAll();
+  if (users[username]) {
+    users[username].avatar = username;
+    saveAll(users);
+  }
+  return true;
+}
+
+function getAvatarPath(username) {
+  const user = getPanelUser(username);
+  if (!user || !user.avatar) return null;
+  if (!fs.existsSync(AVATARS_DIR)) return null;
+  const files = fs.readdirSync(AVATARS_DIR);
+  const match = files.find(f => f.startsWith(username + '.'));
+  return match ? path.join(AVATARS_DIR, match) : null;
+}
+
+function removeAvatar(username) {
+  if (!fs.existsSync(AVATARS_DIR)) return true;
+  const files = fs.readdirSync(AVATARS_DIR);
+  for (const f of files) {
+    if (f.startsWith(username + '.')) {
+      try { fs.unlinkSync(path.join(AVATARS_DIR, f)); } catch {}
+    }
+  }
+  const users = loadAll();
+  if (users[username]) {
+    delete users[username].avatar;
+    saveAll(users);
+  }
+  return true;
+}
+
+function updateLastLogin(username) {
+  const users = loadAll();
+  const user = users[username];
+  if (!user) return false;
+  user.lastLoginAt = new Date().toISOString();
+  saveAll(users);
+  return true;
+}
+
+function getActivity(username, limit) {
+  const audit = require('./audit');
+  const result = audit.query({ user: username, limit: limit || 20 });
+  return result.entries || [];
+}
+
+function getProfileSummary(username) {
+  const user = getPanelUser(username);
+  if (!user) return null;
+  const hasAvatar = getAvatarPath(username) !== null;
+  return {
+    username,
+    displayName: user.displayName || username,
+    email: user.email || '',
+    role: user.role || 'user',
+    twoFactorEnabled: !!user.twoFactorEnabled,
+    createdAt: user.createdAt || null,
+    lastLoginAt: user.lastLoginAt || null,
+    hasAvatar,
+  };
+}
+
 module.exports = {
   init,
   getPanelUser,
@@ -665,4 +753,12 @@ module.exports = {
   getAvailableGroups,
   getAvailableShells,
   validatePasswordStrength,
+  getDisplayName,
+  setDisplayName,
+  setAvatar,
+  getAvatarPath,
+  removeAvatar,
+  updateLastLogin,
+  getActivity,
+  getProfileSummary,
 };

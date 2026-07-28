@@ -1,5 +1,45 @@
 # Changelog
 
+## [1.32.0] - 2026-07-28
+### Changed
+- **Profile Module complete rewrite** — 199 lines → 420 lines (frontend), 97 → 180 lines (routes), 160 → 180 lines (CSS)
+### Added
+- Backend: `getProfileSummary()` — returns username, displayName, email, role, 2FA status, createdAt, lastLoginAt, hasAvatar
+- Backend: `getDisplayName()` / `setDisplayName()` — per-user display name stored in users.json
+- Backend: `setAvatar()` — avatar upload (base64 → PNG, max 512KB) stored in `data/avatars/`
+- Backend: `getAvatarPath()` — returns avatar file path for serving
+- Backend: `removeAvatar()` — deletes avatar file and user reference
+- Backend: `updateLastLogin()` — tracks last login timestamp
+- Backend: `getActivity()` — queries audit log for user-specific activity
+- Routes: `GET /` — full profile summary
+- Routes: `GET /avatar` — serve avatar image
+- Routes: `POST /avatar` — upload avatar (base64)
+- Routes: `DELETE /avatar` — remove avatar
+- Routes: `PUT /display-name` — update display name
+- Routes: `GET /sessions` — list API tokens
+- Routes: `DELETE /sessions/:id` — revoke specific token
+- Routes: `GET /activity` — user activity log
+- Routes: Audit logging on all profile mutations
+- Frontend: IIFE pattern (matches all other modules)
+- Frontend: Event delegation with `data-action` attributes (no inline onclick)
+- Frontend: 4 tabbed categories (Overview, Security, Sessions, Activity)
+- Frontend: Avatar upload with hover overlay, FileReader base64, 512KB limit
+- Frontend: Display name edit modal
+- Frontend: Account info grid (email, role, created, last login, 2FA, username)
+- Frontend: Email update inline
+- Frontend: Password change with real-time strength indicator (weak/fair/strong)
+- Frontend: 2FA setup flow (QR code + secret + verify)
+- Frontend: 2FA enable/disable with password or code
+- Frontend: API token list with revoke
+- Frontend: Activity log with icons and relative timestamps
+- Frontend: Toast notifications for all operations
+- Frontend: API client expanded with `profile:` namespace (13 methods)
+- CSS: Full prf- prefix namespace, avatar section, info grid, password strength bar, 2FA layout, session table, activity list, toast, light theme, mobile responsive
+### Removed
+- Deleted legacy `src/services/profile.js` (dead code, read non-existent `data/profile.json`)
+### Fixed
+- Profile API methods moved from runtime monkey-patching in profile.js to proper `profile:` namespace in api.js
+
 ## [1.31.0] - 2026-07-28
 ### Changed
 - **Settings Module complete rewrite** — 39 lines → 290 lines (backend), 145 → 530 lines (frontend), 25 → 110 lines (routes), 23 → 180 lines (CSS)

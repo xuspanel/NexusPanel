@@ -17,7 +17,7 @@
   <script defer src="/js/api.js?v=1.11.0"></script>
   <script defer src="/js/auth.js?v=1.1.0"></script>
   <script defer src="/js/dashboard.js?v=1.1.0"></script>
-  <script defer src="/js/profile.js?v=1.1.0"></script>
+  <script defer src="/js/profile.js?v=1.32.0"></script>
   <script defer src="/js/filemanager.js?v=1.11.0"></script>
   <script defer src="/js/databases.js?v=1.9.6"></script>
   <script defer src="/js/emails.js?v=1.1.0"></script>
@@ -638,91 +638,37 @@
 
     <!-- Profile View -->
     <main class="dashboard-content" id="viewProfile" style="display:none;">
-      <div class="section-header">
-        <div class="section-title"><span class="icon">👤</span> My Profile</div>
-        <span class="section-badge">Account Settings</span>
-      </div>
-
-      <div class="grid-2 profile-grid">
-        <!-- Email -->
-        <div class="card card-cyan">
-          <div class="card-label"><span class="label-icon">📧</span> Email Address</div>
-          <div id="profileEmail" class="profile-current">admin@meedo51.com</div>
-          <div class="profile-form" style="margin-top:12px;">
-            <div class="input-group" style="margin-bottom:12px;">
-              <input type="email" id="emailInput" placeholder="New email address">
-            </div>
-            <button class="btn-profile" id="updateEmailBtn">Update Email</button>
-            <span class="profile-msg" id="emailMsg"></span>
-          </div>
-        </div>
-
-        <!-- Password -->
-        <div class="card card-gold">
-          <div class="card-label"><span class="label-icon">🔒</span> Change Password</div>
-          <div class="profile-form" style="margin-top:12px;">
-            <div class="input-group" style="margin-bottom:10px;">
-              <input type="password" id="currentPass" placeholder="Current password">
-            </div>
-            <div class="input-group" style="margin-bottom:10px;">
-              <input type="password" id="newPass" placeholder="New password (min 8 chars)">
-            </div>
-            <div class="input-group" style="margin-bottom:12px;">
-              <input type="password" id="confirmPass" placeholder="Confirm new password">
-            </div>
-            <button class="btn-profile" id="changePassBtn">Change Password</button>
-            <span class="profile-msg" id="passwordMsg"></span>
-          </div>
-        </div>
-
-        <!-- 2FA -->
-        <div class="card card-purple" style="grid-column: 1 / -1;">
-          <div class="card-label"><span class="label-icon">🔐</span> Two-Factor Authentication</div>
-          <div id="twoFactorSection">
-            <p class="card-sub" style="margin-bottom:16px;">
-              Add an extra layer of security to your account by enabling 2FA via TOTP
-              (Google Authenticator, Authy, etc.).
-            </p>
-
-            <!-- 2FA Disabled State -->
-            <div id="twoFactorDisabled">
-              <button class="btn-profile btn-accent" id="setup2FABtn">Enable 2FA</button>
-            </div>
-
-            <!-- 2FA Setup State -->
-            <div id="twoFactorSetup" style="display:none;">
-              <div class="twofa-setup-layout">
-                <div class="twofa-qr">
-                  <img id="twoFactorQR" src="" alt="2FA QR Code">
-                </div>
-                <div class="twofa-secret-area">
-                  <p class="card-sub">Or enter this secret key manually:</p>
-                  <code id="twoFactorSecret" class="twofa-secret"></code>
-                  <p class="card-sub" style="margin-top:8px;">Enter the 6-digit code from your app to verify:</p>
-                  <div style="display:flex; gap:10px; margin-top:8px;">
-                    <input type="text" id="twoFactorSetupCode" placeholder="000000" maxlength="6" inputmode="numeric" pattern="[0-9]*" class="twofa-input">
-                    <button class="btn-profile btn-accent" id="verify2FABtn">Verify &amp; Enable</button>
-                  </div>
-                  <span class="profile-msg" id="twoFactorMsg"></span>
-                </div>
-              </div>
-            </div>
-
-            <!-- 2FA Enabled State -->
-            <div id="twoFactorEnabled" style="display:none;">
-              <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
-                <span class="status-dot online" style="width:12px;height:12px;"></span>
-                <span style="color:var(--accent-green); font-weight:600;">Two-factor authentication is active</span>
-              </div>
-              <div style="display:flex; gap:10px; align-items:center;">
-                <input type="password" id="disable2FAPass" placeholder="Enter password to disable" class="twofa-input" style="max-width:260px;">
-                <button class="btn-profile btn-danger" id="disable2FABtn">Disable 2FA</button>
-              </div>
-              <span class="profile-msg" id="disable2FAMsg"></span>
-            </div>
+      <div class="db-header">
+        <div class="db-header-left">
+          <span class="db-header-icon">👤</span>
+          <div class="db-header-info">
+            <div class="db-header-title">My Profile</div>
+            <div class="db-header-subtitle" id="prfHeaderSub">Account settings</div>
           </div>
         </div>
       </div>
+      <div id="profileContent"><div class="db-loading">Loading profile...</div></div>
+      <!-- Display Name Modal -->
+      <div class="fm-modal-overlay" id="prfNameOverlay" style="display:none">
+        <div class="fm-modal" style="width:400px">
+          <div class="fm-modal-header">
+            <span class="fm-modal-title">Edit Display Name</span>
+            <button class="fm-modal-close" data-action="closeNameModal">&times;</button>
+          </div>
+          <div class="fm-modal-body">
+            <label class="prf-modal-label">Display Name</label>
+            <input type="text" id="prfNameInput" class="prf-input" placeholder="Your display name" maxlength="64" autocomplete="off">
+          </div>
+          <div class="fm-modal-actions">
+            <button class="fm-btn" data-action="closeNameModal">Cancel</button>
+            <button class="fm-btn fm-btn-primary" data-action="saveDisplayName">Save</button>
+          </div>
+        </div>
+      </div>
+      <!-- Avatar Upload Hidden Input -->
+      <input type="file" id="prfAvatarInput" accept="image/*" style="display:none">
+      <!-- Toast -->
+      <div id="prfToast" class="prf-toast" style="display:none"></div>
     </main>
 
     <!-- Databases View -->
