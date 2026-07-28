@@ -44,7 +44,7 @@
   <script defer src="/js/ssl.js?v=1.28.0"></script>
   <script defer src="/js/phpfpm.js?v=1.29.0"></script>
   <script defer src="/js/updates.js?v=1.30.0"></script>
-  <script defer src="/js/settings.js?v=1.6.1"></script>
+  <script defer src="/js/settings.js?v=1.31.0"></script>
   <script defer src="/js/search.js?v=1.9.6"></script>
   <script defer src="/js/notifications.js?v=1.1.0"></script>
 
@@ -2330,7 +2330,50 @@
     <!-- Settings View -->
     <main class="dashboard-content" id="viewSettings" style="display:none;">
       <div class="db-header"><div class="db-header-left"><span class="db-header-icon">⚙️</span><div class="db-header-info"><div class="db-header-title">Settings</div><div class="db-header-subtitle">Panel configuration</div></div></div></div>
-      <div id="settingsContent"><div class="db-loading">Loading settings...</div></div>
+      <div id="settingsContent">
+        <div class="db-loading">Loading settings...</div>
+      </div>
+      <!-- Token Modal -->
+      <div class="fm-modal-overlay" id="setTokenOverlay" style="display:none">
+        <div class="fm-modal" style="width:440px">
+          <div class="fm-modal-header">
+            <span class="fm-modal-title">Create API Token</span>
+            <button class="fm-modal-close" data-action="closeTokenModal">&times;</button>
+          </div>
+          <div class="fm-modal-body">
+            <label class="set-modal-label">Token Name</label>
+            <input type="text" id="setTokenName" class="set-input" placeholder="e.g. CI Pipeline" autocomplete="off">
+            <label class="set-modal-label">Scope</label>
+            <select id="setTokenScope" class="settings-select">
+              <option value="read">Read Only</option>
+              <option value="admin">Full Admin</option>
+            </select>
+          </div>
+          <div class="fm-modal-actions">
+            <button class="fm-btn" data-action="closeTokenModal">Cancel</button>
+            <button class="fm-btn fm-btn-primary" data-action="createTokenConfirm">Create</button>
+          </div>
+        </div>
+      </div>
+      <!-- Token Secret Display Modal -->
+      <div class="fm-modal-overlay" id="setTokenSecretOverlay" style="display:none">
+        <div class="fm-modal" style="width:480px">
+          <div class="fm-modal-header">
+            <span class="fm-modal-title">Token Created</span>
+            <button class="fm-modal-close" data-action="closeTokenSecretModal">&times;</button>
+          </div>
+          <div class="fm-modal-body">
+            <p class="set-token-warning">Copy this token now. It will not be shown again.</p>
+            <div class="set-token-secret-box" id="setTokenSecretValue"></div>
+            <button class="db-btn db-btn-sm" data-action="copyTokenSecret" style="margin-top:8px;width:100%">Copy to Clipboard</button>
+          </div>
+          <div class="fm-modal-actions">
+            <button class="fm-btn fm-btn-primary" data-action="closeTokenSecretModal">Done</button>
+          </div>
+        </div>
+      </div>
+      <!-- Toast -->
+      <div id="setToast" class="set-toast" style="display:none"></div>
     </main>
     <!-- Firewall Modals -->
     <div class="fm-modal-overlay" id="fwConfirmOverlay" style="display:none;" onclick="if(event.target===this)this.style.display='none'">

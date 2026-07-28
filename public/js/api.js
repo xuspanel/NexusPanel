@@ -478,6 +478,14 @@ const API = {
   settings: {
     get: () => API.request('GET', '/settings'),
     save: (data) => API.request('POST', '/settings', data),
+    systemInfo: () => API.request('GET', '/settings/system-info'),
+    health: () => API.request('GET', '/settings/health'),
+    tokens: () => API.request('GET', '/settings/tokens'),
+    createToken: (data) => API.request('POST', '/settings/tokens', data),
+    revokeToken: (id) => API.request('DELETE', '/settings/tokens/' + id),
+    clearCache: () => API.request('POST', '/settings/maintenance/clear-cache'),
+    rotateLogs: () => API.request('POST', '/settings/maintenance/rotate-logs'),
+    restart: () => API.request('POST', '/settings/maintenance/restart-service'),
   },
   notifications: {
     list: (unread) => API.request('GET', '/notifications' + (unread ? '?unread=1' : '')),

@@ -1,5 +1,53 @@
 # Changelog
 
+## [1.31.0] - 2026-07-28
+### Changed
+- **Settings Module complete rewrite** — 39 lines → 290 lines (backend), 145 → 530 lines (frontend), 25 → 110 lines (routes), 23 → 180 lines (CSS)
+### Added
+- Backend: Full settings schema with validation (24 fields, type checking, min/max, enum whitelists)
+- Backend: `getSystemInfo()` — live system data (uptime, memory, disk, CPU, hostname, OS, Node/PHP/Nginx versions)
+- Backend: `getSystemHealth()` — service health checks (nginx, php-fpm, postgresql, vsftpd, clamav, firewalld)
+- Backend: `createApiToken()` — generate API tokens with `nxs_` prefix, crypto random bytes
+- Backend: `revokeApiToken()` — soft-revoke tokens with timestamp
+- Backend: `getApiTokens()` — list all tokens from `data/api-tokens.json`
+- Backend: `clearCache()` — remove panel cache and metrics files
+- Backend: `rotateLogs()` — force nginx log rotation via logrotate
+- Backend: `restartService()` — restart NexusPanel systemd service
+- Backend: Atomic file writes (temp + rename) for settings and tokens
+- Backend: Strict input validation (token names, IP/CIDR whitelist, all setting types)
+- Routes: `GET /system-info` — live system information endpoint
+- Routes: `GET /health` — system health summary endpoint
+- Routes: `GET /tokens` — list API tokens (admin)
+- Routes: `POST /tokens` — create API token (admin)
+- Routes: `DELETE /tokens/:id` — revoke API token (admin)
+- Routes: `POST /maintenance/clear-cache` — clear cache (admin)
+- Routes: `POST /maintenance/rotate-logs` — rotate logs (admin)
+- Routes: `POST /maintenance/restart-service` — restart service (admin)
+- Routes: Audit logging on all mutations
+- Frontend: IIFE pattern (matches all other modules)
+- Frontend: Event delegation with `data-action` attributes (no inline onclick)
+- Frontend: 6 tabbed categories (Overview, Panel, Security, Appearance, Notifications, Maintenance)
+- Frontend: Overview tab with system info cards (hostname, uptime, memory, disk, CPU, OS)
+- Frontend: System versions display (Node.js, PHP, Nginx)
+- Frontend: Service health grid with status dots (running/stopped)
+- Frontend: Terminal version preference with reset
+- Frontend: Panel config (name, location, default page, session timeouts)
+- Frontend: Security settings (2FA, login notifications, IP whitelist)
+- Frontend: API token management (create, revoke, secret display modal)
+- Frontend: Appearance settings (theme cards, sidebar position, font size, accent color)
+- Frontend: Notification settings (desktop, update alerts, email, categories)
+- Frontend: Maintenance actions (clear cache, rotate logs, restart service, debug mode)
+- Frontend: Log retention range slider
+- Frontend: Toast notifications for all operations
+- Frontend: Dirty state indicator (shows asterisk on unsaved changes)
+- Frontend: Range sliders with live value display
+- Frontend: Light theme support for all new elements
+- Frontend: Mobile responsive (stacks to single column < 768px)
+- Frontend: API client expanded from 2 to 11 methods
+- CSS: Tab bar, info cards, theme cards, font cards, token table, maintenance grid, health grid, toast, modals, range sliders, input/textarea styles, light theme overrides, mobile responsive
+### Fixed
+- `server.js` auto-update callback-style `applyPanelUpdate` replaced with Promise-based API
+
 ## [1.30.0] - 2026-07-28
 ### Changed
 - **Updates Module complete rewrite** — 191 lines → 430 lines (backend), 147 → 620 lines (frontend), 22 → 130 lines (routes), 30 → 120 lines (CSS)

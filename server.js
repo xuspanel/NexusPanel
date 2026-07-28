@@ -306,9 +306,10 @@ server.listen(PORT, '127.0.0.1', () => {
         const s = settings_.load();
         if (s.autoUpdate) {
           console.log('[AutoUpdate] New version available (' + result.remoteVersion + '), applying...');
-          updates_.applyPanelUpdate((err, output) => {
-            if (err) console.error('[AutoUpdate] Failed:', err.message);
-            else console.log('[AutoUpdate] Success:', output.substring(output.length - 200));
+          updates_.applyPanelUpdate().then(function (output) {
+            console.log('[AutoUpdate] Success:', output.substring(output.length - 200));
+          }).catch(function (err) {
+            console.error('[AutoUpdate] Failed:', err.message);
           });
         }
       }
