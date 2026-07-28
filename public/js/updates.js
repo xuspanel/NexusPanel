@@ -60,8 +60,6 @@
   function handleClick(e) {
     var btn = e.target.closest('[data-action]');
     if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
     var action = btn.getAttribute('data-action');
     switch (action) {
       case 'refresh-updates': loadAll(); break;
