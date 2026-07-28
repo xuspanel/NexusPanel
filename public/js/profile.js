@@ -143,8 +143,8 @@
     h += '</div></div>';
 
     h += '<div class="prf-section"><div class="prf-section-title">Email Address</div><div class="prf-section-desc">Update the email associated with your account</div>';
-    h += '<div class="prf-row"><div class="prf-row-info"><div class="prf-row-label">' + esc(p.email || 'No email set') + '</div></div>';
-    h += '<div style="display:flex;gap:8px;align-items:center">';
+    h += '<div class="prf-row" style="flex-wrap:wrap"><div class="prf-row-info" style="min-width:100%"><div class="prf-row-label">' + esc(p.email || 'No email set') + '</div></div>';
+    h += '<div style="display:flex;gap:8px;align-items:center;flex-shrink:0">';
     h += '<input type="email" class="prf-input" id="prfEmailInput" placeholder="New email address" style="max-width:240px">';
     h += '<button class="db-btn db-btn-primary" data-action="updateEmail">Update</button>';
     h += '</div></div></div>';
@@ -490,10 +490,10 @@
   }
 
   window.initProfile = async function () {
-    var container = $('profileContent');
-    if (container && !container._prfBound) {
-      container._prfBound = true;
-      container.addEventListener('click', function (e) {
+    var viewEl = $('viewProfile');
+    if (viewEl && !viewEl._prfBound) {
+      viewEl._prfBound = true;
+      viewEl.addEventListener('click', function (e) {
         var el = e.target.closest('[data-action]');
         if (el) {
           e.preventDefault();
