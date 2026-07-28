@@ -743,7 +743,8 @@
     if (overlay) return overlay;
     overlay = document.createElement('div');
     overlay.id = 'updModalOverlay';
-    overlay.className = 'modal-overlay';
+    overlay.className = 'fm-modal-overlay';
+    overlay.style.display = 'none';
     document.body.appendChild(overlay);
 
     if (!modalListenerAttached) {
@@ -765,19 +766,22 @@
   function setModalContent(title, bodyHtml, confirmText, confirmAction) {
     var overlay = document.getElementById('updModalOverlay');
     if (!overlay) return;
-    var footer = '';
+    var actionsHtml = '';
     if (confirmText) {
-      footer = '<div class="modal-footer">' +
-        '<button class="db-btn" data-action="close-modal">Cancel</button>' +
-        '<button class="db-btn db-btn-primary" data-action="' + esc(confirmAction) + '">' + esc(confirmText) + '</button>' +
+      actionsHtml = '<div class="fm-modal-actions">' +
+        '<button class="fm-btn" data-action="close-modal">Cancel</button>' +
+        '<button class="fm-btn fm-btn-primary" data-action="' + esc(confirmAction) + '">' + esc(confirmText) + '</button>' +
       '</div>';
     }
     overlay.setAttribute('data-confirm-action', confirmAction || '');
     overlay.innerHTML =
-      '<div class="modal-dialog">' +
-        '<div class="modal-header"><h3 class="modal-title">' + esc(title) + '</h3><button class="modal-close" data-action="close-modal">&times;</button></div>' +
-        '<div class="modal-body" id="updModalBody">' + bodyHtml + '</div>' +
-        footer +
+      '<div class="fm-modal" style="width:440px;">' +
+        '<div class="fm-modal-header">' +
+          '<span class="fm-modal-title">' + esc(title) + '</span>' +
+          '<button class="fm-modal-close" data-action="close-modal">&times;</button>' +
+        '</div>' +
+        '<div class="fm-modal-body" id="updModalBody">' + bodyHtml + '</div>' +
+        actionsHtml +
       '</div>';
     modalConfirmHandler = function () {
       if (confirmAction === 'confirm-apply') executeApplyAll();
@@ -801,9 +805,11 @@
     var overlay = getOrCreateModal();
     overlay.setAttribute('data-confirm-action', '');
     overlay.innerHTML =
-      '<div class="modal-dialog">' +
-        '<div class="modal-header"><h3 class="modal-title">' + esc(title) + '</h3></div>' +
-        '<div class="modal-body"><div class="upd-progress">' +
+      '<div class="fm-modal" style="width:480px;">' +
+        '<div class="fm-modal-header">' +
+          '<span class="fm-modal-title">' + esc(title) + '</span>' +
+        '</div>' +
+        '<div class="fm-modal-body"><div class="upd-progress">' +
           '<div class="upd-progress-status" id="updProgressStatus">' + esc(initialMsg) + '</div>' +
           '<div class="upd-progress-output" id="updProgressOutput"></div>' +
         '</div></div>' +
@@ -825,13 +831,13 @@
       status.className = 'upd-progress-status ' + (success ? 'upd-progress-ok' : 'upd-progress-fail');
       status.textContent = message;
     }
-    var existingFooter = document.querySelector('#updModalOverlay .modal-footer');
+    var existingFooter = document.querySelector('#updModalOverlay .fm-modal-actions');
     if (existingFooter) existingFooter.remove();
     var footer = document.createElement('div');
-    footer.className = 'modal-footer';
-    footer.innerHTML = '<button class="db-btn db-btn-primary" data-action="close-modal">Done</button>';
-    var dialog = document.querySelector('#updModalOverlay .modal-dialog');
-    if (dialog) dialog.appendChild(footer);
+    footer.className = 'fm-modal-actions';
+    footer.innerHTML = '<button class="fm-btn fm-btn-primary" data-action="close-modal">Done</button>';
+    var modal = document.querySelector('#updModalOverlay .fm-modal');
+    if (modal) modal.appendChild(footer);
   }
 
   function closeModal() {

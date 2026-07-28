@@ -10416,8 +10416,6 @@ body::before {
 .upd-stream { margin-top:10px; border-top:1px solid var(--glass-border); padding-top:10px; }
 .upd-stream-pre { background:rgba(0,0,0,0.3); border:1px solid var(--glass-border); border-radius:var(--radius-sm); padding:12px; font-family:var(--font-mono); font-size:12px; color:var(--accent-green); max-height:250px; overflow-y:auto; white-space:pre-wrap; word-break:break-all; margin:0; }
 
-.upd-search-bar { display:flex; gap:8px; }
-.upd-search-bar .db-input { flex:1; }
 .upd-search-results { display:flex; flex-direction:column; gap:4px; }
 .upd-search-loading, .upd-search-empty { padding:12px; text-align:center; color:var(--text-tertiary); font-size:13px; }
 .upd-search-panel { background:var(--bg-card); border:1px solid var(--glass-border); border-radius:var(--radius-lg); overflow:hidden; }
