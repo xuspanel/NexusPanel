@@ -47,6 +47,10 @@ const API = {
   rebootStatus() {
     return this.request('GET', '/system/reboot-status');
   },
+  dashboard: {
+    serviceHealth: () => API.request('GET', '/system/service-health'),
+    quickStats: () => API.request('GET', '/system/quick-stats'),
+  },
   emails: {
     list: () => API.request('GET', '/emails/list'),
     domains: () => API.request('GET', '/emails/domains'),

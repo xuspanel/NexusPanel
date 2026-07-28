@@ -1,5 +1,34 @@
 # Changelog
 
+## [1.33.0] - 2026-07-28
+### Changed
+- **Dashboard Module complete rewrite** — removed particle animation, global functions → IIFE, inline onclick → `data-dash-action` event delegation
+### Added
+- Backend: `getServiceHealth()` — checks nginx, php-fpm, postgresql, vsftpd, docker via `systemctl is-active` (`runSafeSync`)
+- Backend: `getQuickStats()` — returns domainCount, userCount, containerCount from data files + `docker ps -q`
+- Routes: `GET /service-health` — returns health status of 5 core services
+- Routes: `GET /quick-stats` — returns domain/user/container counts
+- Frontend: IIFE pattern with `state` object (replaces global variables)
+- Frontend: Event delegation with `data-dash-action` attributes (no inline onclick)
+- Frontend: `esc()/$()` DOM helpers, `showToast()` notification system
+- Frontend: Connection status indicator (green/red dot with pulse animation)
+- Frontend: Quick stats row (domains, users, containers, uptime)
+- Frontend: Service health badges with live status polling
+- Frontend: Reboot confirmation modal (standard `fm-modal` pattern)
+- Frontend: Resource history charts with Chart.js `.update()` reuse (no destroy/recreate)
+- Frontend: 10s polling interval with visibility change handler
+- Frontend: Notifications rewritten to IIFE with event listeners
+- API: `dashboard:` namespace added to api.js with `serviceHealth()` and `quickStats()`
+- CSS: Full `dash-*` prefix namespace — hero, quick stats, service health, cards, system status, charts, toast, reboot modal, connection indicator, mobile responsive
+### Fixed
+- Dashboard metrics.js: 30d chart bug (hours `1` → `720`), `execSync` → `runSafeSync`
+- Dashboard HTML: removed ALL inline `onclick` handlers, notification bell event listeners
+- Dashboard: Storage quick stat double "GB" unit (`diskTotal` already formatted by `formatBytes`)
+- Dashboard: Bandwidth empty — CSS version stuck at `v=1.11.0`, browser served stale cached styles without `dash-*` rules
+- Dashboard: `getTraffic()` regex failed on `/proc/net/dev` lines with leading whitespace (`/^\s*/` fix)
+- Dashboard: `getTraffic()` fallback regex excluded docker bridges, veth, tun interfaces from bandwidth total
+- Updates Module: `EventSource` URL missing `/api` prefix — panel update never executed (SPA catch-all returned HTML instead of SSE stream)
+
 ## [1.32.0] - 2026-07-28
 ### Changed
 - **Profile Module complete rewrite** — 199 lines → 420 lines (frontend), 97 → 180 lines (routes), 160 → 180 lines (CSS)

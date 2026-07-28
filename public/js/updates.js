@@ -187,7 +187,7 @@
     state.streamOutput = '';
     renderPanelCard();
 
-    var evtSource = new EventSource('/updates/panel-update-stream');
+    var evtSource = new EventSource('/api/updates/panel-update-stream');
     evtSource.onmessage = function (e) {
       try {
         var data = JSON.parse(e.data);

@@ -1,7 +1,7 @@
 const express = require('express');
 const { exec } = require('child_process');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
-const { getStats, isRebooting } = require('../services/system');
+const { getStats, isRebooting, getServiceHealth, getQuickStats } = require('../services/system');
 
 const router = express.Router();
 
@@ -13,6 +13,22 @@ router.get('/stats', async (req, res) => {
     res.json(stats);
   } catch (err) {
     res.status(500).json({ error: 'Failed to fetch system stats' });
+  }
+});
+
+router.get('/service-health', async (req, res) => {
+  try {
+    res.json(getServiceHealth());
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch service health' });
+  }
+});
+
+router.get('/quick-stats', async (req, res) => {
+  try {
+    res.json(getQuickStats());
+  } catch (err) {
+    res.status(500).json({ error: 'Failed to fetch quick stats' });
   }
 });
 

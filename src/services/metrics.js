@@ -1,4 +1,4 @@
-const { execSync } = require('child_process');
+const { runSafeSync } = require('../utils/shell');
 const alerts = require('./alerts');
 const fs = require('fs');
 const path = require('path');
@@ -7,12 +7,17 @@ const DATA_DIR = path.join(__dirname, '..', '..', 'data', 'metrics');
 
 function ensureDir() { try { fs.mkdirSync(DATA_DIR, { recursive: true }); } catch {} }
 
+function shell(cmd) {
+  const r = runSafeSync('bash', ['-c', cmd], { timeout: 5000 });
+  return r.stdout.trim();
+}
+
 function collect() {
   try {
-    const cpu = execSync("top -bn1 | head -5 | tail -1 | awk '{print $2+$4}'", { encoding: 'utf8', timeout: 5000 }).trim();
-    const mem = execSync("free | grep Mem | awk '{printf \"%d %d %d\", $2,$3,$4}'", { encoding: 'utf8', timeout: 5000 }).trim().split(' ');
-    const disk = execSync("df / | tail -1 | awk '{printf \"%d %d %d\", $2,$3,$4}'", { encoding: 'utf8', timeout: 5000 }).trim().split(' ');
-    const net = execSync("cat /proc/net/dev | tail -n +3 | awk '{rx+=$2; tx+=$10} END {print rx, tx}'", { encoding: 'utf8', timeout: 5000 }).trim().split(' ');
+    const cpu = shell("top -bn1 | head -5 | tail -1 | awk '{print $2+$4}'");
+    const mem = shell("free | grep Mem | awk '{printf \"%d %d %d\", $2,$3,$4}'").split(' ');
+    const disk = shell("df / | tail -1 | awk '{printf \"%d %d %d\", $2,$3,$4}'").split(' ');
+    const net = shell("cat /proc/net/dev | tail -n +3 | awk '{rx+=$2; tx+=$10} END {print rx, tx}'").split(' ');
 
     return {
       timestamp: Date.now(),
@@ -35,7 +40,7 @@ function getCurrent() {
 
 function getHistory(period) {
   ensureDir();
-  const hours = period === '24h' ? 24 : period === '7d' ? 168 : 1;
+  const hours = period === '24h' ? 24 : period === '7d' ? 168 : 720;
   const cutoff = Date.now() - hours * 3600000;
   const entries = [];
 

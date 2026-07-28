@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>NexusPanel — VPS Control Center</title>
   <script>document.documentElement.setAttribute('data-theme', localStorage.getItem('nx-theme') || 'dark');</script>
-  <link rel="stylesheet" href="/css/style.css?v=1.11.0">
+  <link rel="stylesheet" href="/css/style.css?v=1.33.0">
   <link rel="stylesheet" href="/css/docker.prompt.css?v=1.12.0">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><text y='28' font-size='28'>⚡</text></svg>">
   <link rel="stylesheet" href="/libs/xterm.css?v=1.6.1">
@@ -16,7 +16,7 @@
   <script defer src="/js/theme.js?v=1.1.0"></script>
   <script defer src="/js/api.js?v=1.11.0"></script>
   <script defer src="/js/auth.js?v=1.1.0"></script>
-  <script defer src="/js/dashboard.js?v=1.1.0"></script>
+  <script defer src="/js/dashboard.js?v=1.33.0"></script>
   <script defer src="/js/profile.js?v=1.32.0"></script>
   <script defer src="/js/filemanager.js?v=1.11.0"></script>
   <script defer src="/js/databases.js?v=1.9.6"></script>
@@ -46,7 +46,7 @@
   <script defer src="/js/updates.js?v=1.30.0"></script>
   <script defer src="/js/settings.js?v=1.31.0"></script>
   <script defer src="/js/search.js?v=1.9.6"></script>
-  <script defer src="/js/notifications.js?v=1.1.0"></script>
+  <script defer src="/js/notifications.js?v=1.33.0"></script>
 
 </head>
 <body>
@@ -288,12 +288,12 @@
           <div class="global-search-results" id="globalSearchResults" style="display:none"></div>
         </div>
         <div class="notif-bell-wrap">
-          <button class="notif-bell" id="notifBell" onclick="toggleNotifPanel()" title="Notifications">🔔</button>
+          <button class="notif-bell" id="notifBell" title="Notifications">🔔</button>
           <span class="notif-badge" id="notifBadge" style="display:none;"></span>
           <div class="notif-panel" id="notifPanel" style="display:none;">
             <div class="notif-panel-header">
               <span>Notifications</span>
-              <button class="fm-btn fm-btn-sm" onclick="notifMarkAllRead()">Mark all read</button>
+              <button class="fm-btn fm-btn-sm" id="notifMarkAllBtn">Mark all read</button>
             </div>
             <div id="notifList" class="notif-list"></div>
           </div>
@@ -305,134 +305,201 @@
     <!-- Home View -->
     <main class="dashboard-content" id="viewDashboard">
       <!-- Hero Welcome -->
-      <div class="home-hero">
-        <div class="home-hero-bg"></div>
-        <div class="home-hero-content">
-          <div class="home-hero-icon" aria-hidden="true">⚡</div>
-          <h1 class="home-hero-title">Welcome to NexusPanel</h1>
-          <p class="home-hero-subtitle" id="homeHeroSubtitle">VPS Control Center</p>
-          <div class="home-hero-stats" id="homeHeroStats">
-            <div class="home-hero-stat">
-              <span class="home-hero-stat-icon" aria-hidden="true">🖥</span>
-              <span class="home-hero-stat-value" id="homeStatCores"><span class="skeleton skeleton-text skeleton-inline"></span></span>
-              <span class="home-hero-stat-label">Cores</span>
+      <div class="dash-hero">
+        <div class="dash-hero-bg"></div>
+        <div class="dash-hero-content">
+          <div class="dash-hero-icon" aria-hidden="true">⚡</div>
+          <h1 class="dash-hero-title">Welcome to NexusPanel</h1>
+          <p class="dash-hero-subtitle" id="dashHeroSubtitle">VPS Control Center</p>
+          <div class="dash-hero-stats" id="dashHeroStats">
+            <div class="dash-hero-stat">
+              <span class="dash-hero-stat-icon" aria-hidden="true">🖥</span>
+              <span class="dash-hero-stat-value" id="dashStatCores"><span class="skeleton skeleton-text skeleton-inline"></span></span>
+              <span class="dash-hero-stat-label">Cores</span>
             </div>
-            <div class="home-hero-stat">
-              <span class="home-hero-stat-icon" aria-hidden="true">💾</span>
-              <span class="home-hero-stat-value" id="homeStatRam"><span class="skeleton skeleton-text skeleton-inline"></span></span>
-              <span class="home-hero-stat-label">RAM</span>
+            <div class="dash-hero-stat">
+              <span class="dash-hero-stat-icon" aria-hidden="true">💾</span>
+              <span class="dash-hero-stat-value" id="dashStatRam"><span class="skeleton skeleton-text skeleton-inline"></span></span>
+              <span class="dash-hero-stat-label">RAM</span>
             </div>
-            <div class="home-hero-stat">
-              <span class="home-hero-stat-icon" aria-hidden="true">⏱</span>
-              <span class="home-hero-stat-value" id="homeStatUptime"><span class="skeleton skeleton-text skeleton-inline"></span></span>
-              <span class="home-hero-stat-label">Uptime</span>
+            <div class="dash-hero-stat">
+              <span class="dash-hero-stat-icon" aria-hidden="true">⏱</span>
+              <span class="dash-hero-stat-value" id="dashStatUptime"><span class="skeleton skeleton-text skeleton-inline"></span></span>
+              <span class="dash-hero-stat-label">Uptime</span>
             </div>
-            <div class="home-hero-stat">
-              <span class="home-hero-stat-icon" aria-hidden="true">🌐</span>
-              <span class="home-hero-stat-value" id="homeStatOS"><span class="skeleton skeleton-text skeleton-inline"></span></span>
-              <span class="home-hero-stat-label">OS</span>
+            <div class="dash-hero-stat">
+              <span class="dash-hero-stat-icon" aria-hidden="true">🌐</span>
+              <span class="dash-hero-stat-value" id="dashStatOS"><span class="skeleton skeleton-text skeleton-inline"></span></span>
+              <span class="dash-hero-stat-label">OS</span>
+            </div>
+            <div class="dash-hero-stat" title="Connection status">
+              <span class="dash-hero-stat-icon" aria-hidden="true">🔗</span>
+              <span class="dash-conn-dot dash-conn-ok" id="dashConnStatus"></span>
+              <span class="dash-hero-stat-label">Status</span>
             </div>
           </div>
         </div>
+      </div>
+
+      <!-- Quick Stats -->
+      <div class="dash-quick-stats" id="dashQuickStatsRow">
+        <div class="dash-qs-card">
+          <div class="dash-qs-icon" aria-hidden="true">🌐</div>
+          <div class="dash-qs-info">
+            <div class="dash-qs-value" id="dashQsDomains">—</div>
+            <div class="dash-qs-label">Domains</div>
+          </div>
+        </div>
+        <div class="dash-qs-card">
+          <div class="dash-qs-icon" aria-hidden="true">👥</div>
+          <div class="dash-qs-info">
+            <div class="dash-qs-value" id="dashQsUsers">—</div>
+            <div class="dash-qs-label">Users</div>
+          </div>
+        </div>
+        <div class="dash-qs-card">
+          <div class="dash-qs-icon" aria-hidden="true">🐳</div>
+          <div class="dash-qs-info">
+            <div class="dash-qs-value" id="dashQsContainers">—</div>
+            <div class="dash-qs-label">Containers</div>
+          </div>
+        </div>
+        <div class="dash-qs-card">
+          <div class="dash-qs-icon" aria-hidden="true">💾</div>
+          <div class="dash-qs-info">
+            <div class="dash-qs-value" id="dashQsDisks">—</div>
+            <div class="dash-qs-label">Storage</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Service Health -->
+      <div class="dash-section-header">
+        <span class="dash-section-icon" aria-hidden="true">🏥</span>
+        <span class="dash-section-title">Service Health</span>
+      </div>
+      <div class="dash-service-health" id="dashServiceHealth">
+        <span class="dash-svc-loading"><span class="skeleton skeleton-text skeleton-inline" style="width:200px;height:20px;"></span></span>
       </div>
 
       <!-- Screen Cards Grid -->
-      <div class="home-cards-grid" id="homeCardsGrid"></div>
+      <div class="dash-cards-grid" id="dashCardsGrid"></div>
 
       <!-- Resource History Charts -->
-      <div class="home-charts-header">
-        <span class="home-charts-title"><span aria-hidden="true">📊</span> Resource History</span>
-        <div class="home-charts-periods">
-          <button class="home-period-btn active" onclick="switchHistoryPeriod('24h',this)">24h</button>
-          <button class="home-period-btn" onclick="switchHistoryPeriod('7d',this)">7d</button>
-          <button class="home-period-btn" onclick="switchHistoryPeriod('30d',this)">30d</button>
+      <div class="dash-charts-header">
+        <span class="dash-charts-title"><span aria-hidden="true">📊</span> Resource History</span>
+        <div class="dash-charts-periods">
+          <button class="dash-period-btn active" data-dash-action="switch-period" data-period="24h">24h</button>
+          <button class="dash-period-btn" data-dash-action="switch-period" data-period="7d">7d</button>
+          <button class="dash-period-btn" data-dash-action="switch-period" data-period="30d">30d</button>
         </div>
       </div>
-      <div id="homeHistoryCharts" class="home-charts-grid">
-        <div class="home-chart-card"><span class="home-chart-label">CPU</span><canvas id="chartCpu" height="80"></canvas><div class="home-chart-empty" id="chartCpuEmpty" style="display:none"><span class="home-chart-empty-icon">📊</span><span class="home-chart-empty-text">No data yet</span></div></div>
-        <div class="home-chart-card"><span class="home-chart-label">Memory</span><canvas id="chartMem" height="80"></canvas><div class="home-chart-empty" id="chartMemEmpty" style="display:none"><span class="home-chart-empty-icon">📊</span><span class="home-chart-empty-text">No data yet</span></div></div>
-        <div class="home-chart-card"><span class="home-chart-label">Disk</span><canvas id="chartDisk" height="80"></canvas><div class="home-chart-empty" id="chartDiskEmpty" style="display:none"><span class="home-chart-empty-icon">📊</span><span class="home-chart-empty-text">No data yet</span></div></div>
-        <div class="home-chart-card"><span class="home-chart-label">Network</span><canvas id="chartNet" height="80"></canvas><div class="home-chart-empty" id="chartNetEmpty" style="display:none"><span class="home-chart-empty-icon">📊</span><span class="home-chart-empty-text">No data yet</span></div></div>
+      <div id="dashHistoryCharts" class="dash-charts-grid">
+        <div class="dash-chart-card"><span class="dash-chart-label">CPU</span><canvas id="dashChartCpu" height="80"></canvas><div class="dash-chart-empty" style="display:none"><span class="dash-chart-empty-icon">📊</span><span class="dash-chart-empty-text">No data yet</span></div></div>
+        <div class="dash-chart-card"><span class="dash-chart-label">Memory</span><canvas id="dashChartMem" height="80"></canvas><div class="dash-chart-empty" style="display:none"><span class="dash-chart-empty-icon">📊</span><span class="dash-chart-empty-text">No data yet</span></div></div>
+        <div class="dash-chart-card"><span class="dash-chart-label">Disk</span><canvas id="dashChartDisk" height="80"></canvas><div class="dash-chart-empty" style="display:none"><span class="dash-chart-empty-icon">📊</span><span class="dash-chart-empty-text">No data yet</span></div></div>
+        <div class="dash-chart-card"><span class="dash-chart-label">Network</span><canvas id="dashChartNet" height="80"></canvas><div class="dash-chart-empty" style="display:none"><span class="dash-chart-empty-icon">📊</span><span class="dash-chart-empty-text">No data yet</span></div></div>
       </div>
-      <div id="homeChartsError" class="home-charts-error" style="display:none">
-        <span class="home-charts-error-icon">⚠️</span>
-        <span class="home-charts-error-text">Unable to load metrics</span>
-        <button class="home-charts-retry" onclick="loadHistoryCharts()">Retry</button>
+      <div id="dashChartsError" class="dash-charts-error" style="display:none">
+        <span class="dash-charts-error-icon">⚠️</span>
+        <span class="dash-charts-error-text">Unable to load metrics</span>
+        <button class="dash-charts-retry" data-dash-action="retry-charts">Retry</button>
       </div>
 
-      <!-- System Stats (compact) -->
-      <div class="home-section-header" style="margin-top:32px;">
-        <span class="home-section-icon" aria-hidden="true">📊</span>
-        <span class="home-section-title">System Status</span>
-        <span class="home-section-badge" id="homeStatusBadge"><span class="status-dot online"></span>Online</span>
+      <!-- System Status -->
+      <div class="dash-section-header" style="margin-top:32px;">
+        <span class="dash-section-icon" aria-hidden="true">📊</span>
+        <span class="dash-section-title">System Status</span>
+        <span class="dash-section-badge" id="dashStatusBadge"><span class="status-dot online"></span>Online</span>
       </div>
-      <div class="home-sys-grid" id="homeSysGrid">
-        <div class="home-sys-card">
-          <div class="home-sys-label"><span class="label-icon" aria-hidden="true">💾</span> RAM</div>
+      <div class="dash-sys-grid" id="dashSysGrid">
+        <div class="dash-sys-card">
+          <div class="dash-sys-label"><span class="label-icon" aria-hidden="true">💾</span> RAM</div>
           <div class="progress-container">
             <div class="progress-header">
-              <span class="progress-text" id="homeRamText"><span class="skeleton skeleton-text"></span></span>
-              <span class="progress-percent" id="homeRamPercent"><span class="skeleton skeleton-text skeleton-inline" style="width:40px"></span></span>
+              <span class="progress-text" id="dashRamText"><span class="skeleton skeleton-text"></span></span>
+              <span class="progress-percent" id="dashRamPercent"><span class="skeleton skeleton-text skeleton-inline" style="width:40px"></span></span>
             </div>
             <div class="progress-bar">
-              <div class="progress-fill progress-fill-green skeleton-progress" id="homeRamFill" style="width:10%"></div>
+              <div class="progress-fill progress-fill-green skeleton-progress" id="dashRamFill" style="width:10%"></div>
             </div>
           </div>
         </div>
-        <div class="home-sys-card">
-          <div class="home-sys-label"><span class="label-icon" aria-hidden="true">⚡</span> CPU</div>
+        <div class="dash-sys-card">
+          <div class="dash-sys-label"><span class="label-icon" aria-hidden="true">⚡</span> CPU</div>
           <div class="progress-container">
             <div class="progress-header">
-              <span class="progress-text">Load Average</span>
-              <span class="progress-percent" id="homeCpuPercent"><span class="skeleton skeleton-text skeleton-inline" style="width:40px"></span></span>
+              <span class="progress-text" id="dashCpuLoad">Load Average</span>
+              <span class="progress-percent" id="dashCpuPercent"><span class="skeleton skeleton-text skeleton-inline" style="width:40px"></span></span>
             </div>
             <div class="progress-bar">
-              <div class="progress-fill progress-fill-gold skeleton-progress" id="homeCpuFill" style="width:10%"></div>
+              <div class="progress-fill progress-fill-gold skeleton-progress" id="dashCpuFill" style="width:10%"></div>
             </div>
           </div>
         </div>
-        <div class="home-sys-card">
-          <div class="home-sys-label"><span class="label-icon" aria-hidden="true">💽</span> Disk</div>
+        <div class="dash-sys-card">
+          <div class="dash-sys-label"><span class="label-icon" aria-hidden="true">💽</span> Disk</div>
           <div class="progress-container">
             <div class="progress-header">
-              <span class="progress-text" id="homeDiskText"><span class="skeleton skeleton-text"></span></span>
-              <span class="progress-percent" id="homeDiskPercent"><span class="skeleton skeleton-text skeleton-inline" style="width:40px"></span></span>
+              <span class="progress-text" id="dashDiskText"><span class="skeleton skeleton-text"></span></span>
+              <span class="progress-percent" id="dashDiskPercent"><span class="skeleton skeleton-text skeleton-inline" style="width:40px"></span></span>
             </div>
             <div class="progress-bar">
-              <div class="progress-fill progress-fill-cyan skeleton-progress" id="homeDiskFill" style="width:10%"></div>
+              <div class="progress-fill progress-fill-cyan skeleton-progress" id="dashDiskFill" style="width:10%"></div>
             </div>
           </div>
         </div>
-        <div class="home-sys-card">
-          <div class="home-sys-label"><span class="label-icon" aria-hidden="true">📡</span> Bandwidth</div>
-          <div class="home-sys-bandwidth">
-            <div class="home-sys-bw-item">
-              <span class="home-sys-bw-label">⬇ Down</span>
-              <span class="home-sys-bw-value" id="homeTrafficRx"><span class="skeleton skeleton-text skeleton-inline" style="width:60px"></span></span>
+        <div class="dash-sys-card">
+          <div class="dash-sys-label"><span class="label-icon" aria-hidden="true">📡</span> Bandwidth</div>
+          <div class="dash-sys-bandwidth">
+            <div class="dash-sys-bw-item">
+              <span class="dash-sys-bw-label">⬇ Down</span>
+              <span class="dash-sys-bw-value" id="dashTrafficRx"><span class="skeleton skeleton-text skeleton-inline" style="width:60px"></span></span>
             </div>
-            <div class="home-sys-bw-item">
-              <span class="home-sys-bw-label">⬆ Up</span>
-              <span class="home-sys-bw-value" id="homeTrafficTx"><span class="skeleton skeleton-text skeleton-inline" style="width:60px"></span></span>
+            <div class="dash-sys-bw-item">
+              <span class="dash-sys-bw-label">⬆ Up</span>
+              <span class="dash-sys-bw-value" id="dashTrafficTx"><span class="skeleton skeleton-text skeleton-inline" style="width:60px"></span></span>
             </div>
           </div>
         </div>
-        <div class="home-sys-card home-sys-card-full">
-          <div class="home-sys-label"><span class="label-icon">🔗</span> SSH Connect</div>
-          <div class="root-command" id="homeRootCommand">
-            <span id="homeRootCommandText">ssh root@—</span>
-            <span class="copy-hint">📋 Click to copy</span>
+        <div class="dash-sys-card dash-sys-card-full">
+          <div class="dash-sys-label"><span class="label-icon">🔗</span> SSH Connect</div>
+          <div class="dash-root-command" data-dash-action="copy-command">
+            <span id="dashRootCommandText">ssh root@—</span>
+            <span class="dash-copy-hint" id="dashCopyHint">📋 Click to copy</span>
           </div>
         </div>
-        <div class="home-sys-card home-sys-card-full">
-          <div class="home-sys-label"><span class="label-icon">🔃</span> Reboot</div>
+        <div class="dash-sys-card dash-sys-card-full">
+          <div class="dash-sys-label"><span class="label-icon">🔃</span> Reboot</div>
           <div style="display:flex;align-items:center;gap:12px;margin-top:4px;">
-            <button class="btn-reboot" id="homeRebootBtn">
+            <button class="btn-reboot" id="dashRebootBtn" data-dash-action="reboot">
               <span class="icon">🔃</span> Reboot Server
             </button>
-            <span class="card-sub" id="homeRebootStatus">Server is running normally</span>
+            <span class="card-sub" id="dashRebootStatus">Server is running normally</span>
           </div>
         </div>
       </div>
+
+      <!-- Reboot Confirmation Modal -->
+      <div class="fm-modal-overlay" id="dashRebootOverlay" style="display:none">
+        <div class="fm-modal" style="width:420px">
+          <div class="fm-modal-header">
+            <span class="fm-modal-title">Reboot Server</span>
+            <button class="fm-modal-close" data-dash-action="cancel-reboot">&times;</button>
+          </div>
+          <div class="fm-modal-body">
+            <p style="margin-bottom:8px;color:var(--text-secondary);font-size:14px;">This will reboot the server in 1 minute. All services will be temporarily unavailable.</p>
+            <p style="font-weight:600;color:var(--text-primary);font-size:14px;">Are you sure you want to reboot?</p>
+          </div>
+          <div class="fm-modal-actions">
+            <button class="fm-btn" data-dash-action="cancel-reboot">Cancel</button>
+            <button class="fm-btn fm-btn-danger" data-dash-action="confirm-reboot">Reboot Now</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Toast -->
+      <div id="dashToast" class="dash-toast" style="display:none"></div>
     </main>
 
     <!-- Users View -->

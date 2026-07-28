@@ -1,4 +1,5 @@
 const { execSync } = require('child_process');
+const { runSafeSync } = require('../utils/shell');
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
@@ -156,7 +157,7 @@ function getTraffic() {
   try {
     const data = fs.readFileSync('/proc/net/dev', 'utf8');
     const lines = data.split('\n');
-    let ethRegex = /^(eth\d+|ens\d+|enp\ds\d+|eno\d+|enx\w+):\s*(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)/;
+    let ethRegex = /^\s*(eth\d+|ens\d+|enp\ds\d+|eno\d+|enx\w+):\s*(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)/;
     let totalRx = 0, totalTx = 0, mainIface = '';
     for (const line of lines) {
       const match = line.match(ethRegex);
@@ -167,10 +168,10 @@ function getTraffic() {
       }
     }
     if (!mainIface) {
-      ethRegex = /^(wlan\d+|eth0|ens\d+):\s*(\d+)\s/;
+      const fallbackRegex = /^\s*([\w-]+):\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)/;
       for (const line of lines) {
-        const match = line.match(/(^[\w]+):\s+(\d+)\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+\d+\s+(\d+)/);
-        if (match && match[1] !== 'lo') {
+        const match = line.match(fallbackRegex);
+        if (match && match[1] !== 'lo' && !match[1].startsWith('docker') && !match[1].startsWith('br-') && !match[1].startsWith('veth') && !match[1].startsWith('tun')) {
           if (!mainIface) mainIface = match[1];
           totalRx += parseInt(match[2]);
           totalTx += parseInt(match[3]);
@@ -249,4 +250,43 @@ async function getStats() {
   };
 }
 
-module.exports = { getStats, isRebooting };
+const SERVICE_LIST = ['nginx', 'php-fpm', 'postgresql', 'vsftpd', 'docker'];
+
+function getServiceHealth() {
+  return SERVICE_LIST.map(name => {
+    const r = runSafeSync('systemctl', ['is-active', name], { timeout: 3000 });
+    return { name, active: r.stdout.trim() === 'active' };
+  });
+}
+
+function getQuickStats() {
+  let domainCount = 0;
+  let userCount = 0;
+  let containerCount = 0;
+
+  try {
+    const domainsFile = path.join(__dirname, '..', '..', 'data', 'domains.json');
+    if (fs.existsSync(domainsFile)) {
+      const domains = JSON.parse(fs.readFileSync(domainsFile, 'utf8'));
+      domainCount = Array.isArray(domains) ? domains.length : 0;
+    }
+  } catch {}
+
+  try {
+    const usersFile = path.join(__dirname, '..', '..', 'data', 'users.json');
+    if (fs.existsSync(usersFile)) {
+      const users = JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+      userCount = Array.isArray(users) ? users.length : 0;
+    }
+  } catch {}
+
+  try {
+    const r = runSafeSync('docker', ['ps', '-q'], { timeout: 5000 });
+    const ids = r.stdout.trim().split('\n').filter(Boolean);
+    containerCount = ids.length;
+  } catch {}
+
+  return { domainCount, userCount, containerCount };
+}
+
+module.exports = { getStats, isRebooting, getServiceHealth, getQuickStats };
