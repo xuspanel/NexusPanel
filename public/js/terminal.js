@@ -233,6 +233,7 @@ function cleanupTabs() {
   closeCommandPalette();
   closeSearchBar();
   closeAutocomplete();
+  hideTermContextMenu();
   updateProTabs();
 }
 
@@ -357,6 +358,29 @@ function initProEvents() {
       e.preventDefault();
       if (currentVersion === 'pro') toggleCommandPalette();
     }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'C' || e.key === 'c')) {
+      if (currentVersion === 'pro') {
+        const p = getActivePane();
+        if (p && p.term && p.term.hasSelection()) document.execCommand('copy');
+        e.preventDefault();
+      }
+    }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'V' || e.key === 'v')) {
+      if (currentVersion === 'pro') {
+        e.preventDefault();
+        const p = getActivePane();
+        if (p && p.term) {
+          navigator.clipboard.readText().then(t => { p.term.paste(t); }).catch(() => {});
+        }
+      }
+    }
+    if (e.ctrlKey && e.shiftKey && (e.key === 'A' || e.key === 'a')) {
+      if (currentVersion === 'pro') {
+        e.preventDefault();
+        const p = getActivePane();
+        if (p && p.term) p.term.selectAll();
+      }
+    }
     if (e.ctrlKey && e.key.toLowerCase() === 'f') {
       if (currentVersion === 'pro' && !isTypingInInput()) {
         e.preventDefault();
@@ -364,6 +388,7 @@ function initProEvents() {
       }
     }
     if (e.key === 'Escape') {
+      hideTermContextMenu();
       closeCommandPalette();
       closeSearchBar();
       closeAutocomplete();
@@ -382,6 +407,10 @@ function initProEvents() {
     if (picker && picker.style.display === 'block' && !picker.contains(e.target) && e.target !== themeBtn && !themeBtn.contains(e.target)) {
       picker.style.display = 'none';
       if (themeBtn) themeBtn.classList.remove('term-pro-tool-active');
+    }
+    const ctxMenu = document.getElementById('termContextMenu');
+    if (ctxMenu && ctxMenu.style.display === 'block' && !ctxMenu.contains(e.target)) {
+      hideTermContextMenu();
     }
     const mobileMenu = document.getElementById('termProMobileMenu');
     const toolbar = document.querySelector('.term-pro-toolbar');
@@ -876,6 +905,66 @@ function createPaneObject(tab, container, isPro, direction) {
     switchPane(tab, pane.id);
   });
 
+  paneWrapper.addEventListener('contextmenu', (e) => {
+    e.preventDefault();
+    switchPane(tab, pane.id);
+    showTermContextMenu(e, pane);
+  });
+
+  term.onBell(() => {
+    paneWrapper.classList.add('term-bell-flash');
+    setTimeout(() => paneWrapper.classList.remove('term-bell-flash'), 300);
+  });
+
+  if (currentVersion === 'pro') {
+    paneWrapper.addEventListener('focusin', () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'focus', paneId: pane.id }));
+      }
+    });
+    paneWrapper.addEventListener('focusout', () => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'blur', paneId: pane.id }));
+      }
+    });
+  }
+
+  term.attachCustomKeyEventHandler((e) => {
+    if (e.type !== 'keydown') return true;
+    if (e.ctrlKey && e.shiftKey) {
+      const k = e.key.toLowerCase();
+      if (k === 'c') {
+        if (term.hasSelection()) document.execCommand('copy');
+        return false;
+      }
+      if (k === 'v') {
+        navigator.clipboard.readText().then(t => { term.paste(t); }).catch(() => {});
+        return false;
+      }
+      if (k === 'a') {
+        term.selectAll();
+        return false;
+      }
+    }
+    if (e.ctrlKey && !e.shiftKey && (e.key === 'C' || e.key === 'c') && term.hasSelection()) {
+      return false;
+    }
+    return true;
+  });
+
+  term.parser.registerOscHandler(52, (data) => {
+    try {
+      const parts = data.split(';');
+      if (parts.length >= 2) {
+        const mode = parts[0];
+        if (mode === 'c' || mode === '') {
+          navigator.clipboard.writeText(atob(parts.slice(1).join(';'))).catch(() => {});
+        }
+      }
+    } catch (_) {}
+    return true;
+  });
+
   return pane;
 }
 
@@ -1238,6 +1327,69 @@ function showTermError(msg) {
   if (error) error.style.display = 'flex';
   const text = document.getElementById('termErrorText');
   if (text) text.textContent = msg || 'Unknown error';
+}
+
+/* ─── Context Menu ─── */
+let _ctxPane = null;
+
+function showTermContextMenu(e, pane) {
+  _ctxPane = pane;
+  let menu = document.getElementById('termContextMenu');
+  if (!menu) {
+    menu = document.createElement('div');
+    menu.id = 'termContextMenu';
+    menu.className = 'term-context-menu';
+    menu.innerHTML = `
+      <button class="term-context-item" data-action="copy">Copy</button>
+      <button class="term-context-item" data-action="paste">Paste</button>
+      <button class="term-context-item" data-action="select-all">Select All</button>
+      <div class="term-context-sep"></div>
+      <button class="term-context-item" data-action="download">Download Buffer</button>
+      <button class="term-context-item" data-action="clear">Clear</button>
+    `;
+    document.body.appendChild(menu);
+
+    menu.addEventListener('click', (ev) => {
+      const btn = ev.target.closest('.term-context-item');
+      if (!btn || btn.classList.contains('disabled')) return;
+      const action = btn.dataset.action;
+      const target = _ctxPane || getActivePane();
+      if (!target || !target.term) return;
+      switch (action) {
+        case 'copy':
+          if (target.term.hasSelection()) document.execCommand('copy');
+          break;
+        case 'paste':
+          navigator.clipboard.readText().then(text => { target.term.paste(text); }).catch(() => {});
+          break;
+        case 'select-all':
+          target.term.selectAll();
+          break;
+        case 'download':
+          downloadActiveBuffer();
+          break;
+        case 'clear':
+          clearActiveTerminal();
+          break;
+      }
+      hideTermContextMenu();
+    });
+  }
+
+  const x = Math.min(e.clientX, window.innerWidth - 200);
+  const y = Math.min(e.clientY, window.innerHeight - 260);
+  menu.style.left = Math.max(0, x) + 'px';
+  menu.style.top = Math.max(0, y) + 'px';
+  menu.style.display = 'block';
+
+  const copyItem = menu.querySelector('[data-action="copy"]');
+  if (copyItem) copyItem.classList.toggle('disabled', !pane.term.hasSelection());
+}
+
+function hideTermContextMenu() {
+  _ctxPane = null;
+  const menu = document.getElementById('termContextMenu');
+  if (menu) menu.style.display = 'none';
 }
 
 /* ─── Command Palette ─── */

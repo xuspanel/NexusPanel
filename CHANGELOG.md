@@ -1,5 +1,38 @@
 # Changelog
 
+## [1.34.0] - 2026-07-31
+### Changed
+- **Emails Module enhancements** — rich text compose, server-side search, bulk operations, HTML email support, hardening
+- **Terminal PRO enhancements** — clipboard shortcuts, right-click context menu, OSC 52, focus reporting, visual bell
+
+### Emails — Added
+- Backend: rich text (HTML) email support — `/send` accepts `html` flag, builds `multipart/alternative` MIME with auto-stripped `text/plain`, nested inside `multipart/mixed` when attachments present (`stripHtml()` helper)
+- Backend: server-side search — `/inbox` accepts `search` query param, filters by subject, from/to name/address, and snippet
+- Backend: permanent delete — `/delete` accepts `permanent` flag, unlinks message instead of moving to Trash
+- Backend: rate-limiting — `createLimiter` (10/hr) on `POST /create`, `sendLimiter` (30/min) on `POST /send`
+- Backend: write-locking — `acquireLockSync`/`releaseLock` lockfile around `email-domains.json` writes
+- Backend: rollback on account creation failure — `userdel -r` + Maildir cleanup with clear error messages
+- Frontend: Quill.js rich text editor (v1.3.7) replaces compose textarea — bold/italic/underline/strike/lists/blockquote/headers/link toolbar
+- Frontend: reply/forward HTML quoting — `<blockquote>` and styled forward headers via `getMsgHtml()`
+- Frontend: bulk operations — row checkboxes, select-all, bulk delete/trash, selection count
+- Frontend: server-side search integration — search triggers server reload instead of client filter
+- Frontend: folder-aware message actions — "Delete Permanently" in Trash, "Not Spam" button in Spam (`moveToInbox()`)
+- CSS: extracted email styles to `public/css/emails.css`, redesigned message reader and compose view, Quill dark theme
+- Accessibility: `aria-label` on icon buttons, `role="tab"` + `aria-selected` on folders, `role="button"` on inbox buttons
+### Emails — Fixed
+- Search input was cleared after every message load
+- Sanitizer allowed `data:` URIs on links/images; `style` attribute removed from allowlist
+- Partial account creation left orphaned users/Maildirs when a step failed
+- `#ecMessageView` layout forced to `flex-direction: column`; compose header stacked vertically
+
+### Terminal — Added
+- Keyboard shortcuts: `Ctrl+Shift+C` copy, `Ctrl+Shift+V` paste, `Ctrl+Shift+A` select-all (document-level + `attachCustomKeyEventHandler`)
+- Right-click context menu — Copy, Paste, Select All, Download Buffer, Clear; positioned at cursor, closes on click/Escape
+- OSC 52 clipboard — vim/tmux can write to system clipboard (`registerOscHandler(52)`)
+- Focus reporting — `focusin`/`focusout` send WS `focus`/`blur`; backend writes `\x1b[I` / `\x1b[O` to the PTY
+- Visual bell — `term.onBell()` flashes the pane with a red glow animation
+- CSS: `.term-context-menu` / `.term-context-item` / `.term-bell-flash` styles with light theme variants
+
 ## [1.33.0] - 2026-07-28
 ### Changed
 - **Dashboard Module complete rewrite** — removed particle animation, global functions → IIFE, inline onclick → `data-dash-action` event delegation

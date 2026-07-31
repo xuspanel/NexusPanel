@@ -252,6 +252,22 @@ wss.on('connection', (ws, req) => {
         return;
       }
 
+      if (msg.type === 'focus') {
+        const pane = msg.paneId ? panes.get(msg.paneId) : null;
+        if (pane) {
+          pane.pty.write('\x1b[I');
+        }
+        return;
+      }
+
+      if (msg.type === 'blur') {
+        const pane = msg.paneId ? panes.get(msg.paneId) : null;
+        if (pane) {
+          pane.pty.write('\x1b[O');
+        }
+        return;
+      }
+
       if (msg.type === 'resize') {
         const pane = msg.paneId ? panes.get(msg.paneId) : null;
         if (pane) {

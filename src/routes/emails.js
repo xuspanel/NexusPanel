@@ -4,6 +4,7 @@ const { exec } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { simpleParser } = require('mailparser');
+const rateLimit = require('express-rate-limit');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
 
 const router = express.Router();
@@ -15,7 +16,42 @@ router.use((req, res, next) => {
   next();
 });
 
+const createLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  max: 10,
+  message: { error: 'Too many account creations. Try again later.' },
+  standardHeaders: true, legacyHeaders: false,
+});
+
+const sendLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 30,
+  message: { error: 'Too many messages sent. Try again later.' },
+  standardHeaders: true, legacyHeaders: false,
+});
+
 const EMAIL_DOMAINS_FILE = path.join(__dirname, '..', '..', 'data', 'email-domains.json');
+const EMAIL_DOMAINS_LOCK = EMAIL_DOMAINS_FILE + '.lock';
+
+function acquireLockSync(timeout = 2000) {
+  const start = Date.now();
+  while (Date.now() - start < timeout) {
+    try {
+      fs.mkdirSync(EMAIL_DOMAINS_LOCK);
+      return true;
+    } catch (e) {
+      if (e.code !== 'EEXIST') throw e;
+    }
+    const delay = 20 + Math.round(Math.random() * 30);
+    const busy = new Uint32Array(new SharedArrayBuffer(4));
+    Atomics.wait(busy, 0, 0, delay);
+  }
+  return false;
+}
+
+function releaseLock() {
+  try { fs.rmdirSync(EMAIL_DOMAINS_LOCK); } catch (e) {}
+}
 
 function loadEmailDomains() {
   try { return JSON.parse(fs.readFileSync(EMAIL_DOMAINS_FILE, 'utf8')); }
@@ -36,9 +72,14 @@ function getEmailDomain(username) {
 }
 
 function setEmailDomain(username, domain) {
-  const map = loadEmailDomains();
-  map[username] = domain;
-  saveEmailDomains(map);
+  const locked = acquireLockSync();
+  try {
+    const map = loadEmailDomains();
+    map[username] = domain;
+    saveEmailDomains(map);
+  } finally {
+    if (locked) releaseLock();
+  }
 }
 
 const FOLDER_MAP = {
@@ -192,38 +233,59 @@ router.get('/domains', async (req, res) => {
   }
 });
 
-router.post('/create', async (req, res) => {
+router.post('/create', createLimiter, async (req, res) => {
+  const { username, domain, password, quota } = req.body;
+  if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
+  const sanitized = sanitizeUser(username);
+  if (!sanitized || sanitized.length < 2 || sanitized.length > 64) return res.status(400).json({ error: 'Invalid username (2-64 chars)' });
+  if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
+  const domainClean = (domain || '').trim().toLowerCase();
+  if (!domainClean) return res.status(400).json({ error: 'Domain is required' });
   try {
-    const { username, domain, password, quota } = req.body;
-    if (!username || !password) return res.status(400).json({ error: 'Username and password are required' });
-    const sanitized = username.replace(/[^a-zA-Z0-9_.-]/g, '').toLowerCase();
-    if (!sanitized || sanitized.length < 2 || sanitized.length > 64) return res.status(400).json({ error: 'Invalid username (2-64 chars)' });
-    if (password.length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
-    const domainClean = (domain || '').trim().toLowerCase();
-    if (!domainClean) return res.status(400).json({ error: 'Domain is required' });
     const existing = await execCmd('id ' + sanitized + ' 2>/dev/null && echo exists || echo notfound');
     if (existing === 'exists') return res.status(409).json({ error: 'User "' + sanitized + '" already exists' });
+  } catch (e) {
+    return res.status(500).json({ error: 'Failed to check user existence: ' + e.message });
+  }
 
-    const quotaMB = parseInt(quota, 10);
-    const hasCustomQuota = quota && quota !== 'unlimited' && !isNaN(quotaMB) && quotaMB > 0;
-    const homeDir = '/home/' + sanitized;
-    const cmds = [
-      'useradd -m -s /sbin/nologin -c "' + sanitized + ' email" ' + sanitized,
-      "echo '" + sanitized + ':' + password.replace(/'/g, "'\\''") + "' | chpasswd",
-      'mkdir -p ' + homeDir + '/Maildir/cur ' + homeDir + '/Maildir/new ' + homeDir + '/Maildir/tmp',
-      'chown -R ' + sanitized + ':' + sanitized + ' ' + homeDir + '/Maildir',
-      'chmod -R 700 ' + homeDir + '/Maildir',
-    ];
+  const quotaMB = parseInt(quota, 10);
+  const hasCustomQuota = quota && quota !== 'unlimited' && !isNaN(quotaMB) && quotaMB > 0;
+  const homeDir = '/home/' + sanitized;
+  let createdUser = false;
+  let createdDirs = false;
+
+  try {
+    await execCmd('useradd -m -s /sbin/nologin -c "' + sanitized + ' email" ' + sanitized);
+    createdUser = true;
+
+    try {
+      await execCmd("echo '" + sanitized + ':' + password.replace(/'/g, "'\\''") + "' | chpasswd");
+    } catch (pwdErr) {
+      await execCmd('userdel -r ' + sanitized + ' 2>/dev/null || true');
+      createdUser = false;
+      return res.status(500).json({ error: 'Failed to set password: ' + pwdErr.message });
+    }
+
+    await execCmd('mkdir -p ' + homeDir + '/Maildir/cur ' + homeDir + '/Maildir/new ' + homeDir + '/Maildir/tmp');
+    createdDirs = true;
+    await execCmd('chown -R ' + sanitized + ':' + sanitized + ' ' + homeDir + '/Maildir');
+    await execCmd('chmod -R 700 ' + homeDir + '/Maildir');
+
     if (hasCustomQuota) {
       const quotaBytes = quotaMB * 1024 * 1024;
-      cmds.push('echo "' + quotaBytes + 'S" > ' + homeDir + '/Maildir/maildirsize');
-      cmds.push('chown ' + sanitized + ':' + sanitized + ' ' + homeDir + '/Maildir/maildirsize');
+      await execCmd('echo "' + quotaBytes + 'S" > ' + homeDir + '/Maildir/maildirsize');
+      await execCmd('chown ' + sanitized + ':' + sanitized + ' ' + homeDir + '/Maildir/maildirsize');
     }
-    for (const cmd of cmds) await execCmd(cmd);
+
     ensureDovecotQuota();
     setEmailDomain(sanitized, domainClean);
     res.json({ success: true, email: sanitized + '@' + domainClean, username: sanitized, domain: domainClean, home: homeDir, quota: hasCustomQuota ? quotaMB : 'unlimited' });
   } catch (err) {
+    if (createdUser) {
+      try { await execCmd('userdel -r ' + sanitized + ' 2>/dev/null || true'); } catch (e) { console.error('Rollback failed:', e.message); }
+    } else if (createdDirs) {
+      try { await execCmd('rm -rf ' + homeDir + '/Maildir 2>/dev/null || true'); } catch (e) { console.error('Rollback failed:', e.message); }
+    }
     res.status(500).json({ error: err.message });
   }
 });
@@ -273,23 +335,19 @@ router.get('/:username/inbox', async (req, res) => {
     const basePath = getMaildirPath(homeDir, folder);
     const page = Math.max(1, parseInt(req.query.page, 10) || 1);
     const limit = Math.min(200, Math.max(1, parseInt(req.query.limit, 10) || 20));
+    const searchQuery = (req.query.search || '').trim().toLowerCase();
     if (!fs.existsSync(basePath)) return res.json({ messages: [], total: 0, page, limit, totalPages: 0 });
 
     const files = listMessageFiles(basePath);
-    const total = files.length;
-    const totalPages = Math.ceil(total / limit);
-    const start = (page - 1) * limit;
-    const pageFiles = files.slice(start, start + limit);
-
     const domain = await execCmd("postconf -h mydomain 2>/dev/null | head -1 || hostname -f 2>/dev/null || echo 'localhost'");
-    const messages = [];
 
-    for (const f of pageFiles) {
+    let allMessages = [];
+    for (const f of files) {
       try {
         const raw = fs.readFileSync(f.path, 'utf-8');
         const parsed = await simpleParser(raw);
         const textBody = parsed.text || (parsed.html ? parsed.html.replace(/<style[^>]*>[^<]*<\/style>/gi, ' ').replace(/<[^>]+>/g, ' ') : '') || '';
-        messages.push({
+        allMessages.push({
           id: f.filename,
           dir: f.dir,
           unread: f.dir === 'new',
@@ -303,7 +361,7 @@ router.get('/:username/inbox', async (req, res) => {
           messageId: parsed.messageId || null,
         });
       } catch (parseErr) {
-        messages.push({
+        allMessages.push({
           id: f.filename,
           dir: f.dir,
           unread: f.dir === 'new',
@@ -312,6 +370,22 @@ router.get('/:username/inbox', async (req, res) => {
         });
       }
     }
+
+    if (searchQuery) {
+      allMessages = allMessages.filter(m =>
+        (m.subject && m.subject.toLowerCase().includes(searchQuery)) ||
+        (m.from.name && m.from.name.toLowerCase().includes(searchQuery)) ||
+        (m.from.address && m.from.address.toLowerCase().includes(searchQuery)) ||
+        (m.to.name && m.to.name.toLowerCase().includes(searchQuery)) ||
+        (m.to.address && m.to.address.toLowerCase().includes(searchQuery)) ||
+        (m.snippet && m.snippet.toLowerCase().includes(searchQuery))
+      );
+    }
+
+    const total = allMessages.length;
+    const totalPages = Math.ceil(total / limit);
+    const start = (page - 1) * limit;
+    const messages = allMessages.slice(start, start + limit);
     res.json({ messages, total, page, limit, totalPages });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -370,14 +444,30 @@ router.get('/:username/message/:file', async (req, res) => {
 
 /* ─── Send Mail ─── */
 
-router.post('/:username/send', async (req, res) => {
+function stripHtml(html) {
+  return html
+    .replace(/<style[^>]*>[^<]*<\/style>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/p>/gi, '\n\n')
+    .replace(/<[^>]+>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+router.post('/:username/send', sendLimiter, async (req, res) => {
   try {
     const username = sanitizeUser(req.params.username);
     if (!username) return res.status(400).json({ error: 'Invalid username' });
     const homeDir = await getHomeDir(username);
     const domain = await execCmd("postconf -h mydomain 2>/dev/null | head -1 || hostname -f 2>/dev/null || echo 'localhost'");
 
-    const { to, cc, bcc, subject, body, attachments } = req.body;
+    const { to, cc, bcc, subject, body, html, attachments } = req.body;
     if (!to || !subject) return res.status(400).json({ error: 'To and Subject are required' });
     if (/[\r\n]/.test(to + (cc || '') + (bcc || '') + subject)) return res.status(400).json({ error: 'Invalid characters in email fields' });
 
@@ -385,35 +475,63 @@ router.post('/:username/send', async (req, res) => {
     const messageId = '<' + Date.now() + '.' + crypto.randomBytes(8).toString('hex') + '@' + domain.trim() + '>';
     const dateStr = new Date().toUTCString();
 
-    const boundary = '=' + crypto.randomBytes(16).toString('hex');
     const hasAttachments = attachments && attachments.length > 0;
-
-    let mimeBody = '';
-    if (hasAttachments) {
-      mimeBody = '--' + boundary + '\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 7bit\r\n\r\n' + (body || '') + '\r\n';
-      for (const att of attachments) {
-        const attFilename = att.filename || 'unnamed';
-        const attType = att.contentType || 'application/octet-stream';
-        mimeBody += '--' + boundary + '\r\nContent-Type: ' + attType + '; name="' + attFilename.replace(/"/g, '\\"') + '"\r\nContent-Disposition: attachment; filename="' + attFilename.replace(/"/g, '\\"') + '"\r\nContent-Transfer-Encoding: base64\r\n\r\n';
-        const content = att.content || '';
-        for (let i = 0; i < content.length; i += 76) mimeBody += content.substring(i, i + 76) + '\r\n';
-        mimeBody += '\r\n';
-      }
-      mimeBody += '--' + boundary + '--\r\n';
-    }
+    const isHtml = html && body;
 
     let headers = 'From: ' + fromAddr + '\r\nTo: ' + to + '\r\n';
     if (cc) headers += 'CC: ' + cc + '\r\n';
     if (bcc) headers += 'BCC: ' + bcc + '\r\n';
     headers += 'Subject: ' + subject + '\r\nDate: ' + dateStr + '\r\nMessage-ID: ' + messageId + '\r\nMIME-Version: 1.0\r\n';
-    if (hasAttachments) {
-      headers += 'Content-Type: multipart/mixed; boundary="' + boundary + '"\r\n';
-    } else {
-      headers += 'Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 7bit\r\n';
-    }
-    headers += '\r\n';
 
-    const fullMessage = headers + (hasAttachments ? mimeBody : (body || ''));
+    const contentBoundary = '=' + crypto.randomBytes(16).toString('hex');
+    const mixBoundary = '=' + crypto.randomBytes(16).toString('hex');
+
+    let fullMessage = '';
+
+    if (isHtml) {
+      const plainText = stripHtml(body);
+      const altBody = '--' + contentBoundary + '\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 7bit\r\n\r\n' + (plainText || '(no content)') + '\r\n'
+        + '--' + contentBoundary + '\r\nContent-Type: text/html; charset=utf-8\r\nContent-Transfer-Encoding: 7bit\r\n\r\n' + body + '\r\n'
+        + '--' + contentBoundary + '--\r\n';
+
+      if (hasAttachments) {
+        headers += 'Content-Type: multipart/mixed; boundary="' + mixBoundary + '"\r\n\r\n';
+        let mime = '--' + mixBoundary + '\r\nContent-Type: multipart/alternative; boundary="' + contentBoundary + '"\r\n\r\n'
+          + altBody
+          + '\r\n--' + mixBoundary + '\r\n';
+        for (const att of attachments) {
+          const attFilename = att.filename || 'unnamed';
+          const attType = att.contentType || 'application/octet-stream';
+          mime += 'Content-Type: ' + attType + '; name="' + attFilename.replace(/"/g, '\\"') + '"\r\nContent-Disposition: attachment; filename="' + attFilename.replace(/"/g, '\\"') + '"\r\nContent-Transfer-Encoding: base64\r\n\r\n';
+          const content = att.content || '';
+          for (let i = 0; i < content.length; i += 76) mime += content.substring(i, i + 76) + '\r\n';
+          mime += '\r\n--' + mixBoundary + '\r\n';
+        }
+        mime = mime.slice(0, -('\r\n--' + mixBoundary + '\r\n').length) + '\r\n--' + mixBoundary + '--\r\n';
+        fullMessage = headers + mime;
+      } else {
+        headers += 'Content-Type: multipart/alternative; boundary="' + contentBoundary + '"\r\n\r\n';
+        fullMessage = headers + altBody;
+      }
+    } else {
+      if (hasAttachments) {
+        let mimeBody = '--' + contentBoundary + '\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 7bit\r\n\r\n' + (body || '') + '\r\n';
+        for (const att of attachments) {
+          const attFilename = att.filename || 'unnamed';
+          const attType = att.contentType || 'application/octet-stream';
+          mimeBody += '--' + contentBoundary + '\r\nContent-Type: ' + attType + '; name="' + attFilename.replace(/"/g, '\\"') + '"\r\nContent-Disposition: attachment; filename="' + attFilename.replace(/"/g, '\\"') + '"\r\nContent-Transfer-Encoding: base64\r\n\r\n';
+          const content = att.content || '';
+          for (let i = 0; i < content.length; i += 76) mimeBody += content.substring(i, i + 76) + '\r\n';
+          mimeBody += '\r\n';
+        }
+        mimeBody += '--' + contentBoundary + '--\r\n';
+        headers += 'Content-Type: multipart/mixed; boundary="' + contentBoundary + '"\r\n\r\n';
+        fullMessage = headers + mimeBody;
+      } else {
+        headers += 'Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: 7bit\r\n\r\n';
+        fullMessage = headers + (body || '');
+      }
+    }
 
     await new Promise((resolve, reject) => {
       const proc = require('child_process').spawn('/usr/sbin/sendmail', ['-t', '-i'], { stdio: ['pipe', 'ignore', 'ignore'] });
@@ -487,7 +605,7 @@ router.post('/:username/delete', async (req, res) => {
     const username = sanitizeUser(req.params.username);
     if (!username) return res.status(400).json({ error: 'Invalid username' });
     const homeDir = await getHomeDir(username);
-    const { messageId, folder } = req.body;
+    const { messageId, folder, permanent } = req.body;
     if (!messageId) return res.status(400).json({ error: 'messageId is required' });
     if (/[\\/]|\.\./.test(messageId)) return res.status(400).json({ error: 'Invalid messageId' });
 
@@ -498,6 +616,11 @@ router.post('/:username/delete', async (req, res) => {
       if (fs.existsSync(candidate)) { sourcePath = candidate; break; }
     }
     if (!sourcePath) return res.status(404).json({ error: 'Message not found' });
+
+    if (permanent) {
+      fs.unlinkSync(sourcePath);
+      return res.json({ success: true, permanent: true });
+    }
 
     const trashBase = homeDir + '/Maildir/.Trash';
     for (const sub of ['cur', 'new', 'tmp']) {

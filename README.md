@@ -4,7 +4,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.33.0-blue?style=for-the-badge&labelColor=1a1a2e&color=0f3460" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.34.0-blue?style=for-the-badge&labelColor=1a1a2e&color=0f3460" alt="Version">
   <img src="https://img.shields.io/badge/node.js-%3E%3D18-brightgreen?style=for-the-badge&labelColor=1a1a2e" alt="Node.js">
   <img src="https://img.shields.io/badge/license-BSL%201.1-purple?style=for-the-badge&labelColor=1a1a2e" alt="License">
   <img src="https://img.shields.io/badge/134_tests-passing-green?style=for-the-badge&labelColor=1a1a2e" alt="Tests">
@@ -258,7 +258,7 @@ After the Change Date (5 years from first publication), the license automaticall
 NexusPanel/
 ├── server.js                 # Express + WebSocket entry point
 ├── package.json              # Dependencies and scripts
-├── VERSION                   # Current version (1.33.0)
+├── VERSION                   # Current version (1.34.0)
 ├── CHANGELOG.md              # Full version history
 ├── nexuspanel.service        # systemd unit file
 ├── vitest.config.mjs         # Test configuration
@@ -494,7 +494,7 @@ Frontend assets are served from `public/` with no build step. Edit `public/js/*.
 ### Commit Conventions
 
 - Commits to `main` must be **GPG-signed**
-- Use conventional, descriptive commit messages (e.g., `v1.33.0: Add dashboard rewrite with live metrics`)
+- Use conventional, descriptive commit messages (e.g., `v1.34.0: Add dashboard rewrite with live metrics`)
 - Do not commit `.env`, `node_modules/`, `data/`, or proprietary directories
 
 ---

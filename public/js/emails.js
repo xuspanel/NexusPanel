@@ -17,6 +17,9 @@ let _state = {
 async function initEmails() {
   if (!emailInit) {
     emailInit = true;
+    document.getElementById('emailCreateBtn').setAttribute('aria-label', 'Create email account');
+    document.getElementById('emailRefreshBtn').setAttribute('aria-label', 'Refresh email accounts');
+    document.getElementById('emailRetryBtn').setAttribute('aria-label', 'Retry loading');
     document.getElementById('emailRefreshBtn').addEventListener('click', loadEmails);
     document.getElementById('emailRetryBtn').addEventListener('click', loadEmails);
     document.getElementById('emailSearchInput').addEventListener('input', debounce(filterEmailList, 250));
@@ -32,12 +35,17 @@ async function initEmails() {
       });
     });
 
+    document.getElementById('ecBackBtn').setAttribute('aria-label', 'Back to email accounts');
+    document.getElementById('ecComposeBtn').setAttribute('aria-label', 'Compose new message');
+    document.getElementById('ecRefreshBtn').setAttribute('aria-label', 'Refresh messages');
+    document.getElementById('ecRetryBtn').setAttribute('aria-label', 'Retry loading messages');
     document.getElementById('ecBackBtn').addEventListener('click', backToAccounts);
     document.getElementById('ecComposeBtn').addEventListener('click', openCompose);
     document.getElementById('ecComposeCancel').addEventListener('click', closeCompose);
     document.getElementById('ecComposeForm').addEventListener('submit', submitSend);
     document.getElementById('ecRefreshBtn').addEventListener('click', refreshFolder);
     document.getElementById('ecRetryBtn').addEventListener('click', refreshFolder);
+    document.getElementById('ecSearchInput').setAttribute('aria-label', 'Search messages');
     document.getElementById('ecSearchInput').addEventListener('input', debounce(filterMessages, 250));
     document.getElementById('ecMsgBackBtn').addEventListener('click', showMessageList);
     document.getElementById('ecMsgDeleteBtn').addEventListener('click', deleteCurrentMessage);
@@ -47,8 +55,11 @@ async function initEmails() {
     document.getElementById('ecAttachBtn').addEventListener('click', () => document.getElementById('ecAttachInput').click());
     document.getElementById('ecAttachInput').addEventListener('change', handleAttachFiles);
     document.getElementById('ecToggleCcBcc').addEventListener('click', toggleCcBcc);
+    document.getElementById('ecMsgNotSpamBtn').addEventListener('click', moveToInbox);
 
     document.querySelectorAll('.ec-nav-item').forEach(item => {
+      item.setAttribute('role', 'tab');
+      item.setAttribute('aria-selected', item.dataset.folder === 'INBOX' ? 'true' : 'false');
       item.addEventListener('click', () => switchFolder(item.dataset.folder));
     });
 
@@ -145,8 +156,8 @@ function renderAccountList(accounts) {
           <div class="email-card-address">${safeEmail}</div>
         </div>
         <div class="email-card-actions">
-          <button class="email-action-btn" data-email="${safeEmail}" title="Copy address">📋</button>
-          ${a.hasMaildir ? `<button class="email-action-btn email-config-btn" title="Email configuration">⚙️</button>` : ''}
+          <button class="email-action-btn" data-email="${safeEmail}" title="Copy address" aria-label="Copy email address">📋</button>
+          ${a.hasMaildir ? `<button class="email-action-btn email-config-btn" title="Email configuration" aria-label="Show email configuration">⚙️</button>` : ''}
         </div>
       </div>
       <div class="email-card-body"><div class="email-stat-row">
@@ -186,7 +197,7 @@ function renderAccountList(accounts) {
           <tr><td class="ecfg-label">Security</td><td class="ecfg-value">SSL/TLS</td></tr>
         </table>
       </div>
-      <div class="email-card-inbox-btn" data-username="${safeUser}"><span class="inbox-btn-icon">📥</span><span class="inbox-btn-label">Open Email Client</span><span class="inbox-btn-arrow">→</span></div>
+      <div class="email-card-inbox-btn" data-username="${safeUser}" role="button" tabindex="0" aria-label="Open email client for ${safeEmail}"><span class="inbox-btn-icon" aria-hidden="true">📥</span><span class="inbox-btn-label">Open Email Client</span><span class="inbox-btn-arrow" aria-hidden="true">→</span></div>
       ` : ''}
     </div>`;
   }).join('');
@@ -244,8 +255,9 @@ async function loadMessages() {
   document.getElementById('ecMessageView').style.display = 'none';
   document.getElementById('ecComposeView').style.display = 'none';
   document.getElementById('ecError').style.display = 'none';
+  const searchQuery = document.getElementById('ecSearchInput').value.trim();
   try {
-    const res = await API.emails.inbox(_state.selectedUser, _state.selectedFolder, _state.page, _state.limit);
+    const res = await API.emails.inbox(_state.selectedUser, _state.selectedFolder, _state.page, _state.limit, searchQuery || undefined);
     _state.messages = res.messages || res;
     _state.totalMessages = res.total || _state.messages.length;
     _state.totalPages = res.totalPages || 1;
@@ -256,7 +268,6 @@ async function loadMessages() {
     document.getElementById('ecFolderCount').textContent = _state.totalMessages + ' message' + (_state.totalMessages !== 1 ? 's' : '') + (unread > 0 ? ', ' + unread + ' unread' : '');
     document.getElementById('ecLoading').style.display = 'none';
     document.getElementById('ecMessageList').style.display = 'flex';
-    document.getElementById('ecSearchInput').value = '';
   } catch (err) {
     document.getElementById('ecLoading').style.display = 'none';
     document.getElementById('ecError').style.display = 'flex';
@@ -273,13 +284,17 @@ function switchFolder(folder) {
   _state.selectedFolder = folder;
   _state.selectedMessageId = null;
   _state.page = 1;
-  document.querySelectorAll('.ec-nav-item').forEach(i => i.classList.toggle('ec-nav-active', i.dataset.folder === folder));
+  document.querySelectorAll('.ec-nav-item').forEach(i => {
+    i.classList.toggle('ec-nav-active', i.dataset.folder === folder);
+    i.setAttribute('aria-selected', i.dataset.folder === folder ? 'true' : 'false');
+  });
   loadMessages();
   loadQuota();
 }
 
 function filterMessages() {
-  renderMessageList(_state.messages);
+  _state.page = 1;
+  loadMessages();
 }
 
 function renderMessageList(messages) {
@@ -292,15 +307,17 @@ function renderMessageList(messages) {
     (m.snippet && m.snippet.toLowerCase().includes(search))
   ) : messages;
   if (filtered.length === 0) {
-    list.innerHTML = '<div class="db-empty">' + (search ? 'No messages match your search' : 'This folder is empty') + '</div>';
+    list.innerHTML = renderBulkBar() + '<div class="db-empty">' + (search ? 'No messages match your search' : 'This folder is empty') + '</div>';
     return;
   }
-  let html = filtered.map(m => {
+  let html = renderBulkBar();
+  html += filtered.map(m => {
     const initial = m.from && m.from.name ? m.from.name.charAt(0).toUpperCase() : (m.from && m.from.address ? m.from.address.charAt(0).toUpperCase() : '?');
     const senderName = m.from && m.from.name ? m.from.name : (m.from && m.from.address ? m.from.address : 'Unknown');
     const senderAddr = m.from && m.from.address ? m.from.address : '';
     const attachIcon = m.hasAttachments ? ' <span class="msg-attach-icon">📎</span>' : '';
     return `<div class="msg-row ${m.unread ? 'msg-unread' : ''}" data-id="${m.id}">
+      <div class="msg-row-check"><input type="checkbox" class="msg-checkbox" data-id="${m.id}" aria-label="Select message"></div>
       <div class="msg-row-left"><div class="msg-avatar" style="background:${avatarColor(senderAddr || senderName)}">${initial}</div></div>
       <div class="msg-row-body">
         <div class="msg-row-top"><span class="msg-sender">${escHtml(senderName)}</span><span class="msg-date">${timeAgo(m.date)}</span></div>
@@ -313,11 +330,89 @@ function renderMessageList(messages) {
   html += renderPagination();
   list.innerHTML = html;
   list.querySelectorAll('.msg-row').forEach(row => {
-    row.addEventListener('click', () => openMessage(row.dataset.id));
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.msg-row-check')) return;
+      openMessage(row.dataset.id);
+    });
+  });
+  list.querySelectorAll('.msg-checkbox').forEach(cb => {
+    cb.addEventListener('change', updateBulkBar);
   });
   list.querySelectorAll('.ec-page-btn').forEach(btn => {
     btn.addEventListener('click', () => goToPage(parseInt(btn.dataset.page, 10)));
   });
+  setupBulkActions();
+}
+
+function renderBulkBar() {
+  return `<div class="ec-bulk-bar" id="ecBulkBar" style="display:none;">
+    <input type="checkbox" id="ecBulkSelectAll" aria-label="Select all messages">
+    <span><span class="ec-bulk-count" id="ecBulkCount">0</span> selected</span>
+    <div class="ec-bulk-actions">
+      <button class="ec-bulk-btn" id="ecBulkDelete" aria-label="Delete selected messages">🗑️ Delete</button>
+      <button class="ec-bulk-btn ec-bulk-btn-danger" id="ecBulkTrash" aria-label="Move selected to trash">📥 Trash</button>
+    </div>
+  </div>`;
+}
+
+function setupBulkActions() {
+  const selectAll = document.getElementById('ecBulkSelectAll');
+  if (selectAll) {
+    selectAll.addEventListener('change', () => {
+      document.querySelectorAll('.msg-checkbox').forEach(cb => cb.checked = selectAll.checked);
+      updateBulkBar();
+    });
+  }
+  const deleteBtn = document.getElementById('ecBulkDelete');
+  if (deleteBtn) {
+    deleteBtn.addEventListener('click', async () => {
+      const ids = getSelectedIds();
+      if (ids.length === 0 || !confirm('Permanently delete ' + ids.length + ' message(s)?')) return;
+      try {
+        for (const id of ids) {
+          await API.emails.delete(_state.selectedUser, { messageId: id, folder: _state.selectedFolder });
+        }
+        loadMessages();
+        loadFolders();
+        loadQuota();
+      } catch (err) {
+        alert('Bulk delete failed: ' + err.message);
+      }
+    });
+  }
+  const trashBtn = document.getElementById('ecBulkTrash');
+  if (trashBtn) {
+    trashBtn.addEventListener('click', async () => {
+      const ids = getSelectedIds();
+      if (ids.length === 0 || !confirm('Move ' + ids.length + ' message(s) to Trash?')) return;
+      try {
+        for (const id of ids) {
+          await API.emails.delete(_state.selectedUser, { messageId: id, folder: _state.selectedFolder });
+        }
+        loadMessages();
+        loadFolders();
+        loadQuota();
+      } catch (err) {
+        alert('Bulk move to trash failed: ' + err.message);
+      }
+    });
+  }
+}
+
+function getSelectedIds() {
+  return Array.from(document.querySelectorAll('.msg-checkbox:checked')).map(cb => cb.dataset.id);
+}
+
+function updateBulkBar() {
+  const bar = document.getElementById('ecBulkBar');
+  const count = document.getElementById('ecBulkCount');
+  const checked = document.querySelectorAll('.msg-checkbox:checked').length;
+  if (checked > 0) {
+    bar.style.display = 'flex';
+    count.textContent = checked;
+  } else {
+    bar.style.display = 'none';
+  }
 }
 
 function renderPagination() {
@@ -356,6 +451,15 @@ async function openMessage(msgId) {
   document.getElementById('ecMsgEnvelope').innerHTML = '<div class="db-loading" style="display:flex;"><div class="db-loading-spinner"></div></div>';
   document.getElementById('ecMsgBody').innerHTML = '';
   document.getElementById('ecMsgAttachments').style.display = 'none';
+
+  const isTrash = _state.selectedFolder === 'Trash';
+  const isSpam = _state.selectedFolder === 'Spam';
+  const deleteBtn = document.getElementById('ecMsgDeleteBtn');
+  const notSpamBtn = document.getElementById('ecMsgNotSpamBtn');
+  deleteBtn.textContent = isTrash ? '🗑️ Delete Permanently' : '🗑️ Delete';
+  deleteBtn.title = isTrash ? 'Permanently delete' : 'Move to Trash';
+  if (notSpamBtn) notSpamBtn.style.display = isSpam ? '' : 'none';
+
   try {
     const msg = await API.emails.message(_state.selectedUser, msgId, _state.selectedFolder);
     renderMessage(msg);
@@ -381,9 +485,11 @@ function renderMessage(msg) {
     <div class="msg-envelope-avatar" style="background:${avatarColor(fromAddr || fromName)}">${fromName.charAt(0).toUpperCase()}</div>
     <div class="msg-envelope-info">
       <div class="msg-envelope-subject">${escHtml(msg.subject)}</div>
-      <div class="msg-envelope-from"><span class="msg-envelope-label">From:</span><span class="msg-envelope-name">${escHtml(fromName)}</span> <span class="msg-envelope-addr">${fromAddr}</span></div>
-      <div class="msg-envelope-to"><span class="msg-envelope-label">To:</span><span class="msg-envelope-name">${escHtml(toName)}</span> <span class="msg-envelope-addr">${toAddr}</span></div>
-      ${msg.cc ? '<div class="msg-envelope-cc"><span class="msg-envelope-label">CC:</span><span>' + escHtml(msg.cc.name || msg.cc.address) + '</span></div>' : ''}
+      <div class="msg-envelope-details">
+        <div class="msg-envelope-from"><span class="msg-envelope-label">From</span><span class="msg-envelope-name">${escHtml(fromName)}</span> <span class="msg-envelope-addr">${fromAddr}</span></div>
+        <div class="msg-envelope-to"><span class="msg-envelope-label">To</span><span class="msg-envelope-name">${escHtml(toName)}</span> <span class="msg-envelope-addr">${toAddr}</span></div>
+        ${msg.cc ? '<div class="msg-envelope-cc"><span class="msg-envelope-label">CC</span><span class="msg-envelope-name">' + escHtml(msg.cc.name || msg.cc.address) + '</span> <span class="msg-envelope-addr">&lt;' + escHtml(msg.cc.address) + '&gt;</span></div>' : ''}
+      </div>
       <div class="msg-envelope-date">${escHtml(dateStr)}</div>
     </div>`;
   document.getElementById('ecMsgBody').innerHTML = bodyHtml;
@@ -423,9 +529,10 @@ function renderMessage(msg) {
 
 async function deleteCurrentMessage() {
   if (!_state.selectedMessageId || !_state.selectedUser) return;
-  if (!confirm('Move this message to Trash?')) return;
+  const isTrash = _state.selectedFolder === 'Trash';
+  if (!confirm(isTrash ? 'Permanently delete this message?' : 'Move this message to Trash?')) return;
   try {
-    await API.emails.delete(_state.selectedUser, { messageId: _state.selectedMessageId, folder: _state.selectedFolder });
+    await API.emails.delete(_state.selectedUser, { messageId: _state.selectedMessageId, folder: _state.selectedFolder, permanent: isTrash || undefined });
     _state.selectedMessageId = null;
     showMessageList();
     loadMessages();
@@ -433,6 +540,20 @@ async function deleteCurrentMessage() {
     loadQuota();
   } catch (err) {
     alert('Failed to delete: ' + err.message);
+  }
+}
+
+async function moveToInbox() {
+  if (!_state.selectedMessageId || !_state.selectedUser) return;
+  try {
+    await API.emails.move(_state.selectedUser, { messageId: _state.selectedMessageId, fromFolder: _state.selectedFolder, toFolder: 'INBOX' });
+    _state.selectedMessageId = null;
+    showMessageList();
+    loadMessages();
+    loadFolders();
+    loadQuota();
+  } catch (err) {
+    alert('Failed to move: ' + err.message);
   }
 }
 
@@ -447,11 +568,37 @@ function showMessageList() {
 
 let _composeFiles = [];
 let _currentMsg = null;
+let _quill = null;
+
+function initQuill() {
+  if (_quill) return;
+  const container = document.getElementById('ecComposeBody');
+  if (!container || typeof Quill === 'undefined') return;
+  _quill = new Quill(container, {
+    theme: 'snow',
+    modules: {
+      toolbar: [
+        ['bold', 'italic', 'underline', 'strike'],
+        [{ 'list': 'ordered'}, { 'list': 'bullet' }],
+        ['blockquote', 'code-block'],
+        [{ 'header': [1, 2, 3, false] }],
+        ['link'],
+        ['clean']
+      ]
+    },
+    placeholder: 'Write your message...',
+  });
+}
+
+function stripHtml(html) {
+  const d = document.createElement('div');
+  d.innerHTML = html;
+  return d.textContent || d.innerText || '';
+}
 
 function openCompose(prefill) {
   _composeFiles = [];
   if (!prefill) _currentMsg = null;
-  document.getElementById('ecComposeForm').reset();
   document.getElementById('ecComposeError').style.display = 'none';
   document.getElementById('ecComposeAttachList').innerHTML = '';
   document.getElementById('ecComposeStatus').textContent = '';
@@ -461,16 +608,22 @@ function openCompose(prefill) {
   document.getElementById('ecComposeSend').disabled = false;
   document.getElementById('ecCcBccFields').style.display = 'none';
   document.getElementById('ecToggleCcBcc').textContent = 'CC/BCC';
+  document.getElementById('ecComposeTo').value = '';
+  document.getElementById('ecComposeCc').value = '';
+  document.getElementById('ecComposeBcc').value = '';
+  document.getElementById('ecComposeSubject').value = '';
+  document.getElementById('ecMessageList').style.display = 'none';
+  document.getElementById('ecMessageView').style.display = 'none';
+  document.getElementById('ecComposeView').style.display = 'flex';
+  initQuill();
+  _quill.setText('');
   if (prefill) {
     if (prefill.to) document.getElementById('ecComposeTo').value = prefill.to;
     if (prefill.cc) { document.getElementById('ecComposeCc').value = prefill.cc; toggleCcBcc(); }
     if (prefill.bcc) { document.getElementById('ecComposeBcc').value = prefill.bcc; if (document.getElementById('ecCcBccFields').style.display === 'none') toggleCcBcc(); }
     if (prefill.subject) document.getElementById('ecComposeSubject').value = prefill.subject;
-    if (prefill.body) document.getElementById('ecComposeBody').value = prefill.body;
+    if (prefill.body) _quill.root.innerHTML = prefill.body;
   }
-  document.getElementById('ecMessageList').style.display = 'none';
-  document.getElementById('ecMessageView').style.display = 'none';
-  document.getElementById('ecComposeView').style.display = 'flex';
   document.getElementById('ecComposeTo').focus();
 }
 
@@ -506,28 +659,36 @@ function getMsgText(msg) {
   return '';
 }
 
+function getMsgHtml(msg) {
+  if (msg.htmlBody) return renderSafeHtml(msg.htmlBody);
+  if (msg.textBody) return escHtml(msg.textBody).replace(/\n/g, '<br>');
+  return '';
+}
+
 function buildReplyBody(msg) {
   const date = formatQuotedDate(msg.date);
-  const fromName = msg.from && msg.from.name ? msg.from.name : (msg.from && msg.from.address ? msg.from.address : 'Unknown');
-  const text = getMsgText(msg);
-  const quoted = text.split('\n').map(l => l ? '> ' + l : '>').join('\n');
-  return '\n\nOn ' + date + ', ' + fromName + ' wrote:\n' + quoted;
+  const fromName = msg.from && msg.from.name ? escHtml(msg.from.name) : (msg.from && msg.from.address ? escHtml(msg.from.address) : 'Unknown');
+  const html = getMsgHtml(msg);
+  return '<br><br><p>On ' + date + ', ' + fromName + ' wrote:</p><blockquote style="border-left:2px solid #ccc;margin:0 0 0 8px;padding:0 0 0 12px;color:#999;">' + html + '</blockquote>';
 }
 
 function buildForwardBody(msg) {
   const date = formatQuotedDate(msg.date);
-  const fromName = msg.from && msg.from.name ? msg.from.name : (msg.from && msg.from.address ? msg.from.address : 'Unknown');
-  const fromAddr = msg.from && msg.from.address ? '<' + msg.from.address + '>' : '';
-  const toName = msg.to && msg.to.name ? msg.to.name : (msg.to && msg.to.address ? msg.to.address : '');
-  const toAddr = msg.to && msg.to.address ? '<' + msg.to.address + '>' : '';
-  const text = getMsgText(msg);
-  let fwd = '\n\n-------- Forwarded Message --------\n';
-  fwd += 'Subject: ' + (msg.subject || '(No Subject)') + '\n';
-  fwd += 'Date: ' + date + '\n';
-  fwd += 'From: ' + fromName + ' ' + fromAddr + '\n';
-  fwd += 'To: ' + toName + ' ' + toAddr + '\n';
-  if (msg.cc && msg.cc.address) fwd += 'CC: ' + (msg.cc.name || msg.cc.address) + ' <' + msg.cc.address + '>\n';
-  fwd += '\n' + text;
+  const fromName = msg.from && msg.from.name ? escHtml(msg.from.name) : (msg.from && msg.from.address ? escHtml(msg.from.address) : 'Unknown');
+  const fromAddr = msg.from && msg.from.address ? '&lt;' + escHtml(msg.from.address) + '&gt;' : '';
+  const toName = msg.to && msg.to.name ? escHtml(msg.to.name) : (msg.to && msg.to.address ? escHtml(msg.to.address) : '');
+  const toAddr = msg.to && msg.to.address ? '&lt;' + escHtml(msg.to.address) + '&gt;' : '';
+  const html = getMsgHtml(msg);
+  let fwd = '<br><br>';
+  fwd += '<div style="border-left:2px solid #666;padding-left:12px;color:#999;">';
+  fwd += '<p><strong>Subject:</strong> ' + escHtml(msg.subject || '(No Subject)') + '</p>';
+  fwd += '<p><strong>Date:</strong> ' + date + '</p>';
+  fwd += '<p><strong>From:</strong> ' + fromName + ' ' + fromAddr + '</p>';
+  fwd += '<p><strong>To:</strong> ' + toName + ' ' + toAddr + '</p>';
+  if (msg.cc && msg.cc.address) fwd += '<p><strong>CC:</strong> ' + escHtml(msg.cc.name || msg.cc.address) + ' &lt;' + escHtml(msg.cc.address) + '&gt;</p>';
+  fwd += '<hr style="border:none;border-top:1px solid #444;">';
+  fwd += html;
+  fwd += '</div>';
   return fwd;
 }
 
@@ -610,7 +771,7 @@ async function submitSend(e) {
   const cc = document.getElementById('ecComposeCc').value.trim();
   const bcc = document.getElementById('ecComposeBcc').value.trim();
   const subject = document.getElementById('ecComposeSubject').value.trim();
-  const body = document.getElementById('ecComposeBody').value;
+  const body = _quill ? _quill.root.innerHTML : '';
 
   if (!to) { showComposeErr('Recipient (To) is required'); return; }
   if (!subject) { showComposeErr('Subject is required'); return; }
@@ -627,7 +788,7 @@ async function submitSend(e) {
       const base64 = await fileToBase64(file);
       attachments.push({ filename: file.name, contentType: file.type || 'application/octet-stream', content: base64 });
     }
-    await API.emails.send(_state.selectedUser, { to, cc: cc || undefined, bcc: bcc || undefined, subject, body, attachments: attachments.length > 0 ? attachments : undefined });
+    await API.emails.send(_state.selectedUser, { to, cc: cc || undefined, bcc: bcc || undefined, subject, body, html: true, attachments: attachments.length > 0 ? attachments : undefined });
     _composeFiles = [];
     document.getElementById('ecComposeStatus').textContent = '✅ Message sent!';
     setTimeout(() => {
@@ -688,7 +849,10 @@ function backToAccounts() {
   _state.selectedMessageId = null;
   document.getElementById('emailClientView').style.display = 'none';
   document.getElementById('emailContent').style.display = 'block';
-  document.querySelectorAll('.ec-nav-item').forEach(i => i.classList.toggle('ec-nav-active', i.dataset.folder === 'INBOX'));
+  document.querySelectorAll('.ec-nav-item').forEach(i => {
+    i.classList.toggle('ec-nav-active', i.dataset.folder === 'INBOX');
+    i.setAttribute('aria-selected', i.dataset.folder === 'INBOX' ? 'true' : 'false');
+  });
   loadEmails();
 }
 
@@ -782,7 +946,7 @@ function renderSafeHtml(html) {
   const div = document.createElement('div');
   div.innerHTML = html;
   const allowedTags = new Set(['p','br','b','i','u','strong','em','a','ul','ol','li','h1','h2','h3','h4','h5','h6','blockquote','pre','code','span','div','table','tr','td','th','thead','tbody','img','hr','sub','sup','small','del','ins','mark']);
-  const allowedAttrs = new Set(['href','src','alt','title','target','rel','style','class','width','height','align']);
+  const allowedAttrs = new Set(['href','src','alt','title','target','rel','class','width','height','align']);
   function sanitize(el) {
     if (el.nodeType === 3) return;
     if (el.nodeType === 1) {
@@ -805,8 +969,7 @@ function renderSafeHtml(html) {
       }
       if (el.tagName.toLowerCase() === 'img') {
         const src = el.getAttribute('src');
-        if (src && (src.startsWith('javascript:') || src.startsWith('vbscript:'))) el.removeAttribute('src');
-        else { el.style.maxWidth = '100%'; el.style.height = 'auto'; el.style.borderRadius = '8px'; }
+        if (src && (src.startsWith('javascript:') || src.startsWith('vbscript:') || src.startsWith('data:'))) el.removeAttribute('src');
       }
       [...el.childNodes].forEach(sanitize);
     }

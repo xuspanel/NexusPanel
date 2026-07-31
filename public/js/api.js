@@ -55,12 +55,13 @@ const API = {
     list: () => API.request('GET', '/emails/list'),
     domains: () => API.request('GET', '/emails/domains'),
     create: (data) => API.request('POST', '/emails/create', data),
-    inbox: (username, folder, page, limit) => {
+    inbox: (username, folder, page, limit, search) => {
       let p = '/emails/' + encodeURIComponent(username) + '/inbox';
       const params = [];
       if (folder) params.push('folder=' + encodeURIComponent(folder));
       if (page) params.push('page=' + page);
       if (limit) params.push('limit=' + limit);
+      if (search) params.push('search=' + encodeURIComponent(search));
       if (params.length) p += '?' + params.join('&');
       return API.request('GET', p);
     },
