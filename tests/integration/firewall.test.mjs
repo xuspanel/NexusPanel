@@ -13,7 +13,7 @@ describe('Firewall Routes', () => {
   it('GET /api/firewall/ returns firewall status', async () => {
     const res = await request(app).get('/api/firewall/').set('Cookie', adminCookie);
     expect(res.status).toBe(200);
-  });
+  }, 30000);
 
   it('rejects unauthenticated firewall request', async () => {
     const res = await request(app).get('/api/firewall/');

@@ -28,4 +28,37 @@ describe('domains service', () => {
     const domains = require('../../../src/services/domains.js');
     expect(() => domains.getDomain('nonexistent_xyz_' + Date.now() + '.com')).toThrow();
   });
+
+  it('findNextFreePort returns the first free port in range', () => {
+    const domains = require('../../../src/services/domains.js');
+    expect(domains.findNextFreePort(new Set([8000]), 8000, 9000)).toBe(8001);
+    expect(domains.findNextFreePort(new Set([8000, 8001, 8002]), 8000, 9000)).toBe(8003);
+    expect(domains.findNextFreePort(new Set(), 8000, 9000)).toBe(8000);
+  });
+
+  it('findNextFreePort skips ports used by other ranges', () => {
+    const domains = require('../../../src/services/domains.js');
+    const used = new Set([8000, 8100, 9000]);
+    const port = domains.findNextFreePort(used, 8000, 9000);
+    expect(used.has(port)).toBe(false);
+  });
+
+  it('findNextFreePort throws when the range is exhausted', () => {
+    const domains = require('../../../src/services/domains.js');
+    const full = new Set();
+    for (let p = 8000; p <= 9000; p++) full.add(p);
+    expect(() => domains.findNextFreePort(full, 8000, 9000)).toThrow(/No available ports/);
+  });
+
+  it('createDomain rejects subdomain without a parent before writing anything', () => {
+    const domains = require('../../../src/services/domains.js');
+    expect(() => domains.createDomain('subdomain', 'no-parent-' + Date.now() + '.example.com', { ssl: false }))
+      .toThrow(/parent domain/i);
+  });
+
+  it('createDomain rejects a port that is already in use', () => {
+    const domains = require('../../../src/services/domains.js');
+    expect(() => domains.createDomain('domain', 'busy-port-' + Date.now() + '.com', { port: 443, ssl: false }))
+      .toThrow(/already in use/i);
+  });
 });

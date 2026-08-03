@@ -8,6 +8,7 @@ let domainsTotalPages = 1;
 let domainsSearch = '';
 let domainsSelected = new Set();
 let domainsDeleteTarget = null;
+let domainsKnownNames = new Set();
 
 window.initDomains = async function () {
   try {
@@ -69,6 +70,12 @@ function bindDomainsEvents() {
       loadDomains();
     });
   });
+
+  const nameInput = document.getElementById('domainFormName');
+  if (nameInput && !nameInput.dataset.bound) {
+    nameInput.dataset.bound = '1';
+    nameInput.addEventListener('input', updateRootPlaceholder);
+  }
 
   document.getElementById('domainDeleteClose')?.addEventListener('click', closeDomainDeleteModal);
   document.getElementById('domainDeleteCancel')?.addEventListener('click', closeDomainDeleteModal);
@@ -260,19 +267,32 @@ async function confirmDeleteDomain() {
     fmShowToast(names.length === 1 ? 'Deleted ' + names[0] : 'Deleted ' + names.length + ' domains', 'success');
     domainsSelected.clear();
     await loadDomains();
+    refreshKnownNames();
   } catch (e) { fmShowToast(e.message, 'error'); }
 }
 
 /* ── Add/Edit Domain Modal ── */
 
+async function refreshKnownNames() {
+  try {
+    const r = await API.domains.list({ page: 1, limit: 1000 });
+    domainsKnownNames = new Set((r.domains || []).map(d => d.domain.toLowerCase()));
+  } catch (_) {
+    domainsKnownNames = new Set();
+  }
+}
+
 function openAddDomain() {
   domainsEditing = null;
+  refreshKnownNames();
   document.getElementById('domainFormTitle').textContent = 'Add Domain';
   document.getElementById('domainFormSubmit').textContent = 'Create Domain';
   document.getElementById('domainFormName').value = '';
   document.getElementById('domainFormName').disabled = false;
   document.getElementById('domainFormPort').value = '';
   document.getElementById('domainFormPort').placeholder = 'Auto-assign (8000-9000)';
+  document.getElementById('domainFormRoot').value = '';
+  updateRootPlaceholder();
   document.getElementById('domainFormSSL').checked = true;
   document.getElementById('domainFormTypeDomain').checked = true;
   document.getElementById('domainFormTypeSub').checked = false;
@@ -282,6 +302,20 @@ function openAddDomain() {
   document.getElementById('domainFormModal').style.display = 'flex';
   document.getElementById('domainFormName').focus();
   populateParentDropdown();
+}
+
+function updateRootPlaceholder() {
+  const name = document.getElementById('domainFormName').value.trim().toLowerCase();
+  const root = document.getElementById('domainFormRoot');
+  const hint = document.getElementById('domainFormRootHint');
+  if (!root) return;
+  if (name && /^[a-z0-9.-]+$/.test(name)) {
+    root.placeholder = '/var/www/' + name;
+    if (hint) hint.textContent = 'Leave empty to auto-create at /var/www/' + name;
+  } else {
+    root.placeholder = '/var/www/[domain]';
+    if (hint) hint.textContent = 'Leave empty to auto-create at /var/www/[domain]';
+  }
 }
 
 async function openEditDomain(name) {
@@ -294,6 +328,8 @@ async function openEditDomain(name) {
     document.getElementById('domainFormName').disabled = true;
     document.getElementById('domainFormPort').value = d.port || '';
     document.getElementById('domainFormPort').placeholder = 'Port number';
+    document.getElementById('domainFormRoot').value = d.root || '';
+    updateRootPlaceholder();
     document.getElementById('domainFormSSL').checked = d.sslEnabled;
     if (d.type === 'subdomain') {
       document.getElementById('domainFormTypeSub').checked = true;
@@ -307,7 +343,11 @@ async function openEditDomain(name) {
     document.getElementById('domainFormError').style.display = 'none';
     document.getElementById('domainFormSuccess').style.display = 'none';
     document.getElementById('domainFormModal').style.display = 'flex';
-    populateParentDropdown();
+    await populateParentDropdown();
+    if (d.parentDomain) {
+      const sel = document.getElementById('domainFormParent');
+      sel.value = d.parentDomain;
+    }
   } catch (e) { fmShowToast(e.message, 'error'); }
 }
 
@@ -318,14 +358,26 @@ function closeDomainForm() {
 function toggleDomainType() {
   const isSub = document.getElementById('domainFormTypeSub').checked;
   document.getElementById('domainFormParentRow').style.display = isSub ? 'flex' : 'none';
+  if (isSub) {
+    const sel = document.getElementById('domainFormParent');
+    const err = document.getElementById('domainFormError');
+    if (sel && sel.options.length <= 1) {
+      err.textContent = 'No parent domains available. Create a main domain first.';
+      err.style.display = 'block';
+    } else if (err) {
+      err.style.display = 'none';
+    }
+  }
 }
 
 async function populateParentDropdown() {
   try {
     const parents = await API.domains.parents();
     const sel = document.getElementById('domainFormParent');
+    const keep = sel.value;
     sel.innerHTML = '<option value="">Select parent domain...</option>' +
       parents.map(p => '<option value="' + escHtml(p) + '">' + escHtml(p) + '</option>').join('');
+    if (keep && parents.includes(keep)) sel.value = keep;
   } catch (_) {}
 }
 
@@ -451,23 +503,56 @@ document.addEventListener('DOMContentLoaded', () => {
     const isEdit = !!domainsEditing;
     const name = document.getElementById('domainFormName').value.trim().toLowerCase();
     const port = parseInt(document.getElementById('domainFormPort').value) || 0;
+    const root = document.getElementById('domainFormRoot').value.trim() || undefined;
     const ssl = document.getElementById('domainFormSSL').checked;
     const type = document.getElementById('domainFormTypeSub').checked ? 'subdomain' : 'domain';
+    const parentDomain = document.getElementById('domainFormParent').value || undefined;
     const errEl = document.getElementById('domainFormError');
     const succEl = document.getElementById('domainFormSuccess');
     errEl.style.display = 'none';
     succEl.style.display = 'none';
+
+    if (!isEdit && (domainsData.some(d => d.domain.toLowerCase() === name) || domainsKnownNames.has(name))) {
+      errEl.textContent = 'Domain "' + name + '" already exists in the panel. Delete it first or use a different name.';
+      errEl.style.display = 'block';
+      return;
+    }
+
+    if (type === 'subdomain' && !parentDomain) {
+      errEl.textContent = 'Please select the associated parent domain for this subdomain';
+      errEl.style.display = 'block';
+      return;
+    }
 
     const btn = document.getElementById('domainFormSubmit');
     btn.disabled = true;
     btn.textContent = 'Processing...';
     try {
       if (isEdit) {
-        await API.domains.update(domainsEditing, { port, sslEnabled: ssl, type });
+        await API.domains.update(domainsEditing, { port, sslEnabled: ssl, type, root });
         succEl.textContent = 'Domain updated';
       } else {
-        await API.domains.create({ domain: name, port: port || undefined, ssl, type });
-        succEl.textContent = 'Domain created';
+        const result = await API.domains.create({ domain: name, port: port || undefined, ssl, type, root, parentDomain });
+        let successText = 'Domain created';
+        let successDelay = 800;
+        if (result && result.domain && result.domain.liveCheck) {
+          const d = result.domain;
+          if (d.liveCheck.ok) {
+            const proto = d.sslEnabled ? 'https' : 'http';
+            const defaultP = d.sslEnabled ? 443 : 80;
+            const visitUrl = proto + '://' + d.domain + (Number(d.port) === defaultP ? '' : ':' + d.port);
+            successText = 'Domain created — LIVE (HTTP ' + d.liveCheck.status + ')\n' + visitUrl;
+            if (d.liveCheck.previewUrl) successText += '\nPreview (works without DNS): ' + d.liveCheck.previewUrl;
+            successDelay = 4000;
+          } else {
+            successText = 'Domain created — live check failed (HTTP ' + (d.liveCheck.status || 'n/a') + '). Check nginx config.';
+            successDelay = 4000;
+          }
+        }
+        succEl.textContent = successText;
+        succEl.style.display = 'block';
+        setTimeout(() => { closeDomainForm(); loadDomains(); }, successDelay);
+        return;
       }
       succEl.style.display = 'block';
       setTimeout(() => { closeDomainForm(); loadDomains(); }, 800);

@@ -131,16 +131,137 @@ function parseNginxServerBlocks(confContent) {
   return blocks;
 }
 
-function findAvailablePort() {
+function getBoundPorts() {
+  const ports = new Set();
+  const addLinePorts = (output) => {
+    for (const line of output.split('\n')) {
+      if (/^\s*LISTEN/.test(line) || line.includes('LISTEN')) {
+        const m = line.match(/[:\[](\d+)\s+\]/) || line.match(/:(\d+)\s/);
+        if (m && m[1]) {
+          const p = parseInt(m[1], 10);
+          if (p >= 1 && p <= 65535) ports.add(p);
+        }
+      }
+    }
+  };
+  const ss = runSafeSync('ss', ['-tln'], { timeout: 5000 });
+  if (ss.status === 0 && ss.stdout) {
+    addLinePorts(ss.stdout);
+    return ports;
+  }
+  for (const file of ['/proc/net/tcp', '/proc/net/tcp6']) {
+    try {
+      const content = fs.readFileSync(file, 'utf8');
+      for (const line of content.split('\n').slice(1)) {
+        const fields = line.trim().split(/\s+/);
+        if (fields.length >= 4 && fields[3] === '0A') {
+          const local = fields[1];
+          const port = parseInt(local.split(':').pop(), 16);
+          if (port >= 1 && port <= 65535) ports.add(port);
+        }
+      }
+    } catch (_) {}
+  }
+  return ports;
+}
+
+function getNginxConfPorts() {
+  const ports = new Set();
+  try {
+    if (!fs.existsSync(NGINX_CONF_DIR)) return ports;
+    const files = fs.readdirSync(NGINX_CONF_DIR).filter(f => f.endsWith('.conf') && !f.includes('.bak'));
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(NGINX_CONF_DIR, file), 'utf8');
+      const matches = content.match(/listen\s+(\d+)/g) || [];
+      for (const m of matches) {
+        const p = parseInt(m.replace(/listen\s+/, ''), 10);
+        if (p >= 1 && p <= 65535) ports.add(p);
+      }
+    }
+  } catch (_) {}
+  return ports;
+}
+
+function getUsedPorts() {
   const store = loadDomains();
   const usedPorts = new Set([80, 443]);
   for (const name in store) {
     if (store[name].port) usedPorts.add(store[name].port);
   }
-  for (let p = PORT_RANGE_START; p <= PORT_RANGE_END; p++) {
-    if (!usedPorts.has(p)) return p;
+  for (const p of getNginxConfPorts()) usedPorts.add(p);
+  for (const p of getBoundPorts()) usedPorts.add(p);
+  return usedPorts;
+}
+
+function findNextFreePort(usedPorts, start, end) {
+  const used = usedPorts || new Set();
+  const lo = start || PORT_RANGE_START;
+  const hi = end || PORT_RANGE_END;
+  for (let p = lo; p <= hi; p++) {
+    if (!used.has(p)) return p;
   }
-  throw new Error('No available ports in range ' + PORT_RANGE_START + '-' + PORT_RANGE_END);
+  throw new Error('No available ports in range ' + lo + '-' + hi);
+}
+
+function findAvailablePort() {
+  return findNextFreePort(getUsedPorts());
+}
+
+function assertPortFree(port) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error('Invalid port number: ' + port);
+  }
+  const usedPorts = getUsedPorts();
+  if (usedPorts.has(port)) {
+    throw new Error('Port ' + port + ' is already in use by another domain or service. Choose a different port or leave it empty to auto-assign.');
+  }
+  return true;
+}
+
+function sleepSync(ms) {
+  try { Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms); } catch (_) {}
+}
+
+function getServerPublicIP() {
+  try {
+    const r = runSafeSync('hostname', ['-I'], { timeout: 5000 });
+    const first = (r.stdout || '').trim().split(/\s+/)[0];
+    if (first && validators.ipAddr.test(first)) return first;
+  } catch (_) {}
+  return '127.0.0.1';
+}
+
+function verifyDomainLive(domain, port, sslEnabled) {
+  const scheme = sslEnabled ? 'https' : 'http';
+  const args = ['-s', '-k', '-o', '/dev/null', '-w', '%{http_code}', '-H', 'Host: ' + domain, scheme + '://127.0.0.1:' + port + '/'];
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const r = runSafeSync('curl', args, { timeout: 5000 });
+    const status = parseInt((r.stdout || '').trim(), 10);
+    if (!Number.isNaN(status) && status >= 200 && status < 400) {
+      return { ok: true, status };
+    }
+    if (attempt < 2) sleepSync(500);
+  }
+  return { ok: false, status: 0 };
+}
+
+function ensureFirewallPort(port) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return false;
+  const state = runSafeSync('firewall-cmd', ['--state'], { timeout: 3000 });
+  if (state.status !== 0) return false;
+  const query = runSafeSync('firewall-cmd', ['--query-port', port + '/tcp'], { timeout: 5000 });
+  if (query.status === 0) return false;
+  runSafeSync('firewall-cmd', ['--permanent', '--zone=public', '--add-port', port + '/tcp'], { timeout: 10000 });
+  runSafeSync('firewall-cmd', ['--reload'], { timeout: 10000 });
+  return true;
+}
+
+function releaseFirewallPort(port) {
+  if (!Number.isInteger(port) || port < 1 || port > 65535) return;
+  const state = runSafeSync('firewall-cmd', ['--state'], { timeout: 3000 });
+  if (state.status !== 0) return;
+  runSafeSync('firewall-cmd', ['--permanent', '--zone=public', '--remove-port', port + '/tcp'], { timeout: 10000 });
+  runSafeSync('firewall-cmd', ['--reload'], { timeout: 10000 });
 }
 
 function syncFromNginx() {
@@ -213,7 +334,7 @@ function syncFromNginx() {
   return store;
 }
 
-function validateDomain(name, type) {
+function validateDomain(name, type, parentDomain) {
   if (!name || name.length < 3) throw new Error('Invalid domain name');
   if (!validators.domain.test(name)) {
     throw new Error('Invalid domain format. Use example.com');
@@ -221,18 +342,32 @@ function validateDomain(name, type) {
   if (type === 'subdomain') {
     const parts = name.split('.');
     if (parts.length < 3) throw new Error('Subdomain must have at least 3 parts (e.g. sub.example.com)');
+    if (!parentDomain) {
+      throw new Error('Subdomain requires selecting an associated parent domain');
+    }
+    const store = loadDomains();
+    if (!store[parentDomain]) {
+      throw new Error('Parent domain not found: ' + parentDomain);
+    }
+    if (store[parentDomain].type === 'subdomain') {
+      throw new Error('Parent domain cannot be a subdomain: ' + parentDomain);
+    }
+    if (name !== parentDomain && !name.endsWith('.' + parentDomain)) {
+      throw new Error('Subdomain "' + name + '" must belong to parent "' + parentDomain + '" (e.g. sub.' + parentDomain + ')');
+    }
   }
 }
 
 function generateNginxConf(domain, port, sslEnabled, type, options) {
-  const root = '/var/www/' + domain;
+  const root = (options && options.root) || '/var/www/' + domain;
   const log = '/var/log/nginx/' + domain;
+  const httpsPort = port || 443;
   let conf = 'server {\n';
   conf += '    server_name ' + domain + ';\n';
   conf += '\n';
   if (sslEnabled) {
-    conf += '    listen ' + port + ' ssl;\n';
-    conf += '    listen [::]:' + port + ' ssl;\n';
+    conf += '    listen ' + httpsPort + ' ssl;\n';
+    conf += '    listen [::]:' + httpsPort + ' ssl;\n';
     conf += '    http2 on;\n';
     conf += '\n';
     conf += '    ssl_certificate /etc/letsencrypt/live/' + domain + '/fullchain.pem;\n';
@@ -247,8 +382,19 @@ function generateNginxConf(domain, port, sslEnabled, type, options) {
   conf += '    root ' + root + ';\n';
   conf += '    index index.html index.htm;\n';
   conf += '\n';
+  conf += '    add_header X-Frame-Options "DENY" always;\n';
+  conf += '    add_header X-Content-Type-Options "nosniff" always;\n';
+  conf += '    add_header X-XSS-Protection "1; mode=block" always;\n';
+  conf += '    add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n';
+  conf += '\n';
   conf += '    location / {\n';
   conf += '        try_files $uri $uri/ =404;\n';
+  conf += '    }\n';
+  conf += '\n';
+  conf += '    location ~ /\\. {\n';
+  conf += '        deny all;\n';
+  conf += '        access_log off;\n';
+  conf += '        log_not_found off;\n';
   conf += '    }\n';
   conf += '\n';
   conf += '    access_log ' + log + '_access.log;\n';
@@ -261,7 +407,95 @@ function generateNginxConf(domain, port, sslEnabled, type, options) {
     conf += '    listen 80;\n';
     conf += '    listen [::]:80;\n';
     conf += '    server_name ' + domain + ';\n';
-    conf += '    return 301 https://$server_name$request_uri;\n';
+    conf += '    return 301 https://$server_name' + (httpsPort === 443 ? '' : ':' + httpsPort) + '$request_uri;\n';
+    conf += '}\n';
+  }
+
+  return conf;
+}
+
+function generateAppNginxConf(domain, port, sslEnabled, opts) {
+  const options = opts || {};
+  const root = options.root;
+  const proxyPass = options.proxyPass;
+  const phpSocket = options.phpSocket;
+  const log = '/var/log/nginx/' + domain;
+  const httpsPort = port || 443;
+  let conf = 'server {\n';
+  conf += '    server_name ' + domain + ';\n';
+  conf += '\n';
+  if (sslEnabled) {
+    conf += '    listen ' + httpsPort + ' ssl;\n';
+    conf += '    listen [::]:' + httpsPort + ' ssl;\n';
+    conf += '    http2 on;\n';
+    conf += '\n';
+    conf += '    ssl_certificate /etc/letsencrypt/live/' + domain + '/fullchain.pem;\n';
+    conf += '    ssl_certificate_key /etc/letsencrypt/live/' + domain + '/privkey.pem;\n';
+    conf += '    include /etc/letsencrypt/options-ssl-nginx.conf;\n';
+    conf += '    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;\n';
+  } else {
+    conf += '    listen ' + port + ';\n';
+    conf += '    listen [::]:' + port + ';\n';
+  }
+  conf += '\n';
+  conf += '    add_header X-Frame-Options "DENY" always;\n';
+  conf += '    add_header X-Content-Type-Options "nosniff" always;\n';
+  conf += '    add_header X-XSS-Protection "1; mode=block" always;\n';
+  conf += '    add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n';
+  conf += '\n';
+
+  if (proxyPass) {
+    conf += '    location / {\n';
+    conf += '        proxy_pass ' + proxyPass + ';\n';
+    conf += '        proxy_http_version 1.1;\n';
+    conf += '        proxy_set_header Upgrade $http_upgrade;\n';
+    conf += '        proxy_set_header Connection "upgrade";\n';
+    conf += '        proxy_set_header Host $host;\n';
+    conf += '        proxy_set_header X-Real-IP $remote_addr;\n';
+    conf += '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n';
+    conf += '        proxy_set_header X-Forwarded-Proto $scheme;\n';
+    conf += '        proxy_read_timeout 300s;\n';
+    conf += '        proxy_send_timeout 300s;\n';
+    conf += '    }\n';
+    conf += '\n';
+  } else {
+    conf += '    root ' + root + ';\n';
+    conf += '    index index.php index.html index.htm;\n';
+    conf += '\n';
+    conf += '    location / {\n';
+    conf += phpSocket
+      ? '        try_files $uri $uri/ /index.php?$query_string;\n'
+      : '        try_files $uri $uri/ =404;\n';
+    conf += '    }\n';
+    conf += '\n';
+  }
+
+  if (phpSocket && !proxyPass) {
+    conf += '    location ~ \\.php$ {\n';
+    conf += '        fastcgi_pass unix:' + phpSocket + ';\n';
+    conf += '        fastcgi_param SCRIPT_FILENAME $document_root$fastcgi_script_name;\n';
+    conf += '        include fastcgi_params;\n';
+    conf += '    }\n';
+    conf += '\n';
+  }
+
+  conf += '    location ~ /\\. {\n';
+  conf += '        deny all;\n';
+  conf += '        access_log off;\n';
+  conf += '        log_not_found off;\n';
+  conf += '    }\n';
+  conf += '\n';
+  conf += '    access_log ' + log + '_access.log;\n';
+  conf += '    error_log ' + log + '_error.log;\n';
+  conf += '}\n';
+
+  if (sslEnabled) {
+    conf += '\n';
+    conf += 'server {\n';
+    conf += '    listen 80;\n';
+    conf += '    listen [::]:80;\n';
+    conf += '    server_name ' + domain + ';\n';
+    conf += '    return 301 https://$server_name' + (httpsPort === 443 ? '' : ':' + httpsPort) + '$request_uri;\n';
     conf += '}\n';
   }
 
@@ -286,13 +520,59 @@ function removeNginxConf(domain) {
   } catch (_) {}
 }
 
-function createDomainWWW(domain) {
-  const dir = path.join(WWW_DIR, domain);
+function createDomainWWW(domain, root) {
+  const dir = root || path.join(WWW_DIR, domain);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
-    fs.writeFileSync(path.join(dir, 'index.html'), '<!DOCTYPE html><html><head><title>' + domain + '</title><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><style>body{font-family:sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;margin:0;background:#0a0e1a;color:#f1f5f9}div{text-align:center}h1{font-size:2.5rem;margin-bottom:0.5rem}p{color:#94a3b8}</style></head><body><div><h1>' + domain + '</h1><p>Welcome! This site is hosted on NexusPanel.</p></div></body></html>', 'utf8');
+  }
+  const indexPath = path.join(dir, 'index.html');
+  if (!fs.existsSync(indexPath)) {
+    fs.writeFileSync(indexPath, LIVE_PAGE_HTML(domain), 'utf8');
   }
   return dir;
+}
+
+function LIVE_PAGE_HTML(domain) {
+  const safe = String(domain).replace(/[<>&"']/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;', "'": '&#39;' }[c]));
+  return '<!DOCTYPE html>' +
+    '<html lang="en">' +
+    '<head>' +
+    '<meta charset="utf-8">' +
+    '<meta name="viewport" content="width=device-width, initial-scale=1">' +
+    '<meta name="robots" content="noindex">' +
+    '<title>' + safe + ' — Live</title>' +
+    '<style>' +
+    '*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}' +
+    'html,body{height:100%}' +
+    'body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;' +
+    'background:radial-gradient(1200px 600px at 50% -10%,#1e1b4b 0%,#0f172a 55%,#020617 100%);' +
+    'color:#e2e8f0;display:flex;align-items:center;justify-content:center;padding:24px;overflow:hidden}' +
+    'body::before{content:"";position:fixed;inset:0;background:radial-gradient(600px 300px at 80% 90%,rgba(34,211,238,.10) 0%,transparent 60%);pointer-events:none}' +
+    '.card{position:relative;text-align:center;max-width:560px;width:100%;padding:56px 40px;border:1px solid rgba(148,163,184,.18);border-radius:20px;' +
+    'background:linear-gradient(180deg,rgba(30,41,59,.6) 0%,rgba(15,23,42,.6) 100%);' +
+    'box-shadow:0 24px 80px rgba(2,6,23,.6);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px)}' +
+    '.live{display:inline-flex;align-items:center;gap:10px;padding:6px 16px;border-radius:999px;background:rgba(16,185,129,.12);' +
+    'border:1px solid rgba(16,185,129,.35);color:#34d399;font-size:13px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;margin-bottom:28px}' +
+    '.dot{width:10px;height:10px;border-radius:50%;background:#10b981;box-shadow:0 0 0 0 rgba(16,185,129,.6);animation:pulse 2s infinite}' +
+    '@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(16,185,129,.55)}70%{box-shadow:0 0 0 12px rgba(16,185,129,0)}100%{box-shadow:0 0 0 0 rgba(16,185,129,0)}}' +
+    '.globe{font-size:44px;margin-bottom:18px;line-height:1}' +
+    'h1{font-size:clamp(22px,4.5vw,34px);font-weight:700;color:#f8fafc;letter-spacing:-.01em;word-break:break-all;margin-bottom:14px}' +
+    'p.tag{color:#94a3b8;font-size:16px;line-height:1.6;margin-bottom:32px}' +
+    'p.tag b{color:#cbd5e1;font-weight:600}' +
+    '.footer{display:flex;align-items:center;justify-content:center;gap:8px;color:#64748b;font-size:13px}' +
+    '.footer .bolt{color:#22d3ee;font-size:15px}' +
+    '</style>' +
+    '</head>' +
+    '<body>' +
+    '<div class="card">' +
+    '<span class="live"><span class="dot"></span>Live</span>' +
+    '<div class="globe">&#127760;</div>' +
+    '<h1>' + safe + '</h1>' +
+    '<p class="tag">This domain is <b>up and serving traffic</b>.<br>Content is ready to be placed here.</p>' +
+    '<div class="footer"><span class="bolt">&#9889;</span> Hosted with NexusPanel</div>' +
+    '</div>' +
+    '</body>' +
+    '</html>';
 }
 
 function removeDomainWWW(domain) {
@@ -357,6 +637,7 @@ function sanitizeDomain(d, name) {
     createdAt: d.createdAt || '',
     nginxFile: d.nginxFile || name + '.conf',
     sslInfo: d.sslEnabled ? getSSLCertInfo(name) : null,
+    sslError: d.sslError || '',
   };
 }
 
@@ -399,58 +680,87 @@ function getDomain(name) {
   return sanitizeDomain(store[name], name);
 }
 
-function createDomain(type, name, port, enableSSL) {
-  validateDomain(name, type);
+function createDomain(type, name, opts) {
+  const options = opts || {};
+  const requestedPort = options.port !== undefined ? parseInt(options.port, 10) : 0;
+  const enableSSL = options.ssl !== undefined ? !!options.ssl : true;
+  const customRoot = (options.root || options.location || '').trim();
+  const parentDomain = (options.parentDomain || '').trim() || null;
+
+  validateDomain(name, type, parentDomain);
 
   const store = loadDomains();
   if (store[name]) throw new Error('Domain "' + name + '" already exists');
 
-  const autoPort = !port || port === 0;
-  if (autoPort) {
-    port = findAvailablePort();
+  const sslEnabled = enableSSL;
+  const customPort = requestedPort > 0;
+
+  if (customPort) {
+    assertPortFree(requestedPort);
+  }
+
+  const root = customRoot ? path.resolve(customRoot) : path.join(WWW_DIR, name);
+  if (customRoot && !customRoot.startsWith('/')) {
+    throw new Error('Location must be an absolute path');
   }
 
   if (!fs.existsSync(NGINX_CONF_DIR)) {
     fs.mkdirSync(NGINX_CONF_DIR, { recursive: true });
   }
 
-  createDomainWWW(name);
+  createDomainWWW(name, root);
 
-  const sslEnabled = enableSSL !== false;
-
+  let finalPort = sslEnabled && !customPort ? 443 : (customPort ? requestedPort : findAvailablePort());
   let finalSSL = false;
+  let sslError = '';
+
   if (sslEnabled) {
-    writeNginxConf(name, generateNginxConf(name, port, false));
+    writeNginxConf(name, generateNginxConf(name, 80, false, type, { root }));
     nginxTestAndReload();
     const sslResult = installCertbotSSL(name);
     if (sslResult.success) {
       finalSSL = true;
     } else {
-      console.error('[Domains] SSL install failed for ' + name + ':', sslResult.output);
+      sslError = (sslResult.output || 'certbot failed').substring(0, 500);
+      console.error('[Domains] SSL install failed for ' + name + ':', sslError);
     }
   }
 
-  writeNginxConf(name, generateNginxConf(name, finalSSL ? 443 : port, finalSSL));
+  if (!sslEnabled || !finalSSL) {
+    finalPort = customPort ? requestedPort : findAvailablePort();
+  }
+
+  writeNginxConf(name, generateNginxConf(name, finalPort, finalSSL, type, { root }));
   nginxTestAndReload();
 
-  const parentDomain = type === 'subdomain' ? name.split('.').slice(1).join('.') : null;
+  const firewallOpened = ensureFirewallPort(finalPort);
+  const liveCheck = verifyDomainLive(name, finalPort, finalSSL);
+
+  const parent = type === 'subdomain' ? (parentDomain || name.split('.').slice(1).join('.')) : null;
 
   store[name] = {
     type,
     domain: name,
-    parentDomain,
-    port: finalSSL ? 443 : port,
-    root: '/var/www/' + name,
+    parentDomain: parent,
+    port: finalPort,
+    root: root,
     sslEnabled: finalSSL,
     sslCert: finalSSL ? '/etc/letsencrypt/live/' + name + '/fullchain.pem' : '',
-    autoPort: autoPort,
+    sslError: sslError || undefined,
+    autoPort: !customPort,
     syncedFromNginx: false,
     nginxFile: name + '.conf',
+    firewallOpened: firewallOpened || undefined,
     createdAt: new Date().toISOString(),
   };
   saveDomains(store);
 
-  return getDomain(name);
+  const result = getDomain(name);
+  result.liveCheck = liveCheck;
+  result.previewUrl = (liveCheck.ok && !finalSSL && finalPort !== 80 && finalPort !== 443)
+    ? 'http://' + getServerPublicIP() + ':' + finalPort + '/'
+    : null;
+  return result;
 }
 
 function editDomain(name, updates) {
@@ -465,6 +775,7 @@ function editDomain(name, updates) {
 
   if (updates.port !== undefined) {
     if (isNaN(newPort) || newPort < 1 || newPort > 65535) throw new Error('Invalid port number');
+    if (newPort !== d.port) assertPortFree(newPort);
     d.port = newPort;
   }
 
@@ -472,33 +783,34 @@ function editDomain(name, updates) {
   if (updates.type) d.type = updates.type;
 
   if (updates.port !== undefined || updates.root) {
-    const conf = generateNginxConf(name, d.port, d.sslEnabled);
+    const conf = generateNginxConf(name, d.port, d.sslEnabled, d.type, { root: d.root });
     writeNginxConf(name, conf);
     nginxTestAndReload();
   }
 
   if (updates.sslEnabled !== undefined && updates.sslEnabled !== d.sslEnabled) {
     if (newSSL) {
-      writeNginxConf(name, generateNginxConf(name, 80, false));
+      writeNginxConf(name, generateNginxConf(name, 80, false, d.type, { root: d.root }));
       nginxTestAndReload();
       const sslResult = installCertbotSSL(name);
       if (!sslResult.success) {
-        writeNginxConf(name, generateNginxConf(name, d.port || 80, false));
+        writeNginxConf(name, generateNginxConf(name, d.port || 80, false, d.type, { root: d.root }));
         nginxTestAndReload();
         throw new Error('SSL installation failed: ' + sslResult.output);
       }
       d.sslEnabled = true;
-      d.port = 443;
+      const httpsPort = d.port === 80 ? 443 : (d.port || 443);
+      d.port = httpsPort;
       d.sslCert = '/etc/letsencrypt/live/' + name + '/fullchain.pem';
     } else {
-      writeNginxConf(name, generateNginxConf(name, 80, false));
+      writeNginxConf(name, generateNginxConf(name, 80, false, d.type, { root: d.root }));
       nginxTestAndReload();
       d.sslEnabled = false;
-      d.port = 80;
+      d.port = d.port === 443 ? 80 : d.port;
       d.sslCert = '';
       deleteCertbotSSL(name);
     }
-    writeNginxConf(name, generateNginxConf(name, d.port, d.sslEnabled));
+    writeNginxConf(name, generateNginxConf(name, d.port, d.sslEnabled, d.type, { root: d.root }));
     nginxTestAndReload();
   }
 
@@ -518,6 +830,9 @@ function deleteDomain(name) {
     deleteCertbotSSL(name);
   }
 
+  const port = store[name].port;
+  const hadFirewall = !!store[name].firewallOpened;
+
   removeNginxConf(name);
   removeDomainWWW(name);
 
@@ -525,6 +840,11 @@ function deleteDomain(name) {
 
   delete store[name];
   saveDomains(store);
+
+  if (hadFirewall) {
+    const stillUsed = Object.keys(store).some(k => Number(store[k].port) === port) || getNginxConfPorts().has(port);
+    if (!stillUsed) releaseFirewallPort(port);
+  }
 
   return { ok: true, domain: name };
 }
@@ -551,9 +871,10 @@ function installSSL(name) {
   const result = installCertbotSSL(name);
   if (result.success) {
     store[name].sslEnabled = true;
-    store[name].port = 443;
+    const httpsPort = store[name].port === 80 || store[name].port === 443 ? 443 : (store[name].port || 443);
+    store[name].port = httpsPort;
     store[name].sslCert = '/etc/letsencrypt/live/' + name + '/fullchain.pem';
-    writeNginxConf(name, generateNginxConf(name, 443, true));
+    writeNginxConf(name, generateNginxConf(name, httpsPort, true, store[name].type, { root: store[name].root }));
     nginxTestAndReload();
     saveDomains(store);
   }
@@ -606,4 +927,10 @@ module.exports = {
   syncFromNginx,
   bulkDelete,
   validateNginxContent,
+  findNextFreePort,
+  getUsedPorts,
+  writeNginxConf,
+  nginxTestAndReload,
+  generateNginxConf,
+  generateAppNginxConf,
 };

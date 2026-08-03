@@ -90,6 +90,7 @@ const updatesRoutes = require('./src/routes/updates');
 const notificationsRoutes = require('./src/routes/notifications');
 const settingsRoutes = require('./src/routes/settings');
 const searchRoutes = require('./src/routes/search');
+const appsRoutes = require('./src/routes/apps');
 
 app.use('/api/auth', loginLimiter, authRoutes);
 app.use('/api/system', apiLimiter, dashboardRoutes);
@@ -121,6 +122,7 @@ app.use('/api/updates', apiLimiter, updatesRoutes);
 app.use('/api/notifications', apiLimiter, notificationsRoutes);
 app.use('/api/settings', apiLimiter, settingsRoutes);
 app.use('/api/search', apiLimiter, searchRoutes);
+app.use('/api/apps', apiLimiter, appsRoutes);
 
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {

@@ -1,6 +1,6 @@
 # Domains API
 
-nginx virtual host management, SSL certificate issuance, and configuration editing.
+nginx virtual host management, SSL certificate issuance, conflict-free port assignment, and configuration editing.
 
 All endpoints are prefixed with `/api/domains`. Admin only.
 
@@ -28,23 +28,56 @@ All endpoints are prefixed with `/api/domains`. Admin only.
 
 ### POST /domains/create
 
+Creates a domain or subdomain. Creates the document root (default `/var/www/[domain]`), a styled `index.html` landing page if none exists, writes `[domain].conf` to `/etc/nginx/conf.d/`, and issues a Let's Encrypt certificate when SSL is enabled.
+
 ```json
 {
   "domain": "app.example.com",
-  "port": 3000,
-  "enableSSL": true
+  "type": "subdomain",
+  "parentDomain": "example.com",
+  "port": 0,
+  "root": "",
+  "ssl": true
 }
 ```
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `domain` | string | Full domain or subdomain name |
+| `type` | `domain` \| `subdomain` | Domain type |
+| `parentDomain` | string | Required for subdomains — the associated parent domain (must exist) |
+| `port` | number | Optional. If empty/0, a free port is auto-assigned (no conflicts). Verified free when provided. |
+| `root` | string | Optional document root. Defaults to `/var/www/[domain]`. |
+| `ssl` | boolean | Auto-issue a Let's Encrypt certificate (default `true`). |
 
 ### Response
 
 ```json
 {
   "success": true,
-  "domain": "app.example.com",
-  "nginxConfig": "server { ... }"
+  "domain": {
+    "domain": "app.example.com",
+    "type": "subdomain",
+    "parentDomain": "example.com",
+    "port": 443,
+    "root": "/var/www/app.example.com",
+    "sslEnabled": true,
+    "sslError": ""
+  }
 }
 ```
+
+### PUT /domains/:name
+
+```json
+{
+  "port": 8443,
+  "root": "/var/www/app.example.com",
+  "sslEnabled": true
+}
+```
+
+Changing the port to one already in use by another domain, vhost, or service returns a `400` error without touching any config.
 
 ### PUT /domains/:name/nginx
 

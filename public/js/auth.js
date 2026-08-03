@@ -63,6 +63,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     document.getElementById('viewEmails').style.display = view === 'emails' ? 'block' : 'none';
     document.getElementById('viewUsers').style.display = view === 'users' ? 'block' : 'none';
     document.getElementById('viewDomains').style.display = view === 'domains' ? 'block' : 'none';
+    document.getElementById('viewApps').style.display = view === 'apps' ? 'block' : 'none';
     document.getElementById('viewBackups').style.display = view === 'backups' ? 'block' : 'none';
     document.getElementById('viewVirusScanner').style.display = view === 'virusscanner' ? 'block' : 'none';
     document.getElementById('viewMimetypes').style.display = view === 'mimetypes' ? 'block' : 'none';
@@ -96,6 +97,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (view === 'terminal' && window.initTerminal) window.initTerminal();
     if (view === 'users' && window.initUsers) window.initUsers();
     if (view === 'domains' && window.initDomains) window.initDomains();
+    if (view === 'apps' && window.initApps) window.initApps();
     if (view === 'backups' && window.initBackups) window.initBackups();
     if (view === 'virusscanner' && window.initVirusScanner) window.initVirusScanner();
     if (view === 'mimetypes' && window.initMimetypes) window.initMimetypes();

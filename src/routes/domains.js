@@ -64,10 +64,15 @@ router.put('/:name/nginx', (req, res) => {
 
 router.post('/create', (req, res) => {
   try {
-    const { type, domain, port, ssl } = req.body;
+    const { type, domain, port, ssl, root, location, parentDomain } = req.body;
     if (!domain || !type) return res.status(400).json({ error: 'Domain name and type required' });
-    const result = domains.createDomain(type, domain, port, ssl !== false);
-    audit.log('domain.create', req, { domain, type, port: result.port, ssl: result.sslEnabled });
+    const result = domains.createDomain(type, domain, {
+      port,
+      ssl,
+      root: root || location,
+      parentDomain,
+    });
+    audit.log('domain.create', req, { domain, type, port: result.port, root: result.root, ssl: result.sslEnabled, parentDomain: result.parentDomain });
     res.json({ success: true, domain: result });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
