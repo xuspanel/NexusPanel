@@ -56,7 +56,14 @@ app.use('/api', (req, res, next) => {
 
 require('./src/services/audit').init();
 
-app.use(express.static(path.join(__dirname, 'public'), { maxAge: '365d', etag: true, lastModified: true }));
+app.use(express.static(path.join(__dirname, 'public'), {
+  maxAge: '365d',
+  etag: true,
+  lastModified: true,
+  setHeaders(res, filePath) {
+    if (filePath.endsWith('/index.html')) res.setHeader('Cache-Control', 'no-cache');
+  },
+}));
 
 const authRoutes = require('./src/routes/auth');
 const dashboardRoutes = require('./src/routes/dashboard');
