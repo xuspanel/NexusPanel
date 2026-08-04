@@ -1,5 +1,10 @@
 # Changelog
 
+## [1.35.1] - 2026-08-05
+### Fixed
+- nginx configs (domains/apps/git-deploy) emitted the standalone `http2 on;` directive, which is unknown on nginx < 1.25.1 and broke `nginx -t` (e.g. `unknown directive "http2"`) — generation is now nginx-version-aware: old nginx gets `listen <port> ssl http2;`, nginx >= 1.25.1 keeps `listen <port> ssl;` + `http2 on;`
+- Pre-existing configs generated with the old syntax must be regenerated (edit the domain in the panel) or edited manually on affected servers
+
 ## [1.35.0] - 2026-08-05
 ### Changed
 - **Deployments screen** — unified two-tab UI: "Quick Apps" (one-click installer) and "Git Deploy" (custom repository deployment)

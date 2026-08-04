@@ -11,6 +11,36 @@ const PORT_RANGE_START = 8000;
 const PORT_RANGE_END = 9000;
 const LOCK_TIMEOUT = 5000;
 
+let cachedNginxVersion = null;
+
+function getNginxVersion() {
+  if (cachedNginxVersion) return cachedNginxVersion;
+  try {
+    const res = runSafeSync('nginx', ['-v']);
+    const out = res.stderr || res.stdout || '';
+    const m = out.match(/nginx\/(\d+)\.(\d+)(?:\.(\d+))?/);
+    if (m) {
+      cachedNginxVersion = {
+        major: parseInt(m[1], 10),
+        minor: parseInt(m[2], 10),
+        patch: parseInt(m[3] || '0', 10),
+      };
+    }
+  } catch (_) { /* fall through */ }
+  return cachedNginxVersion;
+}
+
+function supportsStandaloneHttp2() {
+  const v = getNginxVersion();
+  if (!v) return true;
+  if (v.major > 1) return true;
+  if (v.major === 1) {
+    if (v.minor > 25) return true;
+    if (v.minor === 25 && v.patch >= 1) return true;
+  }
+  return false;
+}
+
 let writeLock = false;
 
 function acquireLock() {
@@ -366,9 +396,10 @@ function generateNginxConf(domain, port, sslEnabled, type, options) {
   conf += '    server_name ' + domain + ';\n';
   conf += '\n';
   if (sslEnabled) {
-    conf += '    listen ' + httpsPort + ' ssl;\n';
-    conf += '    listen [::]:' + httpsPort + ' ssl;\n';
-    conf += '    http2 on;\n';
+    const standaloneH2 = supportsStandaloneHttp2();
+    conf += '    listen ' + httpsPort + ' ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
+    conf += '    listen [::]:' + httpsPort + ' ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
+    if (standaloneH2) conf += '    http2 on;\n';
     conf += '\n';
     conf += '    ssl_certificate /etc/letsencrypt/live/' + domain + '/fullchain.pem;\n';
     conf += '    ssl_certificate_key /etc/letsencrypt/live/' + domain + '/privkey.pem;\n';
@@ -425,9 +456,10 @@ function generateAppNginxConf(domain, port, sslEnabled, opts) {
   conf += '    server_name ' + domain + ';\n';
   conf += '\n';
   if (sslEnabled) {
-    conf += '    listen ' + httpsPort + ' ssl;\n';
-    conf += '    listen [::]:' + httpsPort + ' ssl;\n';
-    conf += '    http2 on;\n';
+    const standaloneH2 = supportsStandaloneHttp2();
+    conf += '    listen ' + httpsPort + ' ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
+    conf += '    listen [::]:' + httpsPort + ' ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
+    if (standaloneH2) conf += '    http2 on;\n';
     conf += '\n';
     conf += '    ssl_certificate /etc/letsencrypt/live/' + domain + '/fullchain.pem;\n';
     conf += '    ssl_certificate_key /etc/letsencrypt/live/' + domain + '/privkey.pem;\n';
