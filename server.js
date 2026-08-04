@@ -91,6 +91,8 @@ const notificationsRoutes = require('./src/routes/notifications');
 const settingsRoutes = require('./src/routes/settings');
 const searchRoutes = require('./src/routes/search');
 const appsRoutes = require('./src/routes/apps');
+const deployRoutes = require('./src/routes/deploy');
+const webhookRoutes = require('./src/routes/webhook');
 
 app.use('/api/auth', loginLimiter, authRoutes);
 app.use('/api/system', apiLimiter, dashboardRoutes);
@@ -123,6 +125,8 @@ app.use('/api/notifications', apiLimiter, notificationsRoutes);
 app.use('/api/settings', apiLimiter, settingsRoutes);
 app.use('/api/search', apiLimiter, searchRoutes);
 app.use('/api/apps', apiLimiter, appsRoutes);
+app.use('/api/deploy', apiLimiter, deployRoutes);
+app.use('/webhook', webhookRoutes);
 
 app.use((req, res, next) => {
   if (req.path.startsWith('/api/')) {

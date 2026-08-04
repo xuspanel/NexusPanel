@@ -78,6 +78,3 @@ tmp/
 temp/
 *.tmp
 
-# Deployment files
-deploy/
-deployment/

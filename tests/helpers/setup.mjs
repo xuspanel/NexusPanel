@@ -72,6 +72,8 @@ export function createTestApp() {
   const databasesRoutes = require('../../src/routes/databases.js');
   const dockerRoutes = require('../../src/routes/docker.js');
   const appsRoutes = require('../../src/routes/apps.js');
+  const deployRoutes = require('../../src/routes/deploy.js');
+  const webhookRoutes = require('../../src/routes/webhook.js');
 
   app.use('/api/auth', loginLimiter, authRoutes);
   app.use('/api/system', apiLimiter, dashboardRoutes);
@@ -103,6 +105,8 @@ export function createTestApp() {
   app.use('/api/databases', apiLimiter, databasesRoutes);
   app.use('/api/docker', apiLimiter, dockerRoutes);
   app.use('/api/apps', apiLimiter, appsRoutes);
+  app.use('/api/deploy', apiLimiter, deployRoutes);
+  app.use('/webhook', webhookRoutes);
 
   app.use('/api/{*rest}', (req, res) => {
     res.status(404).json({ error: 'Endpoint not found' });

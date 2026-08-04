@@ -323,6 +323,26 @@
   /* ── Events ── */
 
   function wireEvents() {
+    var tabBar = document.querySelector('.apps-tabs');
+    if (tabBar) {
+      tabBar.addEventListener('click', function (e) {
+        var tab = e.target.closest('.apps-tab');
+        if (!tab) return;
+        var target = tab.getAttribute('data-tab');
+        var tabs = document.querySelectorAll('.apps-tab');
+        tabs.forEach(function (t) { t.classList.toggle('active', t === tab); });
+        document.getElementById('tabQuickApps').style.display = target === 'quick-apps' ? '' : 'none';
+        document.getElementById('tabGitDeploy').style.display = target === 'git-deploy' ? '' : 'none';
+
+        if (target === 'quick-apps') {
+          if (catalog.length === 0) loadAll();
+          else { renderCatalogGrid(); renderInstalledTable(); }
+        } else if (target === 'git-deploy') {
+          stopPolling();
+          if (window.initDeploy) window.initDeploy();
+        }
+      });
+    }
     var grid = document.getElementById('appCatalogGrid');
     if (grid) {
       grid.addEventListener('click', function (e) {

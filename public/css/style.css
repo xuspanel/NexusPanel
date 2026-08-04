@@ -10696,3 +10696,84 @@ html[data-theme] * {
 
 [data-theme="light"] .apps-progress-log { background: rgba(0,0,0,0.05); }
 [data-theme="light"] .apps-log-drawer { box-shadow: -8px 0 30px rgba(0,0,0,0.12); }
+
+/* ═══ Tabs (Quick Apps / Git Deploy) ═══ */
+.apps-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--glass-border);
+  margin-bottom: 20px;
+  padding: 0 0;
+}
+
+.apps-tab {
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  color: var(--text-muted);
+  font-size: 13.5px;
+  font-weight: 600;
+  padding: 10px 20px;
+  cursor: pointer;
+  transition: var(--transition);
+  font-family: var(--font-sans);
+}
+
+.apps-tab:hover { color: var(--text-primary); }
+
+.apps-tab.active {
+  color: var(--accent-cyan);
+  border-bottom-color: var(--accent-cyan);
+}
+
+.apps-tab-content { }
+
+/* ═══ Git Deploy Form ═══ */
+.deploy-form {
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+}
+
+.deploy-form .form-group {
+  margin-bottom: 14px;
+}
+
+.deploy-form .form-input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.deploy-form-check {
+  cursor: pointer;
+  user-select: none;
+}
+
+/* ═══ Deploy Info Cards ═══ */
+.deploy-info-card {
+  background: var(--bg-card);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 14px 16px;
+}
+
+.deploy-info-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+}
+
+.deploy-info-row span:first-child {
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.deploy-info-row span:last-child {
+  color: var(--text-primary);
+  font-weight: 500;
+}
+
+[data-theme="light"] .deploy-form { border-color: #e2e8f0; }
+[data-theme="light"] .deploy-info-card { border-color: #e2e8f0; }

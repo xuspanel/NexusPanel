@@ -36,6 +36,7 @@
   <script defer src="/js/ftp.js?v=1.1.0"></script>
   <script defer src="/js/domains.js?v=1.1.0"></script>
   <script defer src="/js/apps.js?v=1.0.0"></script>
+  <script defer src="/js/deploy.js?v=1.0.0"></script>
   <script defer src="/js/backups.js?v=1.1.0"></script>
   <script defer src="/js/virusscanner.js?v=1.1.0"></script>
   <script defer src="/js/mimetypes.js?v=1.1.0"></script>
@@ -1444,8 +1445,8 @@
         <div class="db-header-left">
           <span class="db-header-icon">🚀</span>
           <div class="db-header-info">
-            <div class="db-header-title">One-Click App Installer</div>
-            <div class="db-header-subtitle">WordPress · Laravel · Node.js · Next.js · Static</div>
+            <div class="db-header-title">Deployments</div>
+            <div class="db-header-subtitle">One-Click Apps · Git Deploy</div>
           </div>
         </div>
         <div class="db-header-right">
@@ -1453,42 +1454,220 @@
         </div>
       </div>
 
-      <div id="appsLoading" class="db-loading">
-        <div class="db-loading-spinner"></div>
-        <div class="db-loading-text">Loading application catalog...</div>
+      <div class="apps-tabs">
+        <button class="apps-tab active" data-tab="quick-apps">⚡ Quick Apps</button>
+        <button class="apps-tab" data-tab="git-deploy">📦 Git Deploy</button>
       </div>
 
-      <div id="appsError" class="db-error" style="display:none;">
-        <span class="db-error-icon">⚠️</span>
-        <span id="appsErrorText">Failed to load</span>
-        <button class="db-btn db-btn-retry" id="appsRetryBtn">Retry</button>
+      <!-- Quick Apps Tab -->
+      <div id="tabQuickApps" class="apps-tab-content active">
+        <div id="appsLoading" class="db-loading">
+          <div class="db-loading-spinner"></div>
+          <div class="db-loading-text">Loading application catalog...</div>
+        </div>
+
+        <div id="appsError" class="db-error" style="display:none;">
+          <span class="db-error-icon">⚠️</span>
+          <span id="appsErrorText">Failed to load</span>
+          <button class="db-btn db-btn-retry" id="appsRetryBtn">Retry</button>
+        </div>
+
+        <div id="appsContent" style="display:none;">
+          <div class="apps-section-title">Install an application</div>
+          <div class="app-card-grid" id="appCatalogGrid"></div>
+
+          <div class="apps-section-title" style="margin-top:32px;">My Applications</div>
+          <div id="appsInstalledWrap" class="users-table-wrap">
+            <table class="users-table">
+              <thead>
+                <tr>
+                  <th>Application</th>
+                  <th>Domain</th>
+                  <th>System User</th>
+                  <th>Install Path</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="appsTableBody">
+                <tr><td colspan="7" class="apps-empty-row">No applications installed yet. Pick one from the catalog above.</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </div>
 
-      <div id="appsContent" style="display:none;">
-        <div class="apps-section-title">Install an application</div>
-        <div class="app-card-grid" id="appCatalogGrid"></div>
+      <!-- Git Deploy Tab -->
+      <div id="tabGitDeploy" class="apps-tab-content" style="display:none;">
+        <div id="deployLoading" class="db-loading">
+          <div class="db-loading-spinner"></div>
+          <div class="db-loading-text">Loading deployments...</div>
+        </div>
 
-        <div class="apps-section-title" style="margin-top:32px;">My Applications</div>
-        <div id="appsInstalledWrap" class="users-table-wrap">
-          <table class="users-table">
-            <thead>
-              <tr>
-                <th>Application</th>
-                <th>Domain</th>
-                <th>System User</th>
-                <th>Install Path</th>
-                <th>Status</th>
-                <th>Created</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody id="appsTableBody">
-              <tr><td colspan="7" class="apps-empty-row">No applications installed yet. Pick one from the catalog above.</td></tr>
-            </tbody>
-          </table>
+        <div id="deployContent" style="display:none;">
+          <div style="display:grid;grid-template-columns:2fr 1fr;gap:24px;">
+            <div>
+              <div class="apps-section-title">New Deployment</div>
+              <form id="deployForm" class="deploy-form" onsubmit="return false;">
+                <div class="form-group">
+                  <label class="form-label">Git Repository URL *</label>
+                  <input type="text" class="form-input" id="deployRepoUrl" placeholder="https://github.com/username/repo.git" required>
+                </div>
+                <div class="form-row" style="display:flex;gap:12px;">
+                  <div class="form-group" style="flex:1;">
+                    <label class="form-label">Branch</label>
+                    <input type="text" class="form-input" id="deployBranch" value="main" placeholder="main">
+                  </div>
+                  <div class="form-group" style="flex:1;">
+                    <label class="form-label">Domain *</label>
+                    <select class="form-input" id="deployDomain" required>
+                      <option value="">Select domain…</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-row" style="display:flex;gap:12px;">
+                  <div class="form-group" style="flex:2;">
+                    <label class="form-label">System User *</label>
+                    <select class="form-input" id="deployUser" required>
+                      <option value="">Select system user…</option>
+                    </select>
+                  </div>
+                  <div class="form-group" style="flex:1;">
+                    <label class="form-label">Type</label>
+                    <select class="form-input" id="deployType">
+                      <option value="auto">Auto-detect</option>
+                      <option value="node">Node.js</option>
+                      <option value="php">PHP</option>
+                      <option value="static">Static</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Build Command (optional override)</label>
+                  <input type="text" class="form-input" id="deployBuildCmd" placeholder="npm run build (leave blank for default)">
+                </div>
+                <div class="form-group">
+                  <label class="form-label">Environment Variables (KEY=value, one per line)</label>
+                  <textarea class="form-input" id="deployEnvVars" rows="3" placeholder="NODE_ENV=production&#10;API_KEY=your_key_here" style="font-family:var(--font-mono,monospace);font-size:12px;resize:vertical;"></textarea>
+                </div>
+                <label class="deploy-form-check" style="display:flex;align-items:center;gap:8px;margin-bottom:14px;font-size:12.5px;color:var(--text-muted);">
+                  <input type="checkbox" id="deployForce"> Force (overwrite existing deployment)
+                </label>
+                <button type="submit" class="db-btn db-btn-primary" id="deploySubmitBtn" style="width:100%;padding:12px;font-size:15px;">🚀 Deploy</button>
+              </form>
+            </div>
+
+            <div>
+              <div class="apps-section-title">Quick Info</div>
+              <div class="deploy-info-card">
+                <div class="deploy-info-row"><span>SSH Key</span><span id="deploySshStatus">Not set</span></div>
+                <button class="fm-btn fm-btn-secondary fm-btn-sm" id="deploySshBtn" style="margin-top:10px;">🔑 Manage SSH Key</button>
+              </div>
+              <div class="deploy-info-card" style="margin-top:12px;">
+                <div class="deploy-info-row"><span>Recent</span><span id="deployRecentStatus">—</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="apps-section-title" style="margin-top:32px;">Deployment History</div>
+          <div id="deployHistoryWrap" class="users-table-wrap">
+            <table class="users-table">
+              <thead>
+                <tr>
+                  <th>Repo</th>
+                  <th>Branch</th>
+                  <th>Domain</th>
+                  <th>Commit</th>
+                  <th>Type</th>
+                  <th>Status</th>
+                  <th>Created</th>
+                  <th>Actions</th>
+                </tr>
+              </thead>
+              <tbody id="deployHistoryBody">
+                <tr><td colspan="8" class="apps-empty-row">No deployments yet. Fill out the form to deploy your first project.</td></tr>
+              </tbody>
+            </table>
+          </div>
         </div>
       </div>
     </main>
+
+    <!-- Git Deploy: SSH Key Modal -->
+    <div id="deploySshModal" class="modal-overlay" style="display:none;">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+          <span class="modal-icon">🔑</span>
+          <span class="modal-title">SSH Deploy Key</span>
+          <button class="modal-close" id="deploySshClose">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label class="form-label">Paste your private SSH key (RSA / ed25519)</label>
+            <textarea class="form-input" id="deploySshKeyText" rows="8" placeholder="-----BEGIN OPENSSH PRIVATE KEY-----&#10;...&#10;-----END OPENSSH PRIVATE KEY-----" style="font-family:var(--font-mono,monospace);font-size:11px;resize:vertical;"></textarea>
+          </div>
+          <p class="apps-form-note">Your key is encrypted with AES-256-GCM before storage and written to <code>/home/<user>/.ssh/id_rsa</code> (chmod 600) for git operations. Only needed for private repos.</p>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="fm-btn fm-btn-danger fm-btn-sm" id="deploySshDelete" style="margin-right:auto;">Delete Key</button>
+          <button type="button" class="fm-btn fm-btn-secondary" id="deploySshCancel">Cancel</button>
+          <button type="button" class="fm-btn fm-btn-primary" id="deploySshSave">Save Key</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Git Deploy: Progress Modal (reuses appsProgressModal) -->
+
+    <!-- Git Deploy: Success Modal -->
+    <div id="deploySuccessModal" class="modal-overlay" style="display:none;">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+          <span class="modal-icon">🎉</span>
+          <span class="modal-title">Deployment Complete</span>
+          <button class="modal-close" id="deploySuccessClose">✕</button>
+        </div>
+        <div class="modal-body" id="deploySuccessBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="fm-btn fm-btn-primary" id="deploySuccessDone">Done</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Git Deploy: Rollback Confirm -->
+    <div id="deployRollbackModal" class="modal-overlay" style="display:none;">
+      <div class="modal" style="max-width:440px;">
+        <div class="modal-header">
+          <span class="modal-icon">↩️</span>
+          <span class="modal-title">Rollback Deployment</span>
+          <button class="modal-close" id="deployRollbackClose">✕</button>
+        </div>
+        <div class="modal-body" id="deployRollbackBody"></div>
+        <div class="modal-footer">
+          <button type="button" class="fm-btn fm-btn-secondary" id="deployRollbackCancel">Cancel</button>
+          <button type="button" class="fm-btn fm-btn-danger" id="deployRollbackConfirm">Rollback</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Git Deploy: Env Vars Modal -->
+    <div id="deployEnvModal" class="modal-overlay" style="display:none;">
+      <div class="modal" style="max-width:560px;">
+        <div class="modal-header">
+          <span class="modal-icon">⚙️</span>
+          <span class="modal-title">Environment Variables</span>
+          <button class="modal-close" id="deployEnvClose">✕</button>
+        </div>
+        <div class="modal-body">
+          <textarea class="form-input" id="deployEnvText" rows="10" placeholder="NODE_ENV=production&#10;API_KEY=your_key_here" style="font-family:var(--font-mono,monospace);font-size:12px;resize:vertical;"></textarea>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="fm-btn fm-btn-secondary" id="deployEnvCancel">Cancel</button>
+          <button type="button" class="fm-btn fm-btn-primary" id="deployEnvSave">Save</button>
+        </div>
+      </div>
+    </div>
+
 
     <!-- Apps: Install Modal -->
     <div id="appsInstallModal" class="modal-overlay" style="display:none;">
