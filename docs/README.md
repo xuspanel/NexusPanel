@@ -1,6 +1,6 @@
 # NexusPanel Documentation
 
-Welcome to the official documentation for **NexusPanel v1.33.0** — a self-hosted VPS Control Center.
+Welcome to the official documentation for **NexusPanel v1.35.0** — a self-hosted VPS Control Center.
 
 ---
 
@@ -36,6 +36,8 @@ Complete endpoint documentation for every backend module.
 | [Terminal](api/terminal.md) | Terminal | presets CRUD |
 | [FTP](api/ftp.md) | FTP Accounts | vsftpd management, SSL, quotas, bandwidth |
 | [Domains](api/domains.md) | Domain Manager | nginx vhosts, SSL, config editor |
+| [Apps](api/apps.md) | One-Click App Installer | catalog, system-users, targets, list, install, uninstall, logs |
+| [Git Deploy](api/deploy.md) | Git Deploy | deploy, history, status, logs, rollback, env vars, SSH keys, webhook |
 | [Backups](api/backups.md) | Backup Wizard | targets, schedules, start/stop, download |
 | [Virus Scanner](api/virusscanner.md) | Scanner | scan, quarantine, definitions, history |
 | [MIME Types](api/mimetypes.md) | MIME Types | system types, custom CRUD, import/export |
@@ -73,6 +75,8 @@ User-facing guides for every screen in the application.
 | [Terminal](screens/terminal.md) | Shell | Classic single-pane + PRO multi-tab mode |
 | [Users](screens/users.md) | VPS Users | System user management, bulk operations |
 | [Domains](screens/domains.md) | Domains | nginx vhosts, SSL, config editor |
+| [Apps](screens/apps.md) | One-Click Installer | Install WordPress/Laravel/Node/Next.js/Static, progress, logs |
+| [Git Deploy](screens/git-deploy.md) | Git Deploy | Deploy from Git, webhooks, SSH keys, env vars, rollback |
 | [Backups](screens/backups.md) | Backups | Targets, schedules, progress streaming |
 | [Virus Scanner](screens/virus-scanner.md) | Scanner | ClamAV scans, quarantine, history |
 | [MIME Types](screens/mime-types.md) | MIME | System types, custom definitions |
@@ -108,6 +112,9 @@ All API endpoints are prefixed with `/api/` and require JWT authentication via c
 | `/api/terminal/` | Terminal |
 | `/api/ftp/` | FTP |
 | `/api/domains/` | Domains |
+| `/api/apps/` | One-Click App Installer |
+| `/api/deploy/` | Git Deploy |
+| `/webhook/` | Git Deploy webhooks (public, token-authenticated) |
 | `/api/backups/` | Backups |
 | `/api/virusscanner/` | Virus Scanner |
 | `/api/mimetypes/` | MIME Types |
@@ -146,6 +153,11 @@ All API endpoints are prefixed with `/api/` and require JWT authentication via c
 | `data/tokens.json` | Bearer auth tokens |
 | `data/api-tokens.json` | Settings-managed API tokens |
 | `data/domains.json` | Domain/vhost config |
+| `data/apps.json` | Installed applications |
+| `data/deployments.json` | Git deployment records |
+| `data/deploy_keys.json` | Encrypted SSH deploy keys |
+| `data/deploy_env_vars.json` | Encrypted deploy env vars |
+| `data/deploy/` | Deployment logs |
 | `data/mime-types.json` | Custom MIME types |
 | `data/terminal-presets.json` | Terminal command presets |
 | `data/update-history.json` | Update history |
@@ -155,4 +167,4 @@ All API endpoints are prefixed with `/api/` and require JWT authentication via c
 
 ---
 
-*Documentation for NexusPanel v1.33.0 — BSL 1.1 License*
+*Documentation for NexusPanel v1.35.0 — BSL 1.1 License*

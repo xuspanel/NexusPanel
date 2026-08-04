@@ -183,8 +183,8 @@ Edit `public/js/*.js` or `public/css/style.css` and refresh the browser.
 Asset URLs include `?v=<VERSION>`:
 
 ```html
-<link rel="stylesheet" href="/css/style.css?v=1.33.0">
-<script defer src="/js/dashboard.js?v=1.33.0"></script>
+<link rel="stylesheet" href="/css/style.css?v=1.35.0">
+<script defer src="/js/dashboard.js?v=1.35.0"></script>
 ```
 
 ### Theme System
@@ -207,7 +207,7 @@ CSS custom properties switch between dark and light:
 ## Commit Conventions
 
 - Commits to `main` must be **GPG-signed**
-- Use conventional messages: `v1.33.0: Add dashboard rewrite with live metrics`
+- Use conventional messages: `v1.35.0: Add Git Deploy with webhook auto-deploy`
 - Never commit `.env`, `node_modules/`, `data/`, or proprietary directories
 
 ---

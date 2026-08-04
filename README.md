@@ -4,10 +4,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-1.34.0-blue?style=for-the-badge&labelColor=1a1a2e&color=0f3460" alt="Version">
+  <img src="https://img.shields.io/badge/version-1.35.0-blue?style=for-the-badge&labelColor=1a1a2e&color=0f3460" alt="Version">
   <img src="https://img.shields.io/badge/node.js-%3E%3D18-brightgreen?style=for-the-badge&labelColor=1a1a2e" alt="Node.js">
   <img src="https://img.shields.io/badge/license-BSL%201.1-purple?style=for-the-badge&labelColor=1a1a2e" alt="License">
-  <img src="https://img.shields.io/badge/134_tests-passing-green?style=for-the-badge&labelColor=1a1a2e" alt="Tests">
+  <img src="https://img.shields.io/badge/183_tests-passing-green?style=for-the-badge&labelColor=1a1a2e" alt="Tests">
   <img src="https://img.shields.io/badge/29_routes-blue?style=for-the-badge&labelColor=1a1a2e" alt="Routes">
   <img src="https://img.shields.io/badge/28_services-orange?style=for-the-badge&labelColor=1a1a2e" alt="Services">
   <img src="https://img.shields.io/badge/platforms-Linux%20%7C%20macOS%20%7C%20Windows-teal?style=for-the-badge&labelColor=1a1a2e" alt="Platforms">
@@ -29,11 +29,12 @@ NexusPanel is a **single-tenant, self-hosted VPS control center** that orchestra
     │                                                                 │
     │   Dashboard  ─  File Manager  ─  Databases  ─  Docker          │
     │   Terminal   ─  Domains       ─  SSL Certs   ─  Backups        │
-    │   Firewall   ─  PHP-FPM       ─  Cron Jobs   ─  Audit Trail    │
-    │   Mail       ─  FTP Accounts  ─  Virus Scan  ─  MIME Types     │
-    │   Updates    ─  Settings      ─  Profile     ─  Notifications  │
+    │   Apps       ─  Git Deploy    ─  Firewall    ─  PHP-FPM        │
+    │   Cron Jobs  ─  Audit Trail   ─  Mail        ─  FTP Accounts   │
+    │   Virus Scan ─  MIME Types    ─  Updates     ─  Settings       │
+    │   Profile    ─  Notifications                                   │
     │                                                                 │
-    │   29 route modules · 28 services · 134 tests · 37 test files   │
+    │   32 route modules · 31 services · 183 tests · 41 test files   │
     └──────────────────────────────────────────────────────────────────┘
 ```
 
@@ -71,6 +72,8 @@ NexusPanel is a **single-tenant, self-hosted VPS control center** that orchestra
 | Module | What It Does |
 |--------|-------------|
 | **Docker** | Container and image management. Compose-project grouping. Start/stop/restart/remove. Container logs. Pull/tag/remove images. Daemon info. |
+| **Apps (One-Click Installer)** | Install WordPress, Laravel, Node.js, Next.js, or Static HTML with one click. Auto-provisions PHP-FPM pools, PM2 processes, and MariaDB. Encrypted credential storage. Live install progress with log stream. Rollback on failure. |
+| **Git Deploy** | Clone, build, and deploy any Git repository (HTTPS/SSH) to a panel domain. Auto-detects Node/PHP/static. Webhook auto-deploy, SSH deploy keys, env vars, symlink rollback. |
 | **Domains** | Nginx virtual host manager — create/delete server blocks, live config editor, subdomain support. |
 | **SSL Certificates** | Let's Encrypt via certbot. List all certs with expiry badges, expiry charts, days-remaining color coding. Issue new certs, force-renew, dry-run testing, bulk renew. Certificate detail view with full openssl info. Auto-renewal status. |
 | **PHP-FPM Manager** | Pool management across any PHP version. Live pool status, OPcache stats, PHP modules list, pool config editor, error/slow log viewer, config syntax test, graceful reload. |
@@ -229,11 +232,11 @@ After the Change Date (5 years from first publication), the license automaticall
                     /         │         \
               /api/*     /ws/terminal    /* (SPA static)
                  │            │              │
-          29 route       WebSocket        public/
-          modules        + node-pty       index.html
-                 │            │          + js/ (28 modules)
-          28 service               │
-          modules                  bash shell
+           32 route       WebSocket        public/
+           modules        + node-pty       index.html
+                  │            │          + js/ (30 modules)
+           31 service               │
+           modules                  bash shell
                  │
      ┌───────────┼───────────────┬─────────────┐
      ▼           ▼               ▼             ▼
@@ -258,7 +261,7 @@ After the Change Date (5 years from first publication), the license automaticall
 NexusPanel/
 ├── server.js                 # Express + WebSocket entry point
 ├── package.json              # Dependencies and scripts
-├── VERSION                   # Current version (1.34.0)
+├── VERSION                   # Current version (1.35.0)
 ├── CHANGELOG.md              # Full version history
 ├── nexuspanel.service        # systemd unit file
 ├── vitest.config.mjs         # Test configuration
@@ -275,21 +278,24 @@ NexusPanel/
 ├── public/                   # Static frontend (SPA)
 │   ├── index.html
 │   ├── css/style.css         # 11,600+ lines of themed CSS
-│   ├── js/                   # 28 frontend controller modules
+│   ├── js/                   # 30 frontend controller modules
 │   └── libs/                 # Vendored frontend libraries
+├── scripts/
+│   ├── apps/                 # One-click installer scripts (WordPress, Laravel, Node, Next.js, Static)
+│   └── deploy/               # Git Deploy shared shell helpers
 ├── src/
 │   ├── middleware/
 │   │   ├── auth.js           # JWT verification middleware
 │   │   └── security.js       # Helmet, CSP, rate limiters
-│   ├── routes/               # 29 API route modules
-│   └── services/             # 28 business-logic service modules
+│   ├── routes/               # 32 API route modules
+│   └── services/             # 31 business-logic service modules
 └── tests/                    # Automated test suite
     ├── helpers/setup.mjs     # App factory and test utilities
-    ├── unit/                 # Unit tests (9 files)
+    ├── unit/                 # Unit tests (11 files)
     │   ├── utils/
     │   ├── middleware/
     │   └── services/
-    └── integration/          # Integration tests (28 files)
+    └── integration/          # Integration tests (30 files)
 ```
 
 ---
@@ -320,6 +326,8 @@ All endpoints are prefixed with `/api/`. Authentication is via JWT session cooki
 | Terminal | `/ws/terminal` | WebSocket — create panes, send input, resize, kill | Yes |
 | FTP | `/api/ftp` | Create/enable/disable/delete accounts, set home dirs, view logs | Admin |
 | Domains | `/api/domains` | Create/delete nginx server blocks, live config editor | Admin |
+| Apps | `/api/apps` | One-click installer — catalog, system-users, targets, list, install/uninstall, log streaming | Admin |
+| Git Deploy | `/api/deploy` + `/webhook` | Deploy from Git, history, status, logs, rollback, env vars, SSH deploy keys, webhook auto-deploy | Admin |
 | Backups | `/api/backups` | Define targets, start/stop, status, list, download, delete | Admin |
 | Virus Scanner | `/api/virusscanner` | Start scan, progress, results, update definitions | Admin |
 | MIME Types | `/api/mimetypes` | Browse system types, CRUD user-defined types | Yes |
@@ -348,7 +356,7 @@ All endpoints are prefixed with `/api/`. Authentication is via JWT session cooki
 
 ### Automated Test Suite
 
-NexusPanel ships with **134 automated tests** across **37 test files**, powered by [Vitest 4](https://vitest.dev/) and [Supertest](https://github.com/ladakh/supertest).
+NexusPanel ships with **183 automated tests** across **41 test files**, powered by [Vitest 4](https://vitest.dev/) and [Supertest](https://github.com/ladakh/supertest).
 
 ```bash
 # Run the full suite
@@ -365,8 +373,8 @@ npm run test:coverage
 
 | Layer | Files | Coverage |
 |-------|-------|----------|
-| **Unit** | 9 test files | Validators, shell utilities, auth middleware, services (notifications, audit, tokens, settings, users, mimetypes, domains) |
-| **Integration** | 28 test files | Every route module — auth, dashboard, profile, settings, notifications, mimetypes, audit, tokens, users, files, search, domains, FTP, databases, emails, backups, Docker, services, processes, logs, cron, firewall, SSL, PHP-FPM, virus scanner, updates, alerts, metrics |
+| **Unit** | 11 test files | Validators, shell utilities, auth middleware, services (notifications, audit, tokens, settings, users, mimetypes, domains, apps, git-deploy) |
+| **Integration** | 30 test files | Every route module — auth, dashboard, profile, settings, notifications, mimetypes, audit, tokens, users, files, search, domains, FTP, databases, emails, backups, Docker, services, processes, logs, cron, firewall, SSL, PHP-FPM, virus scanner, updates, alerts, metrics, apps, deploy |
 
 ### Test Architecture
 
@@ -494,7 +502,7 @@ Frontend assets are served from `public/` with no build step. Edit `public/js/*.
 ### Commit Conventions
 
 - Commits to `main` must be **GPG-signed**
-- Use conventional, descriptive commit messages (e.g., `v1.34.0: Add dashboard rewrite with live metrics`)
+- Use conventional, descriptive commit messages (e.g., `v1.35.0: Add Git Deploy with webhook auto-deploy`)
 - Do not commit `.env`, `node_modules/`, `data/`, or proprietary directories
 
 ---

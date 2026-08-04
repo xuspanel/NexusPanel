@@ -15,6 +15,10 @@ NexusPanel stores all persistent data as JSON files in the `data/` directory. Th
 | `data/tokens.json` | Array | Unlimited | None | No |
 | `data/api-tokens.json` | Array | Unlimited | None | Yes |
 | `data/domains.json` | Object (keyed by domain) | Unlimited | In-memory boolean (5s timeout) | Yes |
+| `data/apps.json` | Array | Unlimited | In-memory boolean (5s timeout) | Yes |
+| `data/deployments.json` | Array | Unlimited | In-memory boolean (5s timeout) | Yes |
+| `data/deploy_keys.json` | Array | Unlimited | In-memory boolean (5s timeout) | Yes |
+| `data/deploy_env_vars.json` | Object | Unlimited | In-memory boolean (5s timeout) | Yes |
 | `data/mime-types.json` | Object | Unlimited | None | Yes |
 | `data/terminal-presets.json` | Array | Unlimited | None | No |
 | `data/update-history.json` | Array | Unlimited | None | Yes |
@@ -289,6 +293,11 @@ data/
 ├── tokens.json                # Bearer auth tokens
 ├── api-tokens.json            # Settings-managed API tokens
 ├── domains.json               # Domain/vhost config
+├── apps.json                  # Installed applications
+├── deployments.json           # Git deployment records
+├── deploy_keys.json           # Encrypted SSH deploy keys
+├── deploy_env_vars.json       # Encrypted deploy env vars
+├── deploy/                    # Deployment logs (one .log per deploy)
 ├── mime-types.json            # Custom MIME types
 ├── terminal-presets.json      # Terminal command presets
 ├── update-history.json        # Update history

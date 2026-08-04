@@ -1,6 +1,39 @@
 # Changelog
 
-## [1.34.0] - 2026-07-31
+## [1.35.0] - 2026-08-05
+### Changed
+- **Deployments screen** — unified two-tab UI: "Quick Apps" (one-click installer) and "Git Deploy" (custom repository deployment)
+
+### One-Click App Installer — Added
+- **Apps & Installer screen** — new sidebar nav item with catalog card grid, install modal (system-user/domain pickers), progress modal with live log stream, success modal with copy-to-clipboard, logs drawer, uninstall confirmation
+- Backend: catalog of 5 apps — WordPress (WP-CLI), Laravel (Composer), Node.js/Express (PM2), Next.js static export (PM2), Static HTML
+- Backend: `src/services/apps.js` — install/uninstall orchestrator, per-app prerun (php-fpm pool, PM2, MariaDB), encrypted credential storage (AES-256-GCM via `encryptSecret`), rollback on failure, concurrency limit (2 per user → 429), boot-time stale-app sweep
+- Backend: `src/services/mysql.js` — MariaDB provisioning service (database/user create/drop, root unix-socket auth, configurable port default 3307 to avoid container conflicts)
+- Backend: domains service additions — `generateAppNginxConf` (proxy_pass + fastcgi `.php` block), `writeNginxConf` + `nginxTestAndReload` exports
+- REST routes: `/api/apps/catalog`, `system-users`, `targets`, `list`, `:id`, `:id/log`, `install` (202 + background), `uninstall`
+- Frontend: `public/js/apps.js` — dynamic catalog grid, polling progress with live log stream, success modal, logs drawer, uninstall confirm
+- CSS: app cards, status pills (running/installing/failed), progress bar, log drawer slide-in animation, credential rows
+- 23 new tests (15 unit + 8 integration) — encryption round-trip, slot concurrency 429, port allocation, DB ident sanitization, path traversal guard, route auth/catalog shape
+- Docs: `docs/screens/apps.md`, `docs/api/apps.md`
+- Live E2E verified: static (200), node/pm2 proxy (200), WordPress (200 via PHP pool + MariaDB 3307), Laravel (200), concurrency 429, forced-failure rollback, uninstall with full cleanup
+
+### Git Deploy — Added
+- **Git Deploy tab** in Deployments screen — clone/build/deploy any Git repository (HTTPS/SSH) to a panel domain
+- Backend: `src/services/git-deploy.js` — deploy orchestrator: git clone (`--depth 1`), app-type auto-detection (package.json → node, composer.json → php, else static), npm ci/build or composer install, symlink-based deployment, PM2 management, nginx config generation, rollback to previous deploy (keep last 5), webhook auto-deploy (git pull + rebuild + pm2 restart), SSH deploy key management, env var injection, concurrency limit (3 per user → 429), 10-min timeout
+- Backend: per-system-user encrypted SSH deploy keys (AES-256-GCM, written to `~/.ssh/id_rsa`, `StrictHostKeyChecking=accept-new`), encrypted env vars injected as `.env`
+- REST routes: `/api/deploy/git` (202 + background), `history`, `:id`, `:id/log`, `:id/rollback`, `:id/env` (GET/PUT), `ssh` (GET/POST/DELETE), `:id/webhook-url`
+- Webhook endpoint: `POST /webhook/:id/:token` — public, token-verified, optional HMAC-SHA256 signature check, background redeploy (202)
+- Frontend: `public/js/deploy.js` — deploy form (repo URL, branch, domain, system user, type, build cmd, env vars, force overwrite), progress modal with live logs, success modal with webhook URL copy, history table with rollback/env/log actions, SSH key management modal
+- CSS: `.apps-tabs` pills, `.deploy-form`, `.deploy-info-card` (dark + light themes)
+- 16 new tests (6 unit + 10 integration) — SSH key encryption, route validation, webhook auth, duplicate-deploy guard
+- Docs: `docs/screens/git-deploy.md`, `docs/api/deploy.md`
+- Live E2E verified: public repo deploy (200 via nginx), force overwrite, webhook trigger (202), wrong-token rejection (400), rollback (symlink switch + 200), env vars set/get, duplicate-deploy guard (blocked)
+
+### Fixed
+- Frontend deploy calls sent a doubled `/api/api/deploy/...` prefix (API base already includes `/api`), causing 404s on every deploy endpoint — paths corrected to `/deploy/...`
+- Static assets served with 1-year `Cache-Control` reused stale pre-feature `apps.js`/`style.css` cache-buster versions, leaving the Git Deploy tab empty — bumped asset versions and serve `index.html` with `no-cache` so page markup always revalidates
+
+
 ### Changed
 - **Emails Module enhancements** — rich text compose, server-side search, bulk operations, HTML email support, hardening
 - **Terminal PRO enhancements** — clipboard shortcuts, right-click context menu, OSC 52, focus reporting, visual bell

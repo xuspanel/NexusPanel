@@ -18,11 +18,11 @@ NexusPanel is a **single-process, self-hosted VPS control center** that provides
                     /         │         \
               /api/*     /ws/terminal    /* (SPA static)
                  │            │              │
-          29 route       WebSocket        public/
-          modules        + node-pty       index.html
-                 │            │          + js/ (28 modules)
-          28 service               │
-          modules                  bash shell
+           32 route       WebSocket        public/
+           modules        + node-pty       index.html
+                  │            │          + js/ (30 modules)
+           31 service               │
+           modules                  bash shell
                  │
      ┌───────────┼───────────────┬─────────────┐
      ▼           ▼               ▼             ▼
@@ -176,7 +176,7 @@ All frontend click handlers use `data-*-action` attributes instead of inline `on
 NexusPanel/
 ├── server.js                 # Express + WebSocket entry point (371 lines)
 ├── package.json              # Dependencies and scripts
-├── VERSION                   # Current version (1.33.0)
+├── VERSION                   # Current version (1.35.0)
 ├── CHANGELOG.md              # Full version history
 ├── nexuspanel.service        # systemd unit file
 ├── vitest.config.mjs         # Test configuration (ESM)
@@ -195,10 +195,12 @@ NexusPanel/
 │   ├── css/
 │   │   ├── style.css         # Main stylesheet (11,600+ lines)
 │   │   └── docker.prompt.css # Docker prompt styles
-│   ├── js/                   # 28 frontend controller modules
+│   ├── js/                   # 30 frontend controller modules
 │   │   ├── api.js            # API client (519 lines)
 │   │   ├── auth.js           # Login/2FA
 │   │   ├── dashboard.js      # Dashboard (545 lines)
+│   │   ├── apps.js           # One-Click App Installer
+│   │   ├── deploy.js         # Git Deploy
 │   │   ├── filemanager.js    # File Manager (largest module)
 │   │   ├── databases.js      # PostgreSQL Manager
 │   │   ├── docker.js         # Docker Manager
@@ -215,28 +217,37 @@ NexusPanel/
 │   ├── middleware/
 │   │   ├── auth.js           # JWT verification + adminOnly
 │   │   └── security.js       # Helmet, CSP, rate limiters
-│   ├── routes/               # 29 API route modules
+│   ├── routes/               # 32 API route modules
 │   │   ├── auth.js           # /api/auth
 │   │   ├── dashboard.js      # /api/system, /api/metrics
 │   │   ├── files.js          # /api/files
 │   │   ├── databases.js      # /api/databases
+│   │   ├── apps.js           # /api/apps
+│   │   ├── deploy.js         # /api/deploy
+│   │   ├── webhook.js        # /webhook/:id/:token
 │   │   └── ...               # 25 more route files
-│   └── services/             # 28 business-logic service modules
+│   └── services/             # 31 business-logic service modules
 │       ├── system.js         # CPU/RAM/Disk/Network stats
 │       ├── users.js          # User management + JSON storage
 │       ├── settings.js       # Panel config + system info
 │       ├── audit.js          # Audit log (10K entry cap)
 │       ├── notifications.js  # Notification storage
 │       ├── tokens.js         # API token management
+│       ├── apps.js           # One-click install orchestrator
+│       ├── mysql.js          # MariaDB provisioning
+│       ├── git-deploy.js     # Git deploy orchestrator
 │       └── ...               # 22 more service files
-├── tests/                    # Automated test suite (134 tests)
+├── scripts/
+│   ├── apps/                 # Installer scripts (WordPress, Laravel, Node, Next.js, Static)
+│   └── deploy/               # Git Deploy shell helpers
+├── tests/                    # Automated test suite (183 tests)
 │   ├── helpers/
 │   │   └── setup.mjs         # App factory + test utilities
-│   ├── unit/                 # 9 unit test files
+│   ├── unit/                 # 11 unit test files
 │   │   ├── utils/
 │   │   ├── middleware/
 │   │   └── services/
-│   └── integration/          # 28 integration test files
+│   └── integration/          # 30 integration test files
 └── data/                     # Runtime data (gitignored)
     ├── users.json
     ├── settings.json
