@@ -54,7 +54,7 @@
 
   async function refreshSshStatus() {
     try {
-      var res = await API.request('GET', '/api/deploy/ssh');
+      var res = await API.request('GET', '/deploy/ssh');
       document.getElementById('deploySshStatus').textContent = res.has_key ? '✅ Stored (' + (res.stored_at || '').slice(0, 10) + ')' : 'Not set';
     } catch (_) { document.getElementById('deploySshStatus').textContent = 'Error'; }
   }
@@ -90,7 +90,7 @@
 
   async function loadDeployments() {
     try {
-      var res = await API.request('GET', '/api/deploy/history');
+      var res = await API.request('GET', '/deploy/history');
       deployments = res.deployments || [];
       document.getElementById('deployLoading').style.display = 'none';
       document.getElementById('deployContent').style.display = '';
@@ -126,7 +126,7 @@
     document.getElementById('appsProgressLog').textContent = 'Starting deployment…';
     openModal('appsProgressModal');
 
-    API.request('POST', '/api/deploy/git', {
+    API.request('POST', '/deploy/git', {
       repo_url: repoUrl, branch: branch, domain: domain,
       system_user: user, app_type: appType, build_cmd: buildCmd,
       env_vars: envVars, force: force,
@@ -150,8 +150,8 @@
   async function pollTick() {
     if (!pollId) return;
     try {
-      var logRes = await API.request('GET', '/api/deploy/' + pollId + '/log?lines=50');
-      var depRes = await API.request('GET', '/api/deploy/' + pollId);
+      var logRes = await API.request('GET', '/deploy/' + pollId + '/log?lines=50');
+      var depRes = await API.request('GET', '/deploy/' + pollId);
       var lines = logRes.lines || [];
       var box = document.getElementById('appsProgressLog');
       box.textContent = lines.length ? lines.join('\n') : 'Working…';
@@ -228,7 +228,7 @@
     var id = document.getElementById('appsLogsDrawer').dataset.appId;
     if (!id) return;
     try {
-      var res = await API.request('GET', '/api/deploy/' + id + '/log?lines=50');
+      var res = await API.request('GET', '/deploy/' + id + '/log?lines=50');
       var box = document.getElementById('appsLogsBody');
       box.textContent = (res.lines || []).join('\n') || 'No log output yet.';
       box.scrollTop = box.scrollHeight;
@@ -250,7 +250,7 @@
   function confirmRollback() {
     var id = document.getElementById('deployRollbackConfirm').dataset.id;
     closeModal('deployRollbackModal');
-    API.request('POST', '/api/deploy/' + id + '/rollback')
+    API.request('POST', '/deploy/' + id + '/rollback')
       .then(function () { toast('Rollback complete'); loadDeployments(); })
       .catch(function (e) { toast(e.message, true); });
   }
@@ -258,7 +258,7 @@
   /* ─── SSH key modal ─── */
 
   function openSshModal() {
-    API.request('GET', '/api/deploy/ssh').then(function (res) {
+    API.request('GET', '/deploy/ssh').then(function (res) {
       document.getElementById('deploySshKeyText').value = res.has_key ? '(key stored — paste a new one to replace)' : '';
       openModal('deploySshModal');
     }).catch(function (e) { toast(e.message, true); });
@@ -267,7 +267,7 @@
   function saveSshKey() {
     var val = document.getElementById('deploySshKeyText').value.trim();
     if (!val || !val.includes('PRIVATE KEY')) return toast('Invalid SSH private key', true);
-    API.request('POST', '/api/deploy/ssh', { private_key: val }).then(function () {
+    API.request('POST', '/deploy/ssh', { private_key: val }).then(function () {
       closeModal('deploySshModal');
       toast('SSH key saved');
       refreshSshStatus();
@@ -275,7 +275,7 @@
   }
 
   function deleteSshKey() {
-    API.request('DELETE', '/api/deploy/ssh').then(function () {
+    API.request('DELETE', '/deploy/ssh').then(function () {
       document.getElementById('deploySshKeyText').value = '';
       toast('SSH key deleted');
       refreshSshStatus();
@@ -286,7 +286,7 @@
 
   function openEnvModal(id) {
     document.getElementById('deployEnvText').dataset.deployId = id;
-    API.request('GET', '/api/deploy/' + id + '/env').then(function (res) {
+    API.request('GET', '/deploy/' + id + '/env').then(function (res) {
       var vars = res.vars || [];
       document.getElementById('deployEnvText').value = vars.map(function (v) { return v.key + '=' + v.value; }).join('\n');
       openModal('deployEnvModal');
@@ -303,7 +303,7 @@
         if (eq > 0) vars[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
       });
     }
-    API.request('PUT', '/api/deploy/' + id + '/env', vars).then(function () {
+    API.request('PUT', '/deploy/' + id + '/env', vars).then(function () {
       closeModal('deployEnvModal');
       toast('Environment variables saved');
     }).catch(function (e) { toast(e.message, true); });
