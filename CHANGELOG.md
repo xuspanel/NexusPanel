@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.35.2] - 2026-08-05
+### Changed
+- Git Deploy npm step hardened — `npm ci` now runs with fetch retries/timeout (`--fetch-retries=3`, `--fetch-retry-mintimeout=20000`, `--fetch-timeout=300000`) and `--no-audit --no-fund`; HTTP(S)/NO_PROXY env vars from the panel process are passed through to npm and the build command so proxied/limited networks (e.g. regions where registry.npmjs.org is blocked or flaky) are more resilient
+
 ## [1.35.1] - 2026-08-05
 ### Fixed
 - nginx configs (domains/apps/git-deploy) emitted the standalone `http2 on;` directive, which is unknown on nginx < 1.25.1 and broke `nginx -t` (e.g. `unknown directive "http2"`) — generation is now nginx-version-aware: old nginx gets `listen <port> ssl http2;`, nginx >= 1.25.1 keeps `listen <port> ssl;` + `http2 on;`

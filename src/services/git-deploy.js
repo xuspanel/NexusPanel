@@ -98,6 +98,22 @@ function tail(text, n) {
   return lines.slice(-(n || 8)).join('\n') || s.slice(-400);
 }
 
+const NPM_RETRY_FLAGS = [
+  '--fetch-retries=3',
+  '--fetch-retry-factor=2',
+  '--fetch-retry-mintimeout=20000',
+  '--fetch-timeout=300000',
+  '--no-audit',
+  '--no-fund',
+];
+
+function proxyEnv() {
+  const out = {};
+  ['HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'ALL_PROXY', 'http_proxy', 'https_proxy', 'no_proxy', 'all_proxy']
+    .forEach(k => { if (process.env[k]) out[k] = process.env[k]; });
+  return out;
+}
+
 function spawnLogged(id, bin, args, cwd, timeout) {
   return new Promise((resolve) => {
     let killed = false;
@@ -505,9 +521,9 @@ async function performDeploy(rec) {
     await step(id, 'Run build', async () => {
       const buildCmd = rec.custom_build_cmd;
       if (rec.app_type === 'node') {
-        const ci = await runAsUserLogged(id, user, 'npm', ['ci', '--production=false'], { cwd: rec.deploy_dir, timeout: 300000 });
+        const ci = await runAsUserLogged(id, user, 'npm', ['ci', '--production=false', ...NPM_RETRY_FLAGS], { cwd: rec.deploy_dir, env: proxyEnv(), timeout: 300000 });
         if (ci.status !== 0) throw new Error('npm ci failed: ' + tail(ci.stderr || ci.stdout));
-        const build = await runAsUserLogged(id, user, 'bash', ['-lc', buildCmd || 'npm run build'], { cwd: rec.deploy_dir, timeout: 300000 });
+        const build = await runAsUserLogged(id, user, 'bash', ['-lc', buildCmd || 'npm run build'], { cwd: rec.deploy_dir, env: proxyEnv(), timeout: 300000 });
         if (build.status !== 0) throw new Error('build failed: ' + tail(build.stderr || build.stdout));
       } else if (rec.app_type === 'php') {
         const r = await runAsUserLogged(id, user, 'composer', ['install', '--no-dev', '--optimize-autoloader', '--no-interaction'], { cwd: rec.deploy_dir, timeout: 300000 });
@@ -650,11 +666,11 @@ async function handleWebhook(deploymentId, token, signature, body) {
       if (rec.app_type === 'node') {
         const buildCmd = rec.custom_build_cmd;
         await step(cloneId, 'npm ci', async () => {
-          const r = await runAsUserLogged(cloneId, user, 'npm', ['ci', '--production=false'], { cwd: rec.deploy_dir, timeout: 300000 });
+          const r = await runAsUserLogged(cloneId, user, 'npm', ['ci', '--production=false', ...NPM_RETRY_FLAGS], { cwd: rec.deploy_dir, env: proxyEnv(), timeout: 300000 });
           if (r.status !== 0) throw new Error('npm ci failed');
         });
         await step(cloneId, 'npm build', async () => {
-          const r = await runAsUserLogged(cloneId, user, 'bash', ['-lc', buildCmd || 'npm run build'], { cwd: rec.deploy_dir, timeout: 300000 });
+          const r = await runAsUserLogged(cloneId, user, 'bash', ['-lc', buildCmd || 'npm run build'], { cwd: rec.deploy_dir, env: proxyEnv(), timeout: 300000 });
           if (r.status !== 0) throw new Error('build failed');
         });
       }

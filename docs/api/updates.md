@@ -57,8 +57,8 @@ data: {"type":"done","success":true}
 
 ```json
 {
-  "currentVersion": "1.35.1",
-  "latestVersion": "1.35.1",
+  "currentVersion": "1.35.2",
+  "latestVersion": "1.35.2",
   "updateAvailable": true,
   "changelog": "..."
 }
