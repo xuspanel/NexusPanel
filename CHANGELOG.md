@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.35.3] - 2026-08-06
+### Fixed
+- Git Deploy produced a CommonJS `ecosystem.config.js`, which was parsed as an ES module for repos with `"type": "module"` (`module is not defined in ES module scope`) and had no `script` field (`PM2 [ERROR] No script path`) — the ecosystem file is now `ecosystem.config.cjs` (always CommonJS) with a `script`/`args` field resolved from the cloned repo (`main` → file, `start` script → node file or `npm run start`, default entries `index.js`/`server.js`/`app.js`/`main.js`/`.cjs`/`.mjs`/`dist/*`)
+- Node deploys that resolve to a server without a `main`/`start` entry (e.g. Vite SPAs) now serve the built `dist/` statically via nginx instead of failing PM2 (`node_static`); rollback and webhook redeploys handle the static root correctly
+- Proxy port was left `null` when deploying with the default `app_type: auto` that detected Node — nginx emitted `invalid port in upstream "127.0.0.1:null/"` and the deploy failed; the port is now allocated after app-type detection, plus a clear guard in nginx config generation
+- Same-minute deploys collided on a timestamped directory (`directory already exists`) — deploy dirs are now millisecond-precise (`YYYY-MM-DDTHHMMSSmmmZ`) with `-2`/`-3` suffixes on collision
+- Force-deploying the same domain twice concurrently raced nginx/proxy-port/PM2 state (e.g. PM2 on one port, nginx proxying another) — added a per-domain lock; concurrent deploys of the same domain are rejected (HTTP 409) and webhook triggers are skipped (202) while a deploy is in flight
+- PM2 start is skipped for `node_static` apps in the webhook redeploy path
+
+### Changed
+- Git Deploy nginx config generation now throws a clear error when a Node app has no proxy port instead of writing a broken upstream
+
 ## [1.35.2] - 2026-08-05
 ### Changed
 - Git Deploy npm step hardened — `npm ci` now runs with fetch retries/timeout (`--fetch-retries=3`, `--fetch-retry-mintimeout=20000`, `--fetch-timeout=300000`) and `--no-audit --no-fund`; HTTP(S)/NO_PROXY env vars from the panel process are passed through to npm and the build command so proxied/limited networks (e.g. regions where registry.npmjs.org is blocked or flaky) are more resilient

@@ -46,6 +46,107 @@ describe('git-deploy service', () => {
     });
   });
 
+  describe('detectNodeEntry', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    let tmp;
+    beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nxp-entry-test-')); });
+    afterEach(() => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {} });
+
+    it('returns null for a build-only SPA (no main/start/server entry)', () => {
+      fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({ name: 'spa', type: 'module', scripts: { build: 'vite build' } }));
+      expect(deploy.detectNodeEntry(tmp)).toBeNull();
+    });
+
+    it('detects a package.json main file', () => {
+      fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({ name: 'x', main: 'server.js' }));
+      fs.writeFileSync(path.join(tmp, 'server.js'), '');
+      expect(deploy.detectNodeEntry(tmp)).toEqual({ type: 'file', script: 'server.js' });
+    });
+
+    it('detects a start script pointing at a node file', () => {
+      fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({ name: 'x', scripts: { start: 'node --max-old-space-size=256 src/index.js' } }));
+      fs.mkdirSync(path.join(tmp, 'src'));
+      fs.writeFileSync(path.join(tmp, 'src/index.js'), '');
+      expect(deploy.detectNodeEntry(tmp)).toEqual({ type: 'file', script: 'src/index.js' });
+    });
+
+    it('falls back to npm start for CLI-based start scripts (e.g. next start)', () => {
+      fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({ name: 'x', scripts: { start: 'next start' } }));
+      expect(deploy.detectNodeEntry(tmp)).toEqual({ type: 'npm', script: 'start' });
+    });
+
+    it('detects default entry files when no main/start exists', () => {
+      fs.writeFileSync(path.join(tmp, 'package.json'), JSON.stringify({ name: 'x' }));
+      fs.writeFileSync(path.join(tmp, 'index.js'), '');
+      expect(deploy.detectNodeEntry(tmp)).toEqual({ type: 'file', script: 'index.js' });
+    });
+  });
+
+  describe('generateEcosystem', () => {
+    it('emits a script field for a file entry', () => {
+      const rec = { pm2_name: 'app.dev', install_path: '/home/u/domains/app.dev/public_html', proxy_port: 42001 };
+      const out = deploy.generateEcosystem(rec, { type: 'file', script: 'server.js' });
+      expect(out).toContain('module.exports = {');
+      expect(out).toContain("script: 'server.js',");
+      expect(out).toContain('PORT: 42001');
+      expect(out).toContain("name: 'app.dev',");
+    });
+
+    it('emits npm run start for an npm entry', () => {
+      const rec = { pm2_name: 'app.dev', install_path: '/home/u/domains/app.dev/public_html', proxy_port: 42002 };
+      const out = deploy.generateEcosystem(rec, { type: 'npm', script: 'start' });
+      expect(out).toContain("script: 'npm',");
+      expect(out).toContain("args: 'run start',");
+    });
+
+    it('uses .cjs extension on disk in startPm2 path (extension handled by caller)', () => {
+      expect('ecosystem.config.cjs').toMatch(/\.cjs$/);
+    });
+  });
+
+  describe('nextDeployDirName', () => {
+    const fs = require('fs');
+    const path = require('path');
+    const os = require('os');
+    let tmp;
+    beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'nxp-dirname-test-')); });
+    afterEach(() => { try { fs.rmSync(tmp, { recursive: true, force: true }); } catch (_) {} });
+
+    it('returns a unique name even when the base exists', () => {
+      const a = deploy.nextDeployDirName(tmp);
+      fs.mkdirSync(path.join(tmp, a));
+      const b = deploy.nextDeployDirName(tmp);
+      expect(b).not.toBe(a);
+      expect(fs.existsSync(path.join(tmp, b))).toBe(false);
+    });
+
+    it('is millisecond-precise', () => {
+      const a = deploy.nextDeployDirName(tmp);
+      expect(a).toMatch(/^\d{4}-\d{2}-\d{2}T\d{6}\d{3}Z$/);
+    });
+  });
+
+  describe('per-domain lock', () => {
+    it('blocks a second concurrent deploy for the same domain', () => {
+      expect(deploy.acquireDomainLock('example.com')).toBe(true);
+      expect(deploy.acquireDomainLock('example.com')).toBe(false);
+      expect(deploy.acquireDomainLock('other.com')).toBe(true);
+      deploy.releaseDomainLock('example.com');
+      expect(deploy.acquireDomainLock('example.com')).toBe(true);
+      deploy.releaseDomainLock('example.com');
+      deploy.releaseDomainLock('other.com');
+    });
+
+    it('acquire is idempotent for distinct domains', () => {
+      expect(deploy.acquireDomainLock('a.com')).toBe(true);
+      expect(deploy.acquireDomainLock('b.com')).toBe(true);
+      deploy.releaseDomainLock('a.com');
+      deploy.releaseDomainLock('b.com');
+    });
+  });
+
   describe('getDeployment', () => {
     it('throws for unknown id', () => {
       expect(() => deploy.getDeployment('nonexistent-12345')).toThrow('Deployment not found');

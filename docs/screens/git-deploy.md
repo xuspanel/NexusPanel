@@ -44,14 +44,14 @@ Accessible via the **Deployments** screen → **Git Deploy** tab.
 | Branch sanitization | Alphanumeric + `-`, `_`, `/` only |
 | Auto-detection | Scans for `package.json` (Node), `composer.json` (PHP), falls back to Static |
 | Build step | Node: `npm ci` → `npm run build`; PHP: `composer install --no-dev`; Static: skip |
-| Symlink deployment | New deploy creates timestamped dir under `/home/user/deployments/domain/`; `public_html` is a symlink |
+| Symlink deployment | New deploy creates millisecond-precise timestamped dir under `/home/user/deployments/domain/`; `public_html` is a symlink |
 | Rollback | Switch symlink to previous deployment (keeps last 5) |
-| PM2 | Node apps: generated `ecosystem.config.js`, `pm2 start` + `pm2 save` under the system user |
+| PM2 | Node apps: generated `ecosystem.config.cjs` (CommonJS, ESM-safe) with `script`/`args` from the repo's `main`/`start`/default entry, `pm2 start` + `pm2 save` under the system user; repos without a server entry are served statically (`node_static`, nginx `root` → `dist/`) |
 | Nginx | Node: `proxy_pass`; PHP: fastcgi + php-fpm pool; Static: `root` |
 | SSH deploy keys | Per-user, encrypted with AES-256-GCM, written to `~/.ssh/id_rsa` (chmod 600) before clone |
 | Webhook auto-deploy | POST to `https://panel.meedo51.com/webhook/<id>/<token>` → git pull + rebuild + pm2 restart |
 | Env vars | KEY=value stored encrypted, injected into `.env` on each deploy |
-| Concurrency | Max 3 simultaneous deploys per system user (HTTP 429 beyond) |
+| Concurrency | Max 3 simultaneous deploys per system user (HTTP 429); per-domain lock rejects a second deploy for the same domain (HTTP 409) and skips webhook triggers while one is in flight |
 | Timeout | Build step killed after 10 minutes |
 
 ---

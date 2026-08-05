@@ -171,6 +171,16 @@ function releaseDeploySlot(user) {
   else activeDeploys.set(user, n - 1);
 }
 
+const activeDomains = new Set();
+function acquireDomainLock(domain) {
+  if (activeDomains.has(domain)) return false;
+  activeDomains.add(domain);
+  return true;
+}
+function releaseDomainLock(domain) {
+  activeDomains.delete(domain);
+}
+
 /* ─── Validators ─── */
 const GIT_URL_RE = /^(https:\/\/|git@|ssh:\/\/)[^\s]+$/;
 const BRANCH_RE = /^[a-zA-Z0-9][a-zA-Z0-9._\/\-]*$/;
@@ -193,6 +203,28 @@ function detectAppType(deployDir) {
   return 'static';
 }
 
+function detectNodeEntry(deployDir) {
+  let pkg = null;
+  try { pkg = JSON.parse(fs.readFileSync(path.join(deployDir, 'package.json'), 'utf8')); } catch (_) {}
+  const main = pkg && typeof pkg.main === 'string' ? pkg.main.trim() : '';
+  const start = pkg && pkg.scripts && typeof pkg.scripts.start === 'string' ? pkg.scripts.start.trim() : '';
+
+  if (main) {
+    if (fs.existsSync(path.join(deployDir, main))) return { type: 'file', script: main };
+    if (/\.[cm]?js$/.test(main)) return { type: 'file', script: main };
+  }
+  if (start) {
+    for (const tok of start.split(/\s+/)) {
+      if (/\.[cm]?js$/.test(tok) && fs.existsSync(path.join(deployDir, tok))) return { type: 'file', script: tok };
+    }
+    return { type: 'npm', script: 'start' };
+  }
+  for (const f of ['index.js', 'server.js', 'app.js', 'main.js', 'index.cjs', 'server.cjs', 'index.mjs', 'server.mjs', 'dist/index.js', 'dist/server.js']) {
+    if (fs.existsSync(path.join(deployDir, f))) return { type: 'file', script: f };
+  }
+  return null;
+}
+
 /* ─── Nginx ─── */
 function getDomainSnapshot(name) {
   try { return domains.getDomain(name); } catch (_) { return null; }
@@ -205,12 +237,20 @@ async function applyDeployNginx(id, rec) {
   rec.port = snap.port;
 
   if (rec.app_type === 'node') {
-    const conf = domains.generateAppNginxConf(name, snap.port, snap.sslEnabled, {
-      proxyPass: 'http://127.0.0.1:' + rec.proxy_port + '/',
-    });
-    domains.writeNginxConf(name, conf);
-    domains.nginxTestAndReload();
-    appendLog(id, 'nginx: proxy_pass → 127.0.0.1:' + rec.proxy_port);
+    if (rec.node_entry) {
+      if (!rec.proxy_port) throw new Error('No proxy port allocated for node app ' + name);
+      const conf = domains.generateAppNginxConf(name, snap.port, snap.sslEnabled, {
+        proxyPass: 'http://127.0.0.1:' + rec.proxy_port + '/',
+      });
+      domains.writeNginxConf(name, conf);
+      domains.nginxTestAndReload();
+      appendLog(id, 'nginx: proxy_pass → 127.0.0.1:' + rec.proxy_port);
+    } else {
+      const staticRoot = fs.existsSync(path.join(rec.deploy_dir, 'dist')) ? path.join(rec.deploy_dir, 'dist') : rec.install_path;
+      rec.nginx_prev_root = snap.root || '';
+      domains.editDomain(name, { root: staticRoot });
+      appendLog(id, 'nginx: static root → ' + staticRoot);
+    }
   } else if (rec.app_type === 'php') {
     const conf = domains.generateAppNginxConf(name, snap.port, snap.sslEnabled, {
       root: rec.install_path,
@@ -220,6 +260,7 @@ async function applyDeployNginx(id, rec) {
     domains.nginxTestAndReload();
     appendLog(id, 'nginx: root → ' + rec.install_path + ' via php-fpm');
   } else {
+    rec.nginx_prev_root = snap.root || '';
     domains.editDomain(name, { root: rec.install_path });
     appendLog(id, 'nginx: root → ' + rec.install_path);
   }
@@ -229,7 +270,7 @@ async function revertDeployNginx(id, rec) {
   try {
     const snap = getDomainSnapshot(rec.domain);
     if (!snap) return;
-    const conf = domains.generateNginxConf(rec.domain, snap.port, snap.sslEnabled, snap.type, { root: snap.root || '/var/www/' + rec.domain });
+    const conf = domains.generateNginxConf(rec.domain, snap.port, snap.sslEnabled, snap.type, { root: rec.nginx_prev_root || snap.root || '/var/www/' + rec.domain });
     domains.writeNginxConf(rec.domain, conf);
     domains.nginxTestAndReload();
     appendLog(id, 'nginx reverted to snapshot');
@@ -315,29 +356,37 @@ function injectEnvVars(deployDir, deploymentId) {
 }
 
 /* ─── PM2 ─── */
-function generateEcosystem(rec) {
-  return [
+function generateEcosystem(rec, entry) {
+  const lines = [
     'module.exports = {',
-    "  apps: [{",
+    '  apps: [{',
     "    name: '" + rec.pm2_name + "',",
     "    cwd: '" + rec.install_path + "',",
-    "    env: {",
-    "      NODE_ENV: 'production',",
-    "      PORT: " + rec.proxy_port + ",",
-    "    },",
-    "    instances: 1,",
-    "    exec_mode: 'fork',",
-    "    max_memory_restart: '512M',",
-    "    watch: false,",
-    "  }],",
-    "};",
-  ].join('\n');
+  ];
+  if (entry && entry.type === 'npm') {
+    lines.push("    script: 'npm',");
+    lines.push("    args: 'run " + entry.script + "',");
+  } else {
+    lines.push("    script: '" + (entry ? entry.script : 'index.js') + "',");
+  }
+  lines.push('    env: {');
+  lines.push("      NODE_ENV: 'production',");
+  lines.push('      PORT: ' + rec.proxy_port + ',');
+  lines.push('    },');
+  lines.push('    instances: 1,');
+  lines.push("    exec_mode: 'fork',");
+  lines.push("    max_memory_restart: '512M',");
+  lines.push('    watch: false,');
+  lines.push('  }],');
+  lines.push('};');
+  return lines.join('\n');
 }
 
 async function startPm2(id, rec) {
   const user = rec.user_id;
-  const ecosystem = path.join(rec.install_path, 'ecosystem.config.js');
-  fs.writeFileSync(ecosystem, generateEcosystem(rec));
+  const entry = rec.node_entry || detectNodeEntry(rec.deploy_dir);
+  const ecosystem = path.join(rec.install_path, 'ecosystem.config.cjs');
+  fs.writeFileSync(ecosystem, generateEcosystem(rec, entry));
   await runRootLogged(id, 'chown', [user + ':' + user, ecosystem]);
 
   const pm2Env = { PM2_HOME: '/home/' + user + '/.pm2', PORT: String(rec.proxy_port) };
@@ -465,6 +514,16 @@ async function ensurePrereqs(id, appType) {
   }
 }
 
+function nextDeployDirName(deployBase) {
+  const base = new Date().toISOString().replace(/[:.]/g, '').slice(0, 20) + 'Z';
+  let timestamp = base;
+  let n = 1;
+  while (fs.existsSync(path.join(deployBase, timestamp))) {
+    timestamp = base + '-' + (++n);
+  }
+  return timestamp;
+}
+
 /* ─── Core deploy flow ─── */
 async function performDeploy(rec) {
   const id = rec.id;
@@ -475,9 +534,8 @@ async function performDeploy(rec) {
   let poolCreated = false;
   try {
     await step(id, 'Prepare deploy directory', async () => {
-      const timestamp = new Date().toISOString().replace(/[:.]/g, '').slice(0, 15) + 'Z';
       rec.deploy_base = '/home/' + user + '/deployments/' + rec.domain;
-      rec.deploy_dir = path.join(rec.deploy_base, timestamp);
+      rec.deploy_dir = path.join(rec.deploy_base, nextDeployDirName(rec.deploy_base));
       fs.mkdirSync(rec.deploy_dir, { recursive: true });
       await runRootLogged(id, 'chown', ['-R', user + ':' + user, rec.deploy_base]);
     });
@@ -504,6 +562,11 @@ async function performDeploy(rec) {
       rec.app_type = rec.app_type === 'auto' ? detectAppType(rec.deploy_dir) : rec.app_type;
       appendLog(id, 'Detected/selected: ' + rec.app_type);
     });
+
+    if (rec.app_type === 'node' && !rec.proxy_port) {
+      rec.proxy_port = findAppPort();
+      appendLog(id, 'Allocated proxy port ' + rec.proxy_port);
+    }
 
     await step(id, 'Install prerequisites', async () => {
       await ensurePrereqs(id, rec.app_type);
@@ -536,6 +599,15 @@ async function performDeploy(rec) {
     rec.install_path = '/home/' + user + '/domains/' + rec.domain + '/public_html';
     rec.install_parent = path.dirname(rec.install_path);
 
+    if (rec.app_type === 'node') {
+      rec.node_entry = detectNodeEntry(rec.deploy_dir);
+      if (!rec.node_entry) {
+        rec.node_static = true;
+        rec.pm2_name = '';
+        appendLog(id, 'No Node server entry (main/start) found — serving built output statically');
+      }
+    }
+
     await step(id, 'Set up deployment symlink', async () => {
       if (!fs.existsSync(rec.install_parent)) fs.mkdirSync(rec.install_parent, { recursive: true });
       await runRootLogged(id, 'chown', ['-R', user + ':' + user, '/home/' + user + '/domains']);
@@ -550,7 +622,7 @@ async function performDeploy(rec) {
       appendLog(id, 'Symlink: ' + rec.install_path + ' → ' + artifactPath);
     });
 
-    if (rec.app_type === 'node') {
+    if (rec.app_type === 'node' && rec.node_entry) {
       await step(id, 'Start via PM2', async () => {
         await startPm2(id, rec);
       });
@@ -588,6 +660,7 @@ async function performDeploy(rec) {
     appendLog(id, 'Deployment marked as failed. Rollback performed.');
   } finally {
     releaseDeploySlot(rec.user_id);
+    releaseDomainLock(rec.domain);
   }
 }
 
@@ -638,6 +711,11 @@ async function handleWebhook(deploymentId, token, signature, body) {
   initLog(id);
   appendLog(id, 'Webhook triggered — pulling latest changes...');
 
+  if (!acquireDomainLock(rec.domain)) {
+    appendLog(id, 'Another deployment for ' + rec.domain + ' is in progress — skipping webhook trigger');
+    return { status: 202, body: { status: 'skipped', reason: 'deploy_in_progress' } };
+  }
+
   const cloneId = crypto.randomUUID();
   setTimeout(async () => {
     const user = rec.user_id;
@@ -676,7 +754,7 @@ async function handleWebhook(deploymentId, token, signature, body) {
       }
 
       ensureDeploySymlink(rec);
-      if (rec.app_type === 'node') await restartPm2(cloneId, user, rec.pm2_name);
+      if (rec.app_type === 'node' && rec.node_entry) await restartPm2(cloneId, user, rec.pm2_name);
 
       await step(cloneId, 'Verify', async () => { await verifyDeploy(cloneId, rec); });
 
@@ -688,6 +766,8 @@ async function handleWebhook(deploymentId, token, signature, body) {
       appendLog(cloneId, '✖ Webhook deploy failed: ' + (e && e.message || e));
       rec.error = String(e && e.message || e).slice(0, 500);
       await saveRecord(rec).catch(() => {});
+    } finally {
+      releaseDomainLock(rec.domain);
     }
   }, 50);
 
@@ -733,6 +813,9 @@ function createDeploy(body, reqUser) {
     custom_build_cmd: buildCmd || '',
     status: 'deploying',
     pm2_name: domain,
+    node_entry: null,
+    node_static: false,
+    nginx_prev_root: null,
     install_path: installPath,
     proxy_port: null,
     webhook_token: '',
@@ -763,7 +846,18 @@ function createDeploy(body, reqUser) {
     }
   }
 
-  saveRecord(rec);
+  if (!acquireDomainLock(domain)) {
+    const err = new Error('A deployment for domain "' + domain + '" is already in progress');
+    err.statusCode = 409;
+    throw err;
+  }
+
+  try {
+    saveRecord(rec);
+  } catch (e) {
+    releaseDomainLock(domain);
+    throw e;
+  }
   setTimeout(() => { performDeploy(rec).catch(() => {}); }, 50);
   return { ok: true, id: rec.id, status: rec.status, deployment: toSafeView(rec) };
 }
@@ -782,6 +876,12 @@ function performRollback(id, reqUser) {
     try { if (fs.lstatSync(rec.install_path)) fs.unlinkSync(rec.install_path); } catch (_) {}
     fs.symlinkSync(prevDir, rec.install_path);
     appendLog(id, 'Symlink switched to ' + prevDir);
+
+    if (rec.node_static) {
+      const prevRoot = fs.existsSync(path.join(prevDir, 'dist')) ? path.join(prevDir, 'dist') : prevDir;
+      try { domains.editDomain(rec.domain, { root: prevRoot }); } catch (_) {}
+      appendLog(id, 'nginx: static root → ' + prevRoot);
+    }
 
     nginxReloadIfNeeded(rec);
     rec.status = 'running';
@@ -819,6 +919,7 @@ function toSafeView(rec) {
     deploy_dir: rec.deploy_dir || '',
     build_cmd: rec.custom_build_cmd || '',
     pm2_name: rec.pm2_name || '',
+    node_static: rec.node_static || false,
     proxy_port: rec.proxy_port || null,
     status: rec.status,
     url: rec.url || '',
@@ -855,4 +956,9 @@ module.exports = {
   handleWebhook,
   verifyWebhookToken,
   generateWebhookUrl,
+  detectNodeEntry,
+  generateEcosystem,
+  nextDeployDirName,
+  acquireDomainLock,
+  releaseDomainLock,
 };

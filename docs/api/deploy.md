@@ -130,12 +130,13 @@ Switches the `public_html` symlink to the previous deployment directory (sorted 
 - Git clone with `--depth 1` (shallow clone, 5 min timeout)
 - For SSH repos: decrypt key → write to `~/.ssh/id_rsa` → `ssh-keyscan github.com` → clone with `GIT_SSH_COMMAND`
 - Auto-detect: scan for `package.json` → Node, `composer.json` → PHP, fallback → Static
-- Node: `npm ci --production=false` → `npm run build` (or custom command)
+- Node: `npm ci --production=false` → `npm run build` (or custom command); proxy port allocated even when `app_type` is auto-detected
 - PHP: `composer install --no-dev --optimize-autoloader`
 - Static: skip build
-- Symlink: `ln -sfn <deploy_dir> <public_html>` atomically
-- PM2 for Node: generate `ecosystem.config.js`, `pm2 start` + `pm2 save`
+- Symlink: `ln -sfn <deploy_dir> <public_html>` atomically; deploy dirs are millisecond-precise timestamps (`YYYY-MM-DDTHHMMSSmmmZ`) with `-2`/`-3` suffixes on collision
+- PM2 for Node: generate `ecosystem.config.cjs` (CommonJS, ESM-safe) with `script`/`args` resolved from the repo (`main`/`start`/default entries); `pm2 start` + `pm2 save`. Repos without a server entry are served statically (`node_static`, nginx `root` → `dist/`) instead of PM2
 - Nginx: `proxy_pass` for Node, `fastcgi` + PHP pool for PHP, `root` for Static
 - Verify: curl to domain through nginx with proper Host header
 - Cleanup: remove deploy dirs older than the last 5
 - On error: revert symlink to previous directory, stop PM2, revert nginx
+- Concurrency: max 3 simultaneous deploys per system user (HTTP 429); per-domain lock — a second deploy for the same domain is rejected (HTTP 409) while one is in flight, webhook triggers are skipped (HTTP 202)
