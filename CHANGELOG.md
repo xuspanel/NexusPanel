@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.35.4] - 2026-08-06
+### Fixed
+- Modal content was silently cut off with no way to scroll: the `.fm-modal` family (used by ~40 modals across databases, file manager, SSL, firewall, cron, PHP-FPM, settings and the updates dialog) used `overflow: hidden` with a non-scrollable body, so any content taller than 80vh (90vh on mobile) was clipped — modals are now flex columns whose body scrolls (`overflow-y: auto`), and the mobile bottom-sheet keeps the header/action bar pinned while the body scrolls
+- The nginx config preview/edit modal (domain panel) clipped its stacked editors on mobile (`overflow: visible` on a `max-height` container) — the modal is now a constrained flex column and the split body scrolls when stacked
+- `.fm-modal-actions` (the footer row of the updates dialog, firewall confirm/add forms and settings/profile dialogs) had no CSS at all — added proper footer styling and full-width stacked buttons on mobile
+- Docker stats/inspect/file modals stayed in multi-column layouts on small screens, cramming content into ~150px columns — the stats grid collapses to one column at ≤480px and file rows wrap
+
+### Changed
+- Modal mobile safety: centered dialogs (services, processes, audit, scanner, MIME, email create, terminal chooser, log compare) get side padding and a full-width clamp at ≤768px; media (images/video/canvas) inside modal bodies is width-capped so it can never push content off-screen
+- CSS cache-busters bumped to `v=1.35.4` on `style.css`, `emails.css` and `docker.prompt.css` so the fixes reach browsers without a manual cache clear
+
 ## [1.35.3] - 2026-08-06
 ### Fixed
 - Git Deploy produced a CommonJS `ecosystem.config.js`, which was parsed as an ES module for repos with `"type": "module"` (`module is not defined in ES module scope`) and had no `script` field (`PM2 [ERROR] No script path`) — the ecosystem file is now `ecosystem.config.cjs` (always CommonJS) with a `script`/`args` field resolved from the cloned repo (`main` → file, `start` script → node file or `npm run start`, default entries `index.js`/`server.js`/`app.js`/`main.js`/`.cjs`/`.mjs`/`dist/*`)

@@ -149,3 +149,11 @@
 .docker-tab.active { background:var(--bg-tertiary); color:var(--accent-cyan); border-bottom:2px solid var(--accent-cyan); }
 .docker-tab-content { display:none; }
 .docker-tab-content.active { display:block; }
+
+/* Mobile safety for docker modal content */
+@media (max-width: 480px) {
+  .docker-stats-grid { grid-template-columns: 1fr; }
+  .docker-inspect-label { min-width: 96px; }
+  .docker-file-row { flex-wrap: wrap; }
+  .docker-file-meta { width: 100%; }
+}
