@@ -176,7 +176,7 @@ All frontend click handlers use `data-*-action` attributes instead of inline `on
 NexusPanel/
 ├── server.js                 # Express + WebSocket entry point (371 lines)
 ├── package.json              # Dependencies and scripts
-├── VERSION                   # Current version (1.35.4)
+├── VERSION                   # Current version (1.35.5)
 ├── CHANGELOG.md              # Full version history
 ├── nexuspanel.service        # systemd unit file
 ├── vitest.config.mjs         # Test configuration (ESM)

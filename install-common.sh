@@ -864,6 +864,7 @@ configure_nginx() {
 server {
     listen 80;
     server_name ${domain};
+    client_max_body_size 500m;
     location / {
         proxy_pass http://127.0.0.1:${port};
         proxy_http_version 1.1;
@@ -899,6 +900,7 @@ server {
 server {
     listen 443 ssl http2;
     server_name ${domain};
+    client_max_body_size 500m;
     ssl_certificate     /etc/letsencrypt/live/${domain}/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/${domain}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;

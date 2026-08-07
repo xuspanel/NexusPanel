@@ -1,6 +1,6 @@
 # NexusPanel Documentation
 
-Welcome to the official documentation for **NexusPanel v1.35.4** — a self-hosted VPS Control Center.
+Welcome to the official documentation for **NexusPanel v1.35.5** — a self-hosted VPS Control Center.
 
 ---
 
@@ -167,4 +167,4 @@ All API endpoints are prefixed with `/api/` and require JWT authentication via c
 
 ---
 
-*Documentation for NexusPanel v1.35.4 — BSL 1.1 License*
+*Documentation for NexusPanel v1.35.5 — BSL 1.1 License*

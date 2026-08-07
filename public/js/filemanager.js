@@ -1149,8 +1149,20 @@ async function fmUpload(files) {
       });
 
       xhr.addEventListener('load', () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve(JSON.parse(xhr.responseText));
-        else reject(new Error(JSON.parse(xhr.responseText || '{}').error || 'Upload failed'));
+        let parsed = null;
+        try { parsed = JSON.parse(xhr.responseText || ''); } catch (_) {}
+        if (xhr.status >= 200 && xhr.status < 300) {
+          resolve(parsed || {});
+        } else {
+          const serverMsg = (parsed && parsed.error) || xhr.statusText || '';
+          let msg = 'Upload failed';
+          if (xhr.status === 413) {
+            msg = 'Upload rejected (413): the file exceeds the server upload limit. Increase client_max_body_size to at least 500m in nginx and reload nginx.';
+          } else {
+            msg = xhr.status ? `Upload failed (${xhr.status}): ${serverMsg}` : (serverMsg || 'Upload failed');
+          }
+          reject(new Error(msg));
+        }
       });
 
       xhr.addEventListener('error', () => reject(new Error('Network error')));
