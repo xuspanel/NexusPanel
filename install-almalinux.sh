@@ -176,6 +176,7 @@ install_optional_deps() {
     postgresql-setup --initdb 2>/dev/null || true
     service_manage enable postgresql 2>/dev/null || true
     service_manage start postgresql 2>/dev/null || true
+    provision_postgres
   fi
 
   if ${INSTALL_CLAMAV}; then

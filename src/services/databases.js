@@ -11,7 +11,7 @@ function getPool(database) {
       host: process.env.DB_HOST || '127.0.0.1',
       port: parseInt(process.env.DB_PORT || '5432', 10),
       user: process.env.DB_USER || 'postgres',
-      password: process.env.DB_PASSWORD || '',
+      password: String(process.env.DB_PASSWORD ?? ''),
       database: db,
       max: 2,
       idleTimeoutMillis: 30000,
@@ -19,6 +19,36 @@ function getPool(database) {
     }));
   }
   return pools.get(db);
+}
+
+function friendlyPgError(err) {
+  if (!err || typeof err.message !== 'string') return err;
+  const m = err.message;
+  const host = process.env.DB_HOST || '127.0.0.1';
+  const port = process.env.DB_PORT || '5432';
+  const user = process.env.DB_USER || 'postgres';
+
+  if (m.includes('client password must be a string') || m.includes('client password must be a non-empty string')) {
+    const e = new Error('PostgreSQL login failed: the panel has no usable DB_PASSWORD configured. Run the installer with --postgres (it generates a password) or set DB_USER/DB_PASSWORD in the panel .env file and restart NexusPanel.');
+    e.cause = err; return e;
+  }
+  if (/password authentication failed/i.test(m)) {
+    const e = new Error(`PostgreSQL authentication failed for user "${user}": the DB_USER/DB_PASSWORD in .env are wrong. Fix them, or run the installer with --postgres to reset the postgres password.`);
+    e.cause = err; return e;
+  }
+  if (m.includes('ECONNREFUSED') || m.includes('Connection refused')) {
+    const e = new Error(`PostgreSQL is not reachable at ${host}:${port}. Start it (e.g. systemctl start postgresql) or check DB_HOST/DB_PORT in the panel .env file.`);
+    e.cause = err; return e;
+  }
+  if (m.includes('role') && m.includes('does not exist')) {
+    const e = new Error(`PostgreSQL role "${user}" does not exist. Set DB_USER in the panel .env file to a valid role.`);
+    e.cause = err; return e;
+  }
+  if (m.includes('does not exist')) {
+    const e = new Error(`PostgreSQL database "${(err.database) || 'target'}" does not exist. Create it from the Databases screen or with CREATE DATABASE.`);
+    e.cause = err; return e;
+  }
+  return err;
 }
 
 function validateIdent(name) {
@@ -32,8 +62,12 @@ function quoteIdent(name) {
 
 async function query(database, sql, params) {
   const pool = getPool(database);
-  const result = await pool.query(sql, params || []);
-  return result;
+  try {
+    const result = await pool.query(sql, params || []);
+    return result;
+  } catch (err) {
+    throw friendlyPgError(err);
+  }
 }
 
 async function queryOne(database, sql, params) {

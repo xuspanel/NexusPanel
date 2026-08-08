@@ -120,6 +120,16 @@ install_deps() {
     fi
   fi
 
+  # Optional: PostgreSQL
+  if ${INSTALL_PG}; then
+    if ! command -v psql >/dev/null 2>&1; then
+      log_info "Installing PostgreSQL via Homebrew..."
+      run_cmd brew install postgresql@16 2>/dev/null || run_cmd brew install postgresql || true
+    fi
+    brew services start postgresql@16 2>/dev/null || brew services start postgresql 2>/dev/null || true
+    provision_postgres
+  fi
+
   log_success "Dependencies installed"
 }
 
@@ -345,6 +355,7 @@ summary_macos() {
 main() {
   show_banner
   setup_logging
+  parse_args "$@"
 
   detect_os
   check_prerequisites_macos "$@"
