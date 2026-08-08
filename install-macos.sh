@@ -127,7 +127,8 @@ install_deps() {
       run_cmd brew install postgresql@16 2>/dev/null || run_cmd brew install postgresql || true
     fi
     brew services start postgresql@16 2>/dev/null || brew services start postgresql 2>/dev/null || true
-    provision_postgres
+    provision_postgres || \
+      log_warn "PostgreSQL provisioning was not completed — the Databases screen may need manual configuration (see /opt/nexuspanel/.env)"
   fi
 
   log_success "Dependencies installed"

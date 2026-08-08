@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.35.7] - 2026-08-07
+### Fixed
+- **Installer crash on PostgreSQL provisioning** — `provision_postgres` returned a non-zero exit code when the server wasn't reachable (e.g. not listening on 127.0.0.1, missing `pg_isready`, or a firewall), and `set -e` killed the entire installer with `signal_1` leaving the panel in a half-installed state. All three OS installers (Ubuntu, AlmaLinux, macOS) now call `provision_postgres || log_warn` so a provisioning failure is a soft failure — the installer completes and the Databases screen surface the friendly configuration message introduced in 1.35.6. The readiness timeout was also reduced from 45s to 15s, and the timeout message now points the admin at `systemctl status postgresql` and `pg_isready`.
+
 ## [1.35.6] - 2026-08-07
 ### Fixed
 - **Databases Screen SASL error** — the panel showed a cryptic `SASL: SCRAM-SERVER-FIRST-MESSAGE: client password must be a string` when you opened the Databases screen because PostgreSQL was installed but never provisioned: the installer installed the `postgresql` package but never set a password, never configured loopback TCP auth, and never wrote `DB_PASSWORD` (or `DB_HOST`/`DB_PORT`/`DB_USER`) into the panel's `.env` file. The `pg` driver then tried SCRAM auth with an empty/missing password, crashed inside the SASL flow, and the entire Databases view showed a raw stack trace instead of a helpful message. Now:

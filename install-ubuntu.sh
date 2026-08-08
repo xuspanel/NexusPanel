@@ -83,7 +83,8 @@ install_optional_deps() {
     pkg_install postgresql postgresql-contrib 2>/dev/null || true
     service_manage enable postgresql 2>/dev/null || true
     service_manage start postgresql 2>/dev/null || true
-    provision_postgres
+    provision_postgres || \
+      log_warn "PostgreSQL provisioning was not completed — the Databases screen may need manual configuration (see /opt/nexuspanel/.env)"
   fi
 
   if ${INSTALL_CLAMAV}; then

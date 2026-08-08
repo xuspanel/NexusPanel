@@ -825,8 +825,11 @@ provision_postgres() {
   local wait_loops=0
   until command -v pg_isready >/dev/null 2>&1 && pg_isready -h 127.0.0.1 -p "${db_port}" >/dev/null 2>&1; do
     wait_loops=$((wait_loops + 1))
-    if [ ${wait_loops} -gt 45 ]; then
-      log_warning "PostgreSQL did not become ready after 45s — skipping password provisioning"
+    if [ ${wait_loops} -gt 15 ]; then
+      log_warn "PostgreSQL did not become ready on 127.0.0.1:${db_port} — skipping provisioning."
+      log_warn "Run 'systemctl status postgresql' to check the service and"
+      log_warn "'pg_isready -h 127.0.0.1 -p ${db_port}' to test connectivity."
+      log_warn "You can re-run the installer later (it preserves existing DB_* settings)."
       PG_PASSWORD=""
       return 1
     fi

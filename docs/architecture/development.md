@@ -183,8 +183,8 @@ Edit `public/js/*.js` or `public/css/style.css` and refresh the browser.
 Asset URLs include `?v=<VERSION>`:
 
 ```html
-<link rel="stylesheet" href="/css/style.css?v=1.35.6">
-<script defer src="/js/dashboard.js?v=1.35.6"></script>
+<link rel="stylesheet" href="/css/style.css?v=1.35.7">
+<script defer src="/js/dashboard.js?v=1.35.7"></script>
 ```
 
 ### Theme System
@@ -207,7 +207,7 @@ CSS custom properties switch between dark and light:
 ## Commit Conventions
 
 - Commits to `main` must be **GPG-signed**
-- Use conventional messages: `v1.35.6: Fix modal content clipping`
+- Use conventional messages: `v1.35.7: Fix modal content clipping`
 - Never commit `.env`, `node_modules/`, `data/`, or proprietary directories
 
 ---
