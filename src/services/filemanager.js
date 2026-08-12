@@ -406,11 +406,22 @@ async function getDetails(targetPath, user) {
 /* ─── Archive Preview (list entries without extracting) ─── */
 async function listArchiveEntries(archivePath, user) {
   const safeArchive = safeResolve(archivePath, user);
+  if (!fs.existsSync(safeArchive)) {
+    throw new Error('Archive not found: ' + archivePath);
+  }
+  if (fs.statSync(safeArchive).isDirectory()) {
+    throw new Error('Not a file: ' + archivePath + ' (directories cannot be extracted)');
+  }
   const ext = path.extname(safeArchive).toLowerCase();
   const entries = [];
   if (ext === '.zip') {
     const { default: AdmZip } = await import('adm-zip');
-    const zip = new AdmZip(safeArchive);
+    let zip;
+    try {
+      zip = new AdmZip(safeArchive);
+    } catch (e) {
+      throw new Error('Cannot open ZIP archive — it may be corrupt or unreadable: ' + e.message);
+    }
     for (const entry of zip.getEntries()) {
       entries.push({
         name: entry.entryName,
@@ -440,11 +451,11 @@ async function listArchiveEntries(archivePath, user) {
         next();
       });
       extract.on('finish', resolve);
-      extract.on('error', reject);
+      extract.on('error', (err) => reject(new Error('Cannot read archive — it may be corrupt or not a valid tar/gzip file: ' + err.message)));
       source.pipe(extract);
     });
   } else {
-    throw new Error('Unsupported archive format: ' + ext);
+    throw new Error('Unsupported archive format: ' + ext + ' — use .zip, .tar, .gz, or .tgz');
   }
   entries.sort((a, b) => a.name.localeCompare(b.name));
   return entries;

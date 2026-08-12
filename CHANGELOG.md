@@ -1,5 +1,9 @@
 # Changelog
 
+## [1.35.8] - 2026-08-08
+### Fixed
+- **Extract archive 400 error** — the `/api/files/check-extract-conflicts` endpoint crashed with an opaque 400 when archives were missing, corrupt, unreadable, or passed an unsupported format. Now the route returns distinct HTTP statuses (403/404/422) with specific messages, `listArchiveEntries` validates the file exists and wraps raw library errors in clear messages, and the frontend guards against empty path parameters.
+
 ## [1.35.7] - 2026-08-07
 ### Fixed
 - **Installer crash on PostgreSQL provisioning** — `provision_postgres` returned a non-zero exit code when the server wasn't reachable (e.g. not listening on 127.0.0.1, missing `pg_isready`, or a firewall), and `set -e` killed the entire installer with `signal_1` leaving the panel in a half-installed state. All three OS installers (Ubuntu, AlmaLinux, macOS) now call `provision_postgres || log_warn` so a provisioning failure is a soft failure — the installer completes and the Databases screen surface the friendly configuration message introduced in 1.35.6. The readiness timeout was also reduced from 45s to 15s, and the timeout message now points the admin at `systemctl status postgresql` and `pg_isready`.

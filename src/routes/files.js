@@ -353,11 +353,16 @@ router.post('/check-conflicts', async (req, res) => {
 router.post('/check-extract-conflicts', async (req, res) => {
   try {
     const { archive: archivePath, dest } = req.body;
-    if (!archivePath || !dest) return res.status(400).json({ error: 'archive and dest required' });
+    if (!archivePath) return res.status(400).json({ error: 'Archive path is required' });
+    if (!dest) return res.status(400).json({ error: 'Destination path is required' });
     const result = await fm.checkExtractConflicts(archivePath, dest, req.user);
     res.json(result);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    const status = /Access denied/i.test(err.message) ? 403
+      : /not found/i.test(err.message) ? 404
+      : /unsupported|not a valid/i.test(err.message) ? 422
+      : 400;
+    res.status(status).json({ error: err.message });
   }
 });
 

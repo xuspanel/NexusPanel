@@ -690,6 +690,7 @@ async function fmShowArchive(paths) {
 
 /* ─── Extract Modal ─── */
 async function fmShowExtract(path) {
+  if (!path) { fmShowToast('No file selected for extraction', 'error'); return; }
   const defaultDest = fmState.currentPath;
   openFmModal('🗜 Extract Archive', `
     <div class="fm-form-group">
