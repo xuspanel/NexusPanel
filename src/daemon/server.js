@@ -52,6 +52,32 @@ function executePrivilegedCommand(params) {
       });
     }
 
+    // Crucial Security Guard: chown / chmod restricted strictly to /var/lib/rspamd/dkim/
+    if (validation.command === 'chown' || validation.command === 'chmod') {
+      const targetPaths = (args || []).filter(a => typeof a === 'string' && !a.startsWith('-')).slice(1);
+      if (targetPaths.length === 0) {
+        return resolve({
+          result: null,
+          error: {
+            code: ERROR_CODES.INVALID_PARAMS,
+            message: `Missing target path for ${validation.command}`
+          }
+        });
+      }
+      for (const targetPath of targetPaths) {
+        const normalized = path.normalize(targetPath);
+        if (!normalized.startsWith('/var/lib/rspamd/dkim/')) {
+          return resolve({
+            result: null,
+            error: {
+              code: ERROR_CODES.FORBIDDEN_BINARY,
+              message: `Unauthorized path for ${validation.command}: target must strictly begin with /var/lib/rspamd/dkim/`
+            }
+          });
+        }
+      }
+    }
+
     const options = {
       timeout: Math.min(Math.max(timeout || 30000, 1000), 300000),
       maxBuffer: Math.min(maxBuffer || 10 * 1024 * 1024, 25 * 1024 * 1024)

@@ -47,6 +47,16 @@ describe('Daemon & Two-Tier IPC Architecture', () => {
     ).rejects.toThrow(/Forbidden binary/i);
   });
 
+  it('rejects chown or chmod commands outside /var/lib/rspamd/dkim/', async () => {
+    await expect(
+      daemonClient.execViaSocket('chmod', ['0777', '/etc/shadow'], { timeout: 5000 }, TEST_SOCK)
+    ).rejects.toThrow(/Unauthorized path for chmod/i);
+
+    await expect(
+      daemonClient.execViaSocket('chown', ['root:root', '/tmp/malicious'], { timeout: 5000 }, TEST_SOCK)
+    ).rejects.toThrow(/Unauthorized path for chown/i);
+  });
+
   it('enforces payload limits', () => {
     expect(protocol.MAX_PAYLOAD_SIZE).toBeGreaterThan(1024 * 1024);
   });

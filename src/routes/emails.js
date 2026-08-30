@@ -6,6 +6,7 @@ const path = require('path');
 const { simpleParser } = require('mailparser');
 const rateLimit = require('express-rate-limit');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
+const emailsService = require('../services/emails');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -230,6 +231,52 @@ router.get('/domains', async (req, res) => {
     res.json(arr);
   } catch (err) {
     res.status(500).json({ error: err.message });
+  }
+});
+
+router.get('/domains/:domain/dns', async (req, res) => {
+  try {
+    const domain = req.params.domain;
+    const selector = req.query.selector || 'mail';
+    const dnsRecords = await emailsService.getDomainDnsRecords(domain, selector);
+    res.json(dnsRecords);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.get('/:domain/dns', async (req, res) => {
+  try {
+    const domain = req.params.domain;
+    const selector = req.query.selector || 'mail';
+    const dnsRecords = await emailsService.getDomainDnsRecords(domain, selector);
+    res.json(dnsRecords);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/domains/:domain/dkim', async (req, res) => {
+  try {
+    const domain = req.params.domain;
+    const selector = req.body.selector || req.query.selector || 'mail';
+    const dkim = await emailsService.generateDkimKey(domain, selector);
+    const dns = await emailsService.getDomainDnsRecords(domain, selector);
+    res.json({ ok: true, dkim, dns });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
+router.post('/:domain/dkim', async (req, res) => {
+  try {
+    const domain = req.params.domain;
+    const selector = req.body.selector || req.query.selector || 'mail';
+    const dkim = await emailsService.generateDkimKey(domain, selector);
+    const dns = await emailsService.getDomainDnsRecords(domain, selector);
+    res.json({ ok: true, dkim, dns });
+  } catch (err) {
+    res.status(400).json({ error: err.message });
   }
 });
 

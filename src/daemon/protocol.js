@@ -1,7 +1,8 @@
 const PRIVILEGED_BINARIES = new Set([
   'systemctl', 'iptables', 'nft', 'ufw', 'firewall-cmd',
   'certbot', 'nginx', 'vsftpd', 'chpasswd', 'useradd',
-  'userdel', 'usermod', 'clamscan', 'journalctl'
+  'userdel', 'usermod', 'clamscan', 'journalctl',
+  'rspamadm', 'chown', 'chmod'
 ]);
 
 const DEFAULT_SOCKET_PATH = process.env.NEXUSPANEL_SOCK || '/var/run/nexuspanel.sock';
