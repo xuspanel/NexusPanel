@@ -29,6 +29,9 @@ async function initEmails() {
     document.getElementById('emailCreateModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeCreateModal(); });
     document.getElementById('emailPwdToggle').addEventListener('click', togglePassword);
     document.getElementById('emailCreateForm').addEventListener('submit', submitCreate);
+    document.getElementById('emailDnsClose').addEventListener('click', closeDnsModal);
+    document.getElementById('emailDnsDone').addEventListener('click', closeDnsModal);
+    document.getElementById('emailDnsModal').addEventListener('click', (e) => { if (e.target === e.currentTarget) closeDnsModal(); });
     document.querySelectorAll('input[name="quota"]').forEach(r => {
       r.addEventListener('change', () => {
         document.getElementById('emailQuotaCustom').style.display = r.value === 'custom' ? 'flex' : 'none';
@@ -68,6 +71,7 @@ async function initEmails() {
         if (document.getElementById('ecComposeView').style.display !== 'none') closeCompose();
         else if (document.getElementById('ecMessageView').style.display !== 'none') showMessageList();
         else if (document.getElementById('emailCreateModal').style.display !== 'none') closeCreateModal();
+        else if (document.getElementById('emailDnsModal').style.display !== 'none') closeDnsModal();
         else backToAccounts();
       }
     });
@@ -156,6 +160,7 @@ function renderAccountList(accounts) {
           <div class="email-card-address">${safeEmail}</div>
         </div>
         <div class="email-card-actions">
+          <button class="email-action-btn email-dns-btn" data-domain="${safeDomain}" title="DNS Authentication Records (DKIM, SPF, DMARC)" aria-label="Show DNS Authentication Records">🔑</button>
           <button class="email-action-btn" data-email="${safeEmail}" title="Copy address" aria-label="Copy email address">📋</button>
           ${a.hasMaildir ? `<button class="email-action-btn email-config-btn" title="Email configuration" aria-label="Show email configuration">⚙️</button>` : ''}
         </div>
@@ -201,10 +206,16 @@ function renderAccountList(accounts) {
       ` : ''}
     </div>`;
   }).join('');
-  grid.querySelectorAll('.email-action-btn').forEach(btn => {
+  grid.querySelectorAll('.email-action-btn:not(.email-dns-btn):not(.email-config-btn)').forEach(btn => {
     btn.addEventListener('click', (e) => {
       e.stopPropagation();
       navigator.clipboard.writeText(btn.dataset.email).then(() => { btn.textContent = '✓'; setTimeout(() => { btn.textContent = '📋'; }, 1500); });
+    });
+  });
+  grid.querySelectorAll('.email-dns-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      openDnsModal(btn.dataset.domain);
     });
   });
   grid.querySelectorAll('.email-card-inbox-btn').forEach(btn => {
@@ -220,6 +231,100 @@ function renderAccountList(accounts) {
       btn.style.opacity = isOpen ? '' : '1';
     });
   });
+}
+
+/* ─── DNS Records Modal ─── */
+
+async function openDnsModal(domain) {
+  const modal = document.getElementById('emailDnsModal');
+  const title = document.getElementById('emailDnsTitle');
+  const subtitle = document.getElementById('emailDnsSubtitle');
+  const loading = document.getElementById('emailDnsLoading');
+  const error = document.getElementById('emailDnsError');
+  const content = document.getElementById('emailDnsContent');
+
+  modal.style.display = 'flex';
+  title.textContent = `DNS Authentication: ${domain}`;
+  subtitle.textContent = `DKIM, SPF, DMARC, & MX records for ${domain}`;
+  loading.style.display = 'flex';
+  error.style.display = 'none';
+  content.innerHTML = '';
+
+  try {
+    const res = await API.emails.dns(domain);
+    loading.style.display = 'none';
+    if (!res || !res.records || res.records.length === 0) {
+      content.innerHTML = '<div class="db-empty">No DNS records found for this domain.</div>';
+      return;
+    }
+
+    content.innerHTML = res.records.map((r, idx) => {
+      const safeType = escHtml(r.type);
+      const safeHost = escHtml(r.host);
+      const safeFqdn = escHtml(r.fqdn);
+      const safeValue = escHtml(r.value);
+      const safeDesc = escHtml(r.description || '');
+      const priorityBadge = r.priority !== undefined ? `<span class="dns-badge dns-badge-priority">Priority: ${r.priority}</span>` : '';
+
+      return `
+        <div class="dns-record-card" data-idx="${idx}">
+          <div class="dns-record-header">
+            <div class="dns-record-tags">
+              <span class="dns-badge dns-badge-type">${safeType}</span>
+              ${priorityBadge}
+              <span class="dns-record-host">${safeFqdn}</span>
+            </div>
+            <div class="dns-record-desc">${safeDesc}</div>
+          </div>
+          <div class="dns-field-group">
+            <div class="dns-field-label">Host / Name:</div>
+            <div class="dns-field-row">
+              <pre class="dns-code-block"><code>${safeHost}</code></pre>
+              <button class="dns-copy-btn" data-copy="${safeHost}" title="Copy host" aria-label="Copy host value">
+                <span class="copy-icon">📋</span>
+                <span class="copy-text">Copy</span>
+              </button>
+            </div>
+          </div>
+          <div class="dns-field-group">
+            <div class="dns-field-label">Value / Content:</div>
+            <div class="dns-field-row">
+              <pre class="dns-code-block dns-code-wrap"><code>${safeValue}</code></pre>
+              <button class="dns-copy-btn" data-copy="${safeValue}" title="Copy value" aria-label="Copy record content">
+                <span class="copy-icon">📋</span>
+                <span class="copy-text">Copy</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    content.querySelectorAll('.dns-copy-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        const text = btn.dataset.copy;
+        navigator.clipboard.writeText(text).then(() => {
+          const originalText = btn.innerHTML;
+          btn.classList.add('copied');
+          btn.innerHTML = `<span class="copy-icon">✓</span><span class="copy-text">Copied!</span>`;
+          setTimeout(() => {
+            btn.classList.remove('copied');
+            btn.innerHTML = originalText;
+          }, 2000);
+        });
+      });
+    });
+  } catch (err) {
+    loading.style.display = 'none';
+    error.style.display = 'block';
+    error.textContent = err.message || 'Failed to fetch DNS records';
+  }
+}
+
+function closeDnsModal() {
+  const modal = document.getElementById('emailDnsModal');
+  if (modal) modal.style.display = 'none';
 }
 
 /* ─── Email Client ─── */

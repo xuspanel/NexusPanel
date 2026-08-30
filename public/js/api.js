@@ -71,6 +71,8 @@ const API = {
     move: (username, data) => API.request('POST', '/emails/' + encodeURIComponent(username) + '/move', data),
     delete: (username, data) => API.request('POST', '/emails/' + encodeURIComponent(username) + '/delete', data),
     quota: (username) => API.request('GET', '/emails/' + encodeURIComponent(username) + '/quota'),
+    dns: (domain, selector) => API.request('GET', '/emails/' + encodeURIComponent(domain) + '/dns' + (selector ? '?selector=' + encodeURIComponent(selector) : '')),
+    dkim: (domain, selector) => API.request('POST', '/emails/' + encodeURIComponent(domain) + '/dkim', { selector }),
   },
   databases: {
     users: () => API.request('GET', '/databases/users'),

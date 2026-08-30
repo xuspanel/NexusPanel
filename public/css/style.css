@@ -10855,6 +10855,7 @@ html[data-theme] * {
   .scanner-delete-modal,
   .mime-delete-modal,
   .email-create-modal,
+  .email-dns-modal,
   .term-chooser-modal {
     max-width: 100%;
   }
@@ -10863,3 +10864,94 @@ html[data-theme] * {
     align-items: stretch;
   }
 }
+
+/* ─── Global Cross-Device & Terminal Optimization ─── */
+.term-wrapper,
+.term-pro-wrapper {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
+  height: clamp(280px, calc(100dvh - 130px), 85vh);
+}
+
+.term-container,
+.term-pro-shell {
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.term-container .xterm,
+.term-pro-shell .xterm {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box;
+}
+
+.term-container .xterm-screen,
+.term-pro-shell .xterm-screen {
+  max-width: 100% !important;
+}
+
+/* Universal Table Horizontal Scroll Containers */
+.data-table-wrapper,
+.db-table-wrap,
+.fm-table-wrap,
+.table-responsive,
+.email-config-panel {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.15) transparent;
+}
+
+@media (max-width: 1024px) {
+  .term-wrapper,
+  .term-pro-wrapper {
+    height: clamp(240px, calc(100dvh - 160px), 80vh);
+  }
+}
+
+@media (max-width: 768px) {
+  .term-wrapper,
+  .term-pro-wrapper {
+    height: clamp(200px, calc(100dvh - 180px), 78vh);
+    min-height: 200px;
+    gap: 6px;
+  }
+  .term-header,
+  .db-header {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .term-nano-grid {
+    grid-template-columns: repeat(auto-fill, minmax(68px, 1fr));
+    gap: 4px;
+  }
+  .data-table,
+  .db-table {
+    min-width: 560px;
+  }
+}
+
+@media (max-width: 480px) {
+  .term-wrapper,
+  .term-pro-wrapper {
+    height: clamp(180px, calc(100dvh - 200px), 75vh);
+    min-height: 180px;
+  }
+  .term-header-right,
+  .db-header-right {
+    width: 100%;
+    justify-content: space-between;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+}
+
