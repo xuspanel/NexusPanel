@@ -190,7 +190,7 @@ run_migrations() {
 
 # ─── Service Restart ────────────────────────────────
 restart_service() {
-  log_info "Restarting NexusPanel service..."
+  log_info "Restarting NexusPanel services..."
 
   case "$(uname -s)" in
     Darwin)
@@ -198,12 +198,15 @@ restart_service() {
       ;;
     Linux)
       systemctl daemon-reload 2>/dev/null || true
+      if systemctl list-unit-files --type=service --no-legend 2>/dev/null | grep -q 'nexuspanel-daemon'; then
+        systemctl restart nexuspanel-daemon 2>/dev/null || systemctl start nexuspanel-daemon 2>/dev/null || true
+      fi
       service_manage restart nexuspanel
       service_manage restart nginx 2>/dev/null || true
       ;;
   esac
 
-  log_ok "Service restarted"
+  log_ok "Services restarted"
 }
 
 # ─── Verification ───────────────────────────────────
@@ -265,6 +268,13 @@ main() {
 
   update_npm
   run_migrations
+
+  # Two-Tier Migration: Enforce user/group creation, file permissions & systemd services
+  if command -v setup_two_tier_environment >/dev/null 2>&1; then
+    setup_two_tier_environment
+    create_systemd_service "nexuspanel" "${INSTALL_DIR}/server.js"
+  fi
+
   restart_service
   verify_upgrade
   cleanup_backups

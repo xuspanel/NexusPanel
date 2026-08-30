@@ -62,17 +62,27 @@ echo -e "${GREEN}✓ Dependencies installed${NC}"
 echo ""
 echo -e "${CYAN}[3/4] Restarting service...${NC}"
 
-# Auto-detect systemd service name
+# Reload systemd unit configurations
+systemctl daemon-reload 2>/dev/null || true
+
+# Restart Root Daemon if service exists
+if systemctl list-unit-files --type=service --no-legend 2>/dev/null | grep -q 'nexuspanel-daemon'; then
+  systemctl restart nexuspanel-daemon 2>/dev/null || systemctl start nexuspanel-daemon 2>/dev/null || true
+  if systemctl is-active --quiet nexuspanel-daemon 2>/dev/null; then
+    echo -e "${GREEN}✓ Root Daemon is running (systemd: nexuspanel-daemon)${NC}"
+  fi
+fi
+
+# Auto-detect main systemd service name
 SVC=""
 if systemctl is-enabled --quiet nexuspanel 2>/dev/null; then
   SVC="nexuspanel"
 else
-  SVC=$(systemctl list-unit-files --type=service --no-legend 2>/dev/null | grep -oE 'nexuspanel[a-z_-]*' | head -1)
+  SVC=$(systemctl list-unit-files --type=service --no-legend 2>/dev/null | grep -oE 'nexuspanel[a-z_-]*' | grep -v 'daemon' | head -1)
 fi
 
 if [ -n "$SVC" ]; then
   echo -e "  Detected service: ${BOLD}${SVC}${NC}"
-  systemctl daemon-reload 2>/dev/null || true
   systemctl restart "$SVC" 2>/dev/null || {
     echo -e "${YELLOW}⚠ systemctl restart failed. Trying stop + start...${NC}"
     systemctl stop "$SVC" 2>/dev/null || true

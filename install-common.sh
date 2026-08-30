@@ -904,25 +904,101 @@ provision_postgres() {
   fi
 }
 
+# ─── Two-Tier Security & Permissions Setup ────────────
+setup_two_tier_environment() {
+  if ${DRY_RUN:-false}; then
+    log_info "[DRY-RUN] Would configure nexuspanel user, permissions, and sudoers"
+    return 0
+  fi
+
+  log_info "Configuring Two-Tier security environment..."
+
+  # Create nexuspanel group if not exists
+  if ! getent group nexuspanel >/dev/null 2>&1; then
+    groupadd -r nexuspanel 2>/dev/null || groupadd nexuspanel 2>/dev/null || true
+  fi
+
+  # Create nexuspanel system user if not exists
+  if ! id -u nexuspanel >/dev/null 2>&1; then
+    useradd -r -g nexuspanel -s /usr/sbin/nologin -d "${INSTALL_DIR}" -M nexuspanel 2>/dev/null || \
+    useradd -r -g nexuspanel -s /sbin/nologin -d "${INSTALL_DIR}" -M nexuspanel 2>/dev/null || \
+    useradd -g nexuspanel -s /bin/false -d "${INSTALL_DIR}" -M nexuspanel 2>/dev/null || true
+  fi
+
+  # Directory Permissions Lockdown
+  # Source code owned by root:root (0755 dirs, 0644 files)
+  chown -R root:root "${INSTALL_DIR}" 2>/dev/null || true
+  find "${INSTALL_DIR}" -type d -exec chmod 755 {} + 2>/dev/null || true
+  find "${INSTALL_DIR}" -type f -exec chmod 644 {} + 2>/dev/null || true
+
+  # Executable scripts
+  chmod 755 "${INSTALL_DIR}/server.js" "${INSTALL_DIR}/update.sh" "${INSTALL_DIR}/upgrade.sh" 2>/dev/null || true
+  if [ -d "${INSTALL_DIR}/scripts" ]; then
+    find "${INSTALL_DIR}/scripts" -type f -name "*.sh" -exec chmod 755 {} + 2>/dev/null || true
+  fi
+
+  # Data directory owned by nexuspanel:nexuspanel (0750 dir, 0640 files)
+  mkdir -p "${INSTALL_DIR}/data"
+  chown -R nexuspanel:nexuspanel "${INSTALL_DIR}/data" 2>/dev/null || true
+  chmod 750 "${INSTALL_DIR}/data" 2>/dev/null || true
+  find "${INSTALL_DIR}/data" -type f -exec chmod 640 {} + 2>/dev/null || true
+
+  # Sudoers exemption for authenticated admin terminal sessions (node-pty)
+  if [ -d /etc/sudoers.d ]; then
+    cat > /etc/sudoers.d/nexuspanel << 'SUDOERS'
+# NexusPanel Web Tier Terminal Escalation Exemption
+nexuspanel ALL=(root) NOPASSWD: /usr/bin/sudo -i -u root, /usr/bin/sudo -i, /bin/su - root
+SUDOERS
+    chmod 0440 /etc/sudoers.d/nexuspanel 2>/dev/null || true
+  fi
+
+  log_ok "Two-Tier user, file permissions, and sudoers configured"
+}
+
 # ─── Service Management ───────────────────────────────
 create_systemd_service() {
   local service_name="${1:-nexuspanel}"
   local exec_path="${2:-${INSTALL_DIR}/server.js}"
 
-  if ${DRY_RUN}; then
-    log_info "[DRY-RUN] Would create systemd service: ${service_name}"
+  if ${DRY_RUN:-false}; then
+    log_info "[DRY-RUN] Would create systemd services for Two-Tier architecture: ${service_name}"
     return 0
   fi
 
-  cat > "/etc/systemd/system/${service_name}.service" << SYSTEMD
+  setup_two_tier_environment
+
+  # 1. Root Daemon Service (running as root)
+  cat > "/etc/systemd/system/${service_name}-daemon.service" << SYSTEMD_DAEMON
 [Unit]
-Description=NexusPanel - VPS Control Panel
+Description=NexusPanel Root Daemon
 After=network.target
-Wants=network.target
 
 [Service]
 Type=simple
 User=root
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=/usr/bin/node ${INSTALL_DIR}/src/daemon/server.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD_DAEMON
+
+  # 2. Main Web Tier Service (running as unprivileged nexuspanel user)
+  cat > "/etc/systemd/system/${service_name}.service" << SYSTEMD_WEB
+[Unit]
+Description=NexusPanel - VPS Control Panel
+After=network.target ${service_name}-daemon.service
+Wants=${service_name}-daemon.service
+
+[Service]
+Type=simple
+User=nexuspanel
+Group=nexuspanel
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=/usr/bin/node ${exec_path}
 Restart=on-failure
@@ -934,11 +1010,12 @@ LimitNOFILE=65536
 
 [Install]
 WantedBy=multi-user.target
-SYSTEMD
+SYSTEMD_WEB
 
   systemctl daemon-reload 2>/dev/null || true
+  systemctl enable "${service_name}-daemon" 2>/dev/null || true
   systemctl enable "${service_name}" 2>/dev/null || true
-  log_info "Systemd service created: ${service_name}"
+  log_info "Systemd services created and enabled: ${service_name}-daemon, ${service_name}"
 }
 
 # ─── Firewall Helpers ─────────────────────────────────
