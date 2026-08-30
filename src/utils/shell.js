@@ -1,29 +1,19 @@
-const { execFile, spawn, spawnSync } = require('child_process');
+const { execFile, spawnSync } = require('child_process');
 const { promisify } = require('util');
 const execFileAsync = promisify(execFile);
+const daemonClient = require('./daemon-client');
+const { PRIVILEGED_BINARIES } = require('../daemon/protocol');
 
-async function runSafe(command, args, opts = {}) {
-  const { timeout = 30000, maxBuffer = 10 * 1024 * 1024, env, input } = opts;
-  const options = { timeout, maxBuffer };
-  if (env) options.env = env;
-  if (input) options.input = input;
-  return execFileAsync(command, args, options);
+function buildExecutionPlan(command, args = []) {
+  return { bin: command, finalArgs: args || [] };
 }
 
-function runSafeSync(command, args, opts = {}) {
-  const { timeout = 10000, maxBuffer = 10 * 1024 * 1024, env } = opts;
-  const options = {
-    timeout, maxBuffer, encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe']
-  };
-  if (env) options.env = env;
-  const result = spawnSync(command, args, options);
-  return {
-    stdout: (result.stdout || ''),
-    stderr: (result.stderr || ''),
-    status: result.status,
-    error: result.error ? result.error.message : null
-  };
+async function runSafe(command, args = [], opts = {}) {
+  return daemonClient.exec(command, args, opts);
+}
+
+function runSafeSync(command, args = [], opts = {}) {
+  return daemonClient.execSync(command, args, opts);
 }
 
 const validators = {
@@ -38,4 +28,6 @@ const validators = {
   iptablesRule: /^[\w\s.\-\/:!"'$%&()+,;=<>\[\]{}|\\@#~`?]+$/
 };
 
-module.exports = { runSafe, runSafeSync, validators };
+module.exports = { runSafe, runSafeSync, validators, PRIVILEGED_BINARIES, buildExecutionPlan };
+
+

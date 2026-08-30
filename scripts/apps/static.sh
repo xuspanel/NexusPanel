@@ -3,6 +3,14 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
+cleanup() {
+  local exit_code=$?
+  log "ERROR: Static placeholder creation failed (exit code $exit_code). Cleaning up..."
+  cleanup_path "${INSTALL_PATH:-}"
+  exit "$exit_code"
+}
+trap cleanup ERR
+
 for v in INSTALL_PATH DOMAIN SITE_TITLE; do
   require_env "$v"
 done

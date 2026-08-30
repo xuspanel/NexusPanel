@@ -6,11 +6,40 @@ const DATA_FILE = path.join(__dirname, '..', '..', 'data', 'audit.json');
 const MAX_ENTRIES = 10000;
 const MAX_QUERY_LIMIT = 500;
 const FLUSH_INTERVAL = 5000;
+const GENESIS_HASH = '0'.repeat(64);
 
 let entries = [];
 let writeBuffer = [];
 let initialized = false;
 let flushTimer = null;
+
+function canonicalize(obj) {
+  if (obj === null || typeof obj !== 'object') {
+    return JSON.stringify(obj);
+  }
+  if (Array.isArray(obj)) {
+    return '[' + obj.map(canonicalize).join(',') + ']';
+  }
+  const keys = Object.keys(obj).sort();
+  const pairs = keys.map(k => JSON.stringify(k) + ':' + canonicalize(obj[k]));
+  return '{' + pairs.join(',') + '}';
+}
+
+function computeEntryHash(entry) {
+  const payload = {
+    id: entry.id,
+    timestamp: entry.timestamp,
+    user: entry.user,
+    role: entry.role,
+    ip: entry.ip,
+    action: entry.action,
+    method: entry.method,
+    path: entry.path,
+    details: entry.details,
+    prev_hash: entry.prev_hash || GENESIS_HASH
+  };
+  return crypto.createHash('sha256').update(canonicalize(payload)).digest('hex');
+}
 
 function loadFromDisk() {
   try { entries = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
@@ -38,6 +67,9 @@ function init() {
 
 function log(action, req, details) {
   init();
+  const lastEntry = entries.length > 0 ? entries[entries.length - 1] : null;
+  const prev_hash = lastEntry ? (lastEntry.hash || computeEntryHash(lastEntry)) : GENESIS_HASH;
+
   const entry = {
     id: 'a_' + Date.now() + '_' + crypto.randomBytes(4).toString('hex'),
     timestamp: new Date().toISOString(),
@@ -48,11 +80,39 @@ function log(action, req, details) {
     method: (req && req.method) || 'SYSTEM',
     path: (req && (req.originalUrl || req.url)) || '-',
     details: details || null,
+    prev_hash: prev_hash,
   };
+  entry.hash = computeEntryHash(entry);
+
   entries.push(entry);
   if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
   writeBuffer.push(entry);
   return entry;
+}
+
+function verifyIntegrity() {
+  init();
+  for (let i = 0; i < entries.length; i++) {
+    const curr = entries[i];
+    if (i === 0) {
+      if (curr.prev_hash && curr.prev_hash !== GENESIS_HASH) {
+        return { valid: false, brokenIndex: 0, reason: 'Genesis block prev_hash invalid', entry: curr };
+      }
+    } else {
+      const prev = entries[i - 1];
+      const expectedPrevHash = prev.hash || computeEntryHash(prev);
+      if (curr.prev_hash && curr.prev_hash !== expectedPrevHash) {
+        return { valid: false, brokenIndex: i, reason: 'Broken prev_hash chain link', entry: curr };
+      }
+    }
+    if (curr.hash) {
+      const computedHash = computeEntryHash(curr);
+      if (curr.hash !== computedHash) {
+        return { valid: false, brokenIndex: i, reason: 'Tampered content / hash mismatch', entry: curr };
+      }
+    }
+  }
+  return { valid: true, count: entries.length };
 }
 
 function query(opts) {
@@ -159,4 +219,5 @@ function routeLogger(moduleName) {
   };
 }
 
-module.exports = { log, query, getActions, getUsers, getStats, exportAll, clear, routeLogger, init };
+module.exports = { log, query, getActions, getUsers, getStats, exportAll, clear, routeLogger, init, verifyIntegrity, computeEntryHash, GENESIS_HASH };
+

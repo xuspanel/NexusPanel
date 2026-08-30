@@ -133,14 +133,21 @@ async function createRole(username, password, isSuperuser, canCreateDb, canLogin
 
 async function listTables(database, schema) {
   if (!validateIdent(database)) throw new Error('Invalid database name');
-  const schemaFilter = schema && validateIdent(schema) ? `AND table_schema = ${quoteLiteral(schema)}` : `AND table_schema NOT IN ('pg_catalog','information_schema','pg_toast')`;
+  const params = [];
+  let schemaFilter;
+  if (schema && validateIdent(schema)) {
+    schemaFilter = 'AND table_schema = $1';
+    params.push(schema);
+  } else {
+    schemaFilter = "AND table_schema NOT IN ('pg_catalog','information_schema','pg_toast')";
+  }
   return await queryRows(database, `SELECT table_schema, table_name,
   (SELECT COUNT(*)::int FROM information_schema.columns c WHERE c.table_schema = t.table_schema AND c.table_name = t.table_name) AS column_count,
   (SELECT reltuples::bigint FROM pg_class WHERE oid = (quote_ident(table_schema) || '.' || quote_ident(table_name))::regclass::oid) AS approx_row_count,
   pg_size_pretty(pg_total_relation_size(quote_ident(table_schema) || '.' || quote_ident(table_name))) AS size_formatted
 FROM information_schema.tables t
 WHERE table_type = 'BASE TABLE' ${schemaFilter}
-ORDER BY table_schema, table_name`);
+ORDER BY table_schema, table_name`, params);
 }
 
 async function listSchemas(database) {
@@ -454,11 +461,16 @@ async function setColumnOrder(database, schema, table, columnOrder) {
   await ensureColumnOrderTable(database);
   const entries = Object.entries(columnOrder || {});
   if (!entries.length) return { ok: true };
-  await exec(database, `DELETE FROM nexus_panel_column_order WHERE schema_name = ${quoteLiteral(schema)} AND table_name = ${quoteLiteral(table)}`);
-  const values = entries.map(function(e, i) {
-    return `(${quoteLiteral(schema)}, ${quoteLiteral(table)}, ${quoteLiteral(e[0])}, ${parseInt(e[1], 10)})`;
-  }).join(', ');
-  await exec(database, `INSERT INTO nexus_panel_column_order (schema_name, table_name, column_name, display_order) VALUES ${values}`);
+  await exec(database, `DELETE FROM nexus_panel_column_order WHERE schema_name = $1 AND table_name = $2`, [schema, table]);
+  const valueClauses = [];
+  const params = [];
+  let pIdx = 1;
+  for (const [colName, orderNum] of entries) {
+    valueClauses.push(`($${pIdx}, $${pIdx + 1}, $${pIdx + 2}, $${pIdx + 3})`);
+    params.push(schema, table, colName, parseInt(orderNum, 10));
+    pIdx += 4;
+  }
+  await exec(database, `INSERT INTO nexus_panel_column_order (schema_name, table_name, column_name, display_order) VALUES ${valueClauses.join(', ')}`, params);
   return { ok: true };
 }
 
@@ -594,7 +606,14 @@ async function revokePrivilege(database, schema, table, privilege, grantee) {
 
 async function listFunctions(database, schema) {
   if (!validateIdent(database)) throw new Error('Invalid database name');
-  const schemaFilter = schema && validateIdent(schema) ? ` AND n.nspname = ${quoteLiteral(schema)}` : ` AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')`;
+  const params = [];
+  let schemaFilter;
+  if (schema && validateIdent(schema)) {
+    schemaFilter = ' AND n.nspname = $1';
+    params.push(schema);
+  } else {
+    schemaFilter = " AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')";
+  }
   return await queryRows(database, `SELECT
     n.nspname AS schema,
     p.proname AS name,
@@ -607,7 +626,7 @@ async function listFunctions(database, schema) {
   JOIN pg_catalog.pg_namespace n ON p.pronamespace = n.oid
   JOIN pg_catalog.pg_language l ON p.prolang = l.oid
   WHERE p.prokind IN ('f','p')${schemaFilter}
-  ORDER BY n.nspname, p.proname`);
+  ORDER BY n.nspname, p.proname`, params);
 }
 
 async function getFunctionDefinition(database, schema, name, args) {
@@ -785,13 +804,20 @@ async function dumpDatabase(database, format) {
 
 async function searchAllTables(database, searchTerm, schema) {
   if (!validateIdent(database)) throw new Error('Invalid database name');
-  const schemaFilter = schema && validateIdent(schema) ? ` AND c.table_schema = ${quoteLiteral(schema)}` : ` AND c.table_schema NOT IN ('pg_catalog','information_schema','pg_toast')`;
+  const params = [];
+  let schemaFilter;
+  if (schema && validateIdent(schema)) {
+    schemaFilter = ' AND c.table_schema = $1';
+    params.push(schema);
+  } else {
+    schemaFilter = " AND c.table_schema NOT IN ('pg_catalog','information_schema','pg_toast')";
+  }
   const tables = await queryRows(database, `SELECT c.table_schema, c.table_name, c.column_name, c.data_type
     FROM information_schema.columns c
     JOIN information_schema.tables t ON c.table_schema = t.table_schema AND c.table_name = t.table_name
     WHERE t.table_type = 'BASE TABLE'${schemaFilter}
       AND c.data_type IN ('text','varchar','character varying','char','name','citext','json','jsonb')
-    ORDER BY c.table_schema, c.table_name, c.ordinal_position`);
+    ORDER BY c.table_schema, c.table_name, c.ordinal_position`, params);
 
   const results = [];
   const term = `%${searchTerm}%`;
@@ -1014,8 +1040,15 @@ async function deleteRows(database, schema, table, pkCol, pkVals) {
 
 async function listViews(database, schema) {
   if (!validateIdent(database)) throw new Error('Invalid database name');
-  const schemaFilter = schema && validateIdent(schema) ? `AND table_schema = ${quoteLiteral(schema)}` : `AND table_schema NOT IN ('pg_catalog','information_schema','pg_toast')`;
-  return await queryRows(database, `SELECT table_schema, table_name AS view_name, view_definition FROM information_schema.views WHERE 1=1 ${schemaFilter} ORDER BY table_schema, table_name`);
+  const params = [];
+  let schemaFilter;
+  if (schema && validateIdent(schema)) {
+    schemaFilter = 'AND table_schema = $1';
+    params.push(schema);
+  } else {
+    schemaFilter = "AND table_schema NOT IN ('pg_catalog','information_schema','pg_toast')";
+  }
+  return await queryRows(database, `SELECT table_schema, table_name AS view_name, view_definition FROM information_schema.views WHERE 1=1 ${schemaFilter} ORDER BY table_schema, table_name`, params);
 }
 
 async function createView(database, schema, viewName, query) {
@@ -1035,7 +1068,14 @@ async function dropView(database, schema, viewName) {
 
 async function listMatViews(database, schema) {
   if (!validateIdent(database)) throw new Error('Invalid database name');
-  const schemaFilter = schema && validateIdent(schema) ? `AND n.nspname = ${quoteLiteral(schema)}` : `AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')`;
+  const params = [];
+  let schemaFilter;
+  if (schema && validateIdent(schema)) {
+    schemaFilter = 'AND n.nspname = $1';
+    params.push(schema);
+  } else {
+    schemaFilter = "AND n.nspname NOT IN ('pg_catalog','information_schema','pg_toast')";
+  }
   return await queryRows(database, `SELECT
     n.nspname AS schema,
     c.relname AS matview_name,
@@ -1044,9 +1084,10 @@ async function listMatViews(database, schema) {
     (SELECT reltuples::bigint FROM pg_catalog.pg_class WHERE oid = c.oid) AS estimated_rows
   FROM pg_catalog.pg_class c
   JOIN pg_catalog.pg_namespace n ON c.relnamespace = n.oid
-  WHERE c.relkind = 'm'${schemaFilter}
-  ORDER BY n.nspname, c.relname`);
+  WHERE c.relkind = 'm' ${schemaFilter}
+  ORDER BY n.nspname, c.relname`, params);
 }
+
 
 async function createMatView(database, schema, name, query, withData) {
   if (!validateIdent(database) || !validateIdent(schema) || !validateIdent(name)) throw new Error('Invalid name');

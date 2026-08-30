@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.36.0] - 2026-08-31
+### Added
+- **Security Sandboxing & Auditing**: Implemented tamper-evident SHA-256 cryptographic chaining in the audit log service. Parameterized all dynamic SQL queries across database services to eliminate SQL injection vectors. Restructured interactive terminal sessions to enforce root privilege escalation strictly for authenticated admin users.
+- **Two-Tier Daemon IPC Architecture**: Decoupled root system privileges from the web-facing Express tier by creating a standalone Root Daemon communicating exclusively over a local Unix Domain Socket (`/var/run/nexuspanel.sock`) with strict NDJSON framing, JSON-RPC 2.0 payload validation, memory limits, and process crash immunity.
+- **Fail-Safe Operations & Rollback Architecture**: Implemented atomic Nginx configuration pre-flight validation and rollback guards to prevent service crashes on syntax errors. Refactored Git Deploy webhooks to use zero-downtime timestamped directory symlinks with automatic state reversion on failure. Injected strict error trapping (`trap cleanup ERR`) and partial state cleanup across all one-click app installers (WordPress, Laravel, Next.js, Node/Express, Static).
+- **Cryptographic Licensing & Resilient Offline Grace Period**: Secured local license caching with HMAC-SHA256 signatures, constant-time verification, and a monotonic high-water mark to prevent clock tampering. Implemented a resilient 72-hour offline grace period and enforced granular, plan-based API route gating (`Starter`, `Pro`, `Enterprise`) at the middleware level.
+
 ## [1.35.8] - 2026-08-08
 ### Fixed
 - **Extract archive 400 error** — the `/api/files/check-extract-conflicts` endpoint crashed with an opaque 400 when archives were missing, corrupt, unreadable, or passed an unsupported format. Now the route returns distinct HTTP statuses (403/404/422) with specific messages, `listArchiveEntries` validates the file exists and wraps raw library errors in clear messages, and the frontend guards against empty path parameters.

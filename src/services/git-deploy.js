@@ -709,66 +709,26 @@ async function handleWebhook(deploymentId, token, signature, body) {
 
   const id = rec.id;
   initLog(id);
-  appendLog(id, 'Webhook triggered — pulling latest changes...');
+  appendLog(id, 'Webhook received for ' + rec.domain + ' — triggering timestamped zero-downtime deployment...');
+
+  if (!acquireDeploySlot(rec.user_id)) {
+    return { status: 429, body: { error: 'Concurrent deploy limit reached for user' } };
+  }
 
   if (!acquireDomainLock(rec.domain)) {
+    releaseDeploySlot(rec.user_id);
     appendLog(id, 'Another deployment for ' + rec.domain + ' is in progress — skipping webhook trigger');
     return { status: 202, body: { status: 'skipped', reason: 'deploy_in_progress' } };
   }
 
-  const cloneId = crypto.randomUUID();
-  setTimeout(async () => {
-    const user = rec.user_id;
-    initLog(cloneId);
-    try {
-      const sshUsed = await step(cloneId, 'SSH key setup', async () => {
-        const key = getSshKey(user);
-        if (!key) return false;
-        await setupSshKey(cloneId, user);
-        return true;
-      });
+  rec.status = 'deploying';
+  rec.started_at = new Date().toISOString();
+  await saveRecord(rec);
 
-      const gitEnv = sshUsed ? { GIT_SSH_COMMAND: 'ssh -o StrictHostKeyChecking=accept-new -i /home/' + user + '/.ssh/id_rsa' } : {};
-      await step(cloneId, 'git pull', async () => {
-        const r = await runAsUserLogged(cloneId, user, 'git', ['-C', rec.deploy_dir, 'pull', 'origin', rec.branch], { env: gitEnv, timeout: 300000 });
-        if (r.status !== 0) throw new Error('git pull failed: ' + tail(r.stderr || r.stdout));
-      });
-
-      await step(cloneId, 'Resolve commit', async () => {
-        const r = await runAsUserLogged(cloneId, user, 'git', ['-C', rec.deploy_dir, 'rev-parse', 'HEAD'], { timeout: 15000 });
-        if (r.status === 0) { rec.commit_hash = (r.stdout || '').trim().slice(0, 12); await saveRecord(rec); }
-      });
-
-      injectEnvVars(rec.deploy_dir, id);
-
-      if (rec.app_type === 'node') {
-        const buildCmd = rec.custom_build_cmd;
-        await step(cloneId, 'npm ci', async () => {
-          const r = await runAsUserLogged(cloneId, user, 'npm', ['ci', '--production=false', ...NPM_RETRY_FLAGS], { cwd: rec.deploy_dir, env: proxyEnv(), timeout: 300000 });
-          if (r.status !== 0) throw new Error('npm ci failed');
-        });
-        await step(cloneId, 'npm build', async () => {
-          const r = await runAsUserLogged(cloneId, user, 'bash', ['-lc', buildCmd || 'npm run build'], { cwd: rec.deploy_dir, env: proxyEnv(), timeout: 300000 });
-          if (r.status !== 0) throw new Error('build failed');
-        });
-      }
-
-      ensureDeploySymlink(rec);
-      if (rec.app_type === 'node' && rec.node_entry) await restartPm2(cloneId, user, rec.pm2_name);
-
-      await step(cloneId, 'Verify', async () => { await verifyDeploy(cloneId, rec); });
-
-      rec.finished_at = new Date().toISOString();
-      rec.error = '';
-      await saveRecord(rec);
-      appendLog(cloneId, '✔ Webhook deploy complete');
-    } catch (e) {
-      appendLog(cloneId, '✖ Webhook deploy failed: ' + (e && e.message || e));
-      rec.error = String(e && e.message || e).slice(0, 500);
-      await saveRecord(rec).catch(() => {});
-    } finally {
-      releaseDomainLock(rec.domain);
-    }
+  setTimeout(() => {
+    performDeploy(rec).catch((err) => {
+      console.error('[Deploy] Webhook deployment error:', err.message);
+    });
   }, 50);
 
   return { status: 202, body: { status: 'triggered', id: rec.id } };
