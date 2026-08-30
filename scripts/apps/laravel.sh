@@ -3,6 +3,15 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
+cleanup() {
+  local exit_code=$?
+  log "ERROR: Laravel installation failed (exit code $exit_code). Cleaning up..."
+  cleanup_path "${INSTALL_PATH:-}"
+  cleanup_mysql_db "${DB_NAME:-}" "${DB_USER:-}" "${DB_PASSWORD:-}" "${DB_PORT:-3306}"
+  exit "$exit_code"
+}
+trap cleanup ERR
+
 for v in INSTALL_PATH APP_URL DB_NAME DB_USER DB_PASSWORD SITE_TITLE; do
   require_env "$v"
 done

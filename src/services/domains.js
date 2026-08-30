@@ -93,6 +93,17 @@ function nginxTestAndReload() {
   const reload = runSafeSync('nginx', ['-s', 'reload']);
   const reloadOutput = (reload.stdout + reload.stderr);
   if (reload.status !== 0 || reloadOutput.includes('failed') || reloadOutput.includes('error')) {
+    if (reloadOutput.includes('invalid PID') || reloadOutput.includes('No such process') || reloadOutput.includes('PID file') || reload.status !== 0) {
+      const sysReload = runSafeSync('systemctl', ['reload', 'nginx']);
+      if (sysReload.status === 0) {
+        return true;
+      }
+      const sysRestart = runSafeSync('systemctl', ['restart', 'nginx']);
+      if (sysRestart.status === 0) {
+        return true;
+      }
+      throw new Error('nginx reload & systemctl restart failed:\n' + (sysRestart.stderr || sysRestart.stdout || reloadOutput));
+    }
     throw new Error('nginx reload failed:\n' + (reloadOutput || reload.error));
   }
   return true;
@@ -539,8 +550,38 @@ function writeNginxConf(domain, confContent) {
   const confPath = path.join(NGINX_CONF_DIR, domain + '.conf');
   backupNginxConf(domain);
   const tmpFile = confPath + '.tmp';
+
+  if (!fs.existsSync(NGINX_CONF_DIR)) {
+    try { fs.mkdirSync(NGINX_CONF_DIR, { recursive: true }); } catch (_) {}
+  }
+
   fs.writeFileSync(tmpFile, confContent, 'utf8');
-  fs.renameSync(tmpFile, confPath);
+
+  const originalExists = fs.existsSync(confPath);
+  let originalContent = null;
+  if (originalExists) {
+    try { originalContent = fs.readFileSync(confPath, 'utf8'); } catch (_) {}
+  }
+
+  try {
+    fs.renameSync(tmpFile, confPath);
+    const test = runSafeSync('nginx', ['-t']);
+    const testOutput = (test.stdout + test.stderr);
+    if (test.status !== 0 && (testOutput.includes('[emerg]') || testOutput.includes('test failed') || testOutput.includes('syntax error'))) {
+      if (originalExists && originalContent !== null) {
+        fs.writeFileSync(confPath, originalContent, 'utf8');
+      } else {
+        try { fs.unlinkSync(confPath); } catch (_) {}
+      }
+      throw new Error('Nginx pre-flight test failed:\n' + (testOutput || test.error));
+    }
+  } catch (err) {
+    if (fs.existsSync(tmpFile)) {
+      try { fs.unlinkSync(tmpFile); } catch (_) {}
+    }
+    throw err;
+  }
+
   return confPath;
 }
 

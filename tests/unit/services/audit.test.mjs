@@ -46,4 +46,18 @@ describe('audit service', () => {
     const entries = audit.exportAll();
     expect(Array.isArray(entries)).toBe(true);
   });
+
+  it('generates SHA-256 hash chain and passes integrity verification', () => {
+    const audit = require('../../../src/services/audit.js');
+    const e1 = audit.log('security:test1', { user: { username: 'root', role: 'admin' }, ip: '127.0.0.1' }, { step: 1 });
+    const e2 = audit.log('security:test2', { user: { username: 'root', role: 'admin' }, ip: '127.0.0.1' }, { step: 2 });
+    expect(e1.hash).toBeDefined();
+    expect(e1.prev_hash).toBeDefined();
+    expect(e2.prev_hash).toBe(e1.hash);
+    expect(e2.hash).toBe(audit.computeEntryHash(e2));
+
+    const check = audit.verifyIntegrity();
+    expect(check.valid).toBe(true);
+  });
 });
+

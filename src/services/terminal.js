@@ -79,13 +79,27 @@ function sanitizeEnv(extra) {
   return { ...clean, ...extra };
 }
 
-function createTerminalSession(cols, rows, env) {
-  const shell = process.env.SHELL || (os.platform() === 'win32' ? 'powershell.exe' : 'bash');
-  const session = pty.spawn(shell, [], {
+function createTerminalSession(cols, rows, env = {}) {
+  const isWindows = os.platform() === 'win32';
+  const defaultShell = process.env.SHELL || (isWindows ? 'powershell.exe' : 'bash');
+  const isRoot = !process.getuid || process.getuid() === 0;
+  const isAdmin = env.ROLE === 'admin' || env.role === 'admin' || env.USER === 'admin';
+
+  let bin = defaultShell;
+  let args = [];
+  let cwd = process.env.HOME || (isRoot ? '/root' : '/home/nexuspanel');
+
+  if (!isWindows && !isRoot && isAdmin) {
+    bin = 'sudo';
+    args = ['-i', '-u', 'root'];
+    cwd = '/root';
+  }
+
+  const session = pty.spawn(bin, args, {
     name: 'xterm-256color',
     cols: cols || 80,
     rows: rows || 24,
-    cwd: process.env.HOME || '/root',
+    cwd: cwd,
     env: sanitizeEnv(env),
   });
 
@@ -93,3 +107,4 @@ function createTerminalSession(cols, rows, env) {
 }
 
 module.exports = { getPresets, addPreset, updatePreset, deletePreset, createTerminalSession };
+
