@@ -150,6 +150,7 @@ function renderDomainsTable(domains) {
       '<td class="domain-date-cell">' + (d.createdAt ? formatDate(d.createdAt) : '—') + '</td>' +
       '<td class="domain-actions">' +
         '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="visit" data-dm-domain="' + escHtml(d.domain) + '" data-dm-port="' + d.port + '" data-dm-ssl="' + d.sslEnabled + '" title="Open site in new tab">🔗</button>' +
+        '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="dns" data-dm-domain="' + escHtml(d.domain) + '" title="DNS Authentication Records (DKIM, SPF, DMARC)">🔑</button>' +
         '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="nginx" data-dm-domain="' + escHtml(d.domain) + '" title="View/Edit nginx config">⚙</button>' +
         (!d.sslEnabled ? '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="ssl" data-dm-domain="' + escHtml(d.domain) + '" title="Install SSL">🔒</button>' : '') +
         '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="edit" data-dm-domain="' + escHtml(d.domain) + '" title="Edit">✎</button>' +
@@ -171,6 +172,9 @@ function renderDomainsTable(domains) {
       const action = btn.dataset.dmAction;
       const name = btn.dataset.dmDomain;
       if (action === 'visit') openVisitDomain(name, parseInt(btn.dataset.dmPort), btn.dataset.dmSsl === 'true');
+      else if (action === 'dns') {
+        if (typeof window.openDnsModal === 'function') window.openDnsModal(name);
+      }
       else if (action === 'nginx') openDomainNginx(name);
       else if (action === 'ssl') installDomainSSL(name);
       else if (action === 'edit') openEditDomain(name);

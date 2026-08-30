@@ -327,6 +327,9 @@ function closeDnsModal() {
   if (modal) modal.style.display = 'none';
 }
 
+window.openDnsModal = openDnsModal;
+window.closeDnsModal = closeDnsModal;
+
 /* ─── Email Client ─── */
 
 async function openEmailClient(username) {
