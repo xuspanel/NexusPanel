@@ -1,42 +1,46 @@
+const pty = require('node-pty');
+const os = require('os');
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
-const pty = require('node-pty');
 
 const PRESETS_FILE = path.join(__dirname, '..', '..', 'data', 'terminal-presets.json');
+
+const VALID_CATEGORIES = ['system', 'services', 'docker', 'network', 'security', 'logs', 'custom'];
+
+function normalizeCategory(cat) {
+  if (!cat || typeof cat !== 'string') return 'custom';
+  const c = cat.toLowerCase().trim();
+  return VALID_CATEGORIES.includes(c) ? c : 'custom';
+}
 
 function loadPresets() {
   try {
     if (fs.existsSync(PRESETS_FILE)) {
-      const presets = JSON.parse(fs.readFileSync(PRESETS_FILE, 'utf8'));
-      let changed = false;
-      presets.forEach(p => {
-        if (!p.category) {
-          p.category = 'Custom';
-          changed = true;
-        }
-      });
-      if (changed) savePresets(presets);
-      return presets;
+      return JSON.parse(fs.readFileSync(PRESETS_FILE, 'utf8'));
     }
-  } catch (_) {}
+  } catch (err) {
+    console.error('[Terminal] Error loading presets:', err.message);
+  }
   return [];
 }
 
 function savePresets(presets) {
-  fs.writeFileSync(PRESETS_FILE, JSON.stringify(presets, null, 2), 'utf8');
+  try {
+    const dir = path.dirname(PRESETS_FILE);
+    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
+    fs.writeFileSync(PRESETS_FILE, JSON.stringify(presets, null, 2), 'utf8');
+  } catch (err) {
+    console.error('[Terminal] Error saving presets:', err.message);
+  }
 }
 
-function getPresets() {
-  return loadPresets();
-}
-
-const PRESET_CATEGORIES = ['System', 'Docker', 'Files', 'Network', 'Database', 'Custom'];
-
-function normalizeCategory(cat) {
-  const c = String(cat || 'Custom').trim();
-  const match = PRESET_CATEGORIES.find(x => x.toLowerCase() === c.toLowerCase());
-  return match || 'Custom';
+function getPresets(category) {
+  const all = loadPresets();
+  if (category) {
+    const norm = normalizeCategory(category);
+    return all.filter(p => p.category === norm);
+  }
+  return all;
 }
 
 function addPreset(label, cmd, category) {
@@ -87,12 +91,17 @@ function createTerminalSession(cols, rows, env = {}) {
 
   let bin = defaultShell;
   let args = [];
-  let cwd = process.env.HOME || (isRoot ? '/root' : '/home/nexuspanel');
+  // Use a universally accessible working directory for initial spawn so chdir(2) never fails
+  let cwd = '/tmp';
 
   if (!isWindows && !isRoot && isAdmin) {
     bin = 'sudo';
     args = ['-i', '-u', 'root'];
-    cwd = '/root';
+    cwd = '/tmp';
+  } else if (isRoot) {
+    cwd = process.env.HOME || '/root';
+  } else {
+    cwd = '/tmp';
   }
 
   const session = pty.spawn(bin, args, {
@@ -107,4 +116,3 @@ function createTerminalSession(cols, rows, env = {}) {
 }
 
 module.exports = { getPresets, addPreset, updatePreset, deletePreset, createTerminalSession };
-

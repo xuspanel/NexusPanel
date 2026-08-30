@@ -23,6 +23,20 @@ let serverInstance = null;
 let currentSocketPath = null;
 const activeSockets = new Set();
 
+function resolveNexusPanelGid() {
+  try {
+    const groupFile = fs.readFileSync('/etc/group', 'utf8');
+    for (const line of groupFile.split('\n')) {
+      const parts = line.split(':');
+      if (parts[0] === 'nexuspanel' && parts[2]) {
+        const gid = parseInt(parts[2], 10);
+        if (!isNaN(gid)) return gid;
+      }
+    }
+  } catch (_) {}
+  return process.getgid ? process.getgid() : 0;
+}
+
 function executePrivilegedCommand(params) {
   return new Promise((resolve) => {
     const { command, args, timeout, maxBuffer, env, input } = params;
@@ -162,11 +176,13 @@ function startDaemon(customSockPath) {
     server.listen(sockPath, () => {
       console.log(`[DAEMON] NexusPanel Root Daemon listening on ${sockPath}`);
       try {
-        fs.chmodSync(sockPath, 0o660);
-        const groupInfo = process.getgid ? process.getgid() : null;
-        if (process.getuid && process.getuid() === 0 && groupInfo !== null) {
-          try { fs.chownSync(sockPath, 0, groupInfo); } catch (_) {}
+        const nexuspanelGid = resolveNexusPanelGid();
+        if (process.getuid && process.getuid() === 0) {
+          try { fs.chownSync(sockPath, 0, nexuspanelGid); } catch (err) {
+            console.warn('[DAEMON] Could not chown socket to group ' + nexuspanelGid + ':', err.message);
+          }
         }
+        fs.chmodSync(sockPath, 0o660);
       } catch (err) {
         console.warn('[DAEMON] Note: Could not set permissions on socket:', err.message);
       }
@@ -219,4 +235,4 @@ if (require.main === module) {
   startDaemon();
 }
 
-module.exports = { startDaemon, stopDaemon, executePrivilegedCommand };
+module.exports = { startDaemon, stopDaemon, executePrivilegedCommand, resolveNexusPanelGid };
