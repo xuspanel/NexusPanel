@@ -239,6 +239,18 @@ function Install-Application {
     New-Item -ItemType Directory -Force -Path $DATA_DIR | Out-Null
     New-Item -ItemType Directory -Force -Path $LOG_DIR | Out-Null
 
+    # Create upload staging directory with permissive ACLs for Two-Tier IPC
+    $uploadDir = "$env:TEMP\nexus-uploads"
+    New-Item -ItemType Directory -Force -Path $uploadDir | Out-Null
+    try {
+        $acl = Get-Acl $uploadDir
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule("Everyone", "FullControl", "ContainerInherit,ObjectInherit", "None", "Allow")
+        $acl.AddAccessRule($rule)
+        Set-Acl $uploadDir $acl
+    } catch {
+        Write-Warning "Could not configure custom ACL on $uploadDir: $_"
+    }
+
     # Clone repo
     $repoDir = "$env:TEMP\nexuspanel-repo"
     if (Test-Path $repoDir) {
@@ -258,33 +270,59 @@ function Install-Application {
 
 # ─── Service Creation via NSSM ────────────────────────
 function Create-Service {
-    Write-Info "Creating Windows service..."
+    Write-Info "Creating Two-Tier Windows services (Daemon + Web)..."
 
     if ($DryRun) {
-        Write-Info "[DRY-RUN] Would create service: NexusPanel"
+        Write-Info "[DRY-RUN] Would create services: NexusPanel-Daemon and NexusPanel-Web"
         return
     }
 
-    # Stop existing service if present
+    $nodeExe = "C:\Program Files\nodejs\node.exe"
+    if (-not (Test-Path $nodeExe)) {
+        $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+        if ($nodeCmd) { $nodeExe = $nodeCmd.Source }
+    }
+
+    # Cleanup legacy single service if exists
     nssm stop NexusPanel 2>$null
     nssm remove NexusPanel confirm 2>$null
 
-    # Create service with NSSM
-    nssm install NexusPanel "C:\Program Files\nodejs\node.exe" "$InstallDir\server.js"
-    nssm set NexusPanel AppDirectory $InstallDir
-    nssm set NexusPanel DisplayName "NexusPanel - VPS Control Panel"
-    nssm set NexusPanel Description "All-in-one VPS control panel"
-    nssm set NexusPanel Start SERVICE_AUTO_START
-    nssm set NexusPanel AppStdout "$LOG_DIR\stdout.log"
-    nssm set NexusPanel AppStderr "$LOG_DIR\stderr.log"
-    nssm set NexusPanel AppRotateFiles 1
-    nssm set NexusPanel AppRotateSeconds 86400
-    nssm set NexusPanel AppRotateBytes 10485760
-    nssm set NexusPanel AppEnvironmentExtra "NODE_ENV=production"
+    # 1. Root Daemon Service (NexusPanel-Daemon)
+    nssm stop NexusPanel-Daemon 2>$null
+    nssm remove NexusPanel-Daemon confirm 2>$null
 
-    # Start service
-    nssm start NexusPanel
-    Write-Success "Service created and started"
+    nssm install NexusPanel-Daemon $nodeExe "$InstallDir\src\daemon\server.js"
+    nssm set NexusPanel-Daemon AppDirectory $InstallDir
+    nssm set NexusPanel-Daemon DisplayName "NexusPanel Root Daemon"
+    nssm set NexusPanel-Daemon Description "NexusPanel Privileged Background Daemon"
+    nssm set NexusPanel-Daemon Start SERVICE_AUTO_START
+    nssm set NexusPanel-Daemon AppStdout "$LOG_DIR\daemon-stdout.log"
+    nssm set NexusPanel-Daemon AppStderr "$LOG_DIR\daemon-stderr.log"
+    nssm set NexusPanel-Daemon AppRotateFiles 1
+    nssm set NexusPanel-Daemon AppRotateSeconds 86400
+    nssm set NexusPanel-Daemon AppRotateBytes 10485760
+
+    # 2. Web Tier Service (NexusPanel-Web)
+    nssm stop NexusPanel-Web 2>$null
+    nssm remove NexusPanel-Web confirm 2>$null
+
+    nssm install NexusPanel-Web $nodeExe "$InstallDir\server.js"
+    nssm set NexusPanel-Web AppDirectory $InstallDir
+    nssm set NexusPanel-Web DisplayName "NexusPanel Web Tier"
+    nssm set NexusPanel-Web Description "NexusPanel VPS Control Panel Web Interface"
+    nssm set NexusPanel-Web Start SERVICE_AUTO_START
+    nssm set NexusPanel-Web AppStdout "$LOG_DIR\web-stdout.log"
+    nssm set NexusPanel-Web AppStderr "$LOG_DIR\web-stderr.log"
+    nssm set NexusPanel-Web AppRotateFiles 1
+    nssm set NexusPanel-Web AppRotateSeconds 86400
+    nssm set NexusPanel-Web AppRotateBytes 10485760
+    nssm set NexusPanel-Web AppEnvironmentExtra "NODE_ENV=production"
+    nssm set NexusPanel-Web DependOnService "NexusPanel-Daemon"
+
+    # Start services
+    nssm start NexusPanel-Daemon
+    nssm start NexusPanel-Web
+    Write-Success "Dual services created and started: NexusPanel-Daemon, NexusPanel-Web"
 }
 
 # ─── Environment Configuration ────────────────────────
@@ -323,13 +361,23 @@ function Test-Installation {
     $passed = 0
     $failed = 0
 
-    # Service
-    $svc = Get-Service -Name "NexusPanel" -ErrorAction SilentlyContinue
-    if ($svc -and $svc.Status -eq "Running") {
-        Write-Success "Service is running"
+    # Daemon Service
+    $daemonSvc = Get-Service -Name "NexusPanel-Daemon" -ErrorAction SilentlyContinue
+    if ($daemonSvc -and $daemonSvc.Status -eq "Running") {
+        Write-Success "Daemon Service (NexusPanel-Daemon) is running"
         $passed++
     } else {
-        Write-Error "Service is NOT running"
+        Write-Error "Daemon Service (NexusPanel-Daemon) is NOT running"
+        $failed++
+    }
+
+    # Web Service
+    $webSvc = Get-Service -Name "NexusPanel-Web" -ErrorAction SilentlyContinue
+    if ($webSvc -and $webSvc.Status -eq "Running") {
+        Write-Success "Web Service (NexusPanel-Web) is running"
+        $passed++
+    } else {
+        Write-Error "Web Service (NexusPanel-Web) is NOT running"
         $failed++
     }
 
@@ -376,7 +424,8 @@ function Show-Summary {
   Config:     $InstallDir\.env
   Logs:       $LOG_DIR
 
-  Manage:     nssm {start|stop|restart} NexusPanel
+  Manage:     nssm {start|stop|restart} NexusPanel-Daemon
+              nssm {start|stop|restart} NexusPanel-Web
 "@ -ForegroundColor Green
 }
 

@@ -21,7 +21,8 @@ fi
 : "${LOG_DIR:=/usr/local/var/log/nexuspanel}"
 : "${DATA_DIR:=${INSTALL_DIR}/data}"
 : "${HOME_DIR:=${HOME}}"
-LAUNCHD_PLIST="/Library/LaunchDaemons/com.nexuspanel.plist"
+LAUNCHD_DAEMON_PLIST="/Library/LaunchDaemons/com.nexuspanel.daemon.plist"
+LAUNCHD_WEB_PLIST="/Library/LaunchDaemons/com.nexuspanel.web.plist"
 
 # ─── OS Detection ─────────────────────────────────────
 detect_os() {
@@ -144,6 +145,8 @@ install_app() {
   fi
 
   mkdir -p "${INSTALL_DIR}" "${DATA_DIR}" "${LOG_DIR}"
+  mkdir -p /tmp/nexus-uploads
+  chmod 777 /tmp/nexus-uploads 2>/dev/null || chmod 755 /tmp/nexus-uploads 2>/dev/null || true
 
   # Clone or update
   if [ -d "${INSTALL_DIR}/.git" ]; then
@@ -173,24 +176,68 @@ install_app() {
 
 # ─── LaunchDaemon ─────────────────────────────────────
 create_launchdaemon() {
-  log_info "Creating LaunchDaemon..."
+  log_info "Creating Dual LaunchDaemons for Two-Tier Architecture..."
 
   if ${DRY_RUN}; then
-    log_info "[DRY-RUN] Would create ${LAUNCHD_PLIST}"
+    log_info "[DRY-RUN] Would create ${LAUNCHD_DAEMON_PLIST} and ${LAUNCHD_WEB_PLIST}"
     return 0
   fi
 
   local node_path
   node_path=$(command -v node)
 
-  cat > "${LAUNCHD_PLIST}" << PLIST
+  # 1. Root Daemon LaunchDaemon (com.nexuspanel.daemon)
+  cat > "${LAUNCHD_DAEMON_PLIST}" << PLIST_DAEMON
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
   "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>Label</key>
-    <string>com.nexuspanel</string>
+    <string>com.nexuspanel.daemon</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>${node_path}</string>
+        <string>${INSTALL_DIR}/src/daemon/server.js</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>${INSTALL_DIR}</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>${LOG_DIR}/daemon.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>${LOG_DIR}/daemon-error.log</string>
+
+    <key>ThrottleInterval</key>
+    <integer>3</integer>
+
+    <key>HardResourceLimits</key>
+    <dict>
+        <key>NumberOfFiles</key>
+        <integer>65536</integer>
+    </dict>
+</dict>
+</plist>
+PLIST_DAEMON
+
+  # 2. Web Tier LaunchDaemon (com.nexuspanel.web)
+  cat > "${LAUNCHD_WEB_PLIST}" << PLIST_WEB
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.nexuspanel.web</string>
 
     <key>ProgramArguments</key>
     <array>
@@ -216,21 +263,13 @@ create_launchdaemon() {
     <true/>
 
     <key>StandardOutPath</key>
-    <string>${LOG_DIR}/nexuspanel.log</string>
+    <string>${LOG_DIR}/web.log</string>
 
     <key>StandardErrorPath</key>
-    <string>${LOG_DIR}/nexuspanel-error.log</string>
+    <string>${LOG_DIR}/web-error.log</string>
 
     <key>ThrottleInterval</key>
     <integer>5</integer>
-
-    <key>Nice</key>
-    <integer>-10</integer>
-
-    <key>WatchPaths</key>
-    <array>
-        <string>${INSTALL_DIR}</string>
-    </array>
 
     <key>HardResourceLimits</key>
     <dict>
@@ -239,29 +278,35 @@ create_launchdaemon() {
     </dict>
 </dict>
 </plist>
-PLIST
+PLIST_WEB
 
-  chmod 644 "${LAUNCHD_PLIST}"
-  log_info "LaunchDaemon created at ${LAUNCHD_PLIST}"
+  chmod 644 "${LAUNCHD_DAEMON_PLIST}" "${LAUNCHD_WEB_PLIST}"
+  log_info "Dual LaunchDaemons created: com.nexuspanel.daemon and com.nexuspanel.web"
 }
 
 # ─── Service Management ───────────────────────────────
 start_service() {
-  log_info "Starting NexusPanel service..."
+  log_info "Starting NexusPanel services..."
 
   if ${DRY_RUN}; then
-    log_info "[DRY-RUN] Would load LaunchDaemon"
+    log_info "[DRY-RUN] Would load Dual LaunchDaemons"
     return 0
   fi
 
-  launchctl unload "${LAUNCHD_PLIST}" 2>/dev/null || true
-  launchctl load -w "${LAUNCHD_PLIST}" 2>/dev/null || {
-    log_error "Failed to load LaunchDaemon — check permissions or SIP status"
-    log_info "System Integrity Protection (SIP) may need to be configured"
+  launchctl unload "${LAUNCHD_DAEMON_PLIST}" 2>/dev/null || true
+  launchctl unload "${LAUNCHD_WEB_PLIST}" 2>/dev/null || true
+
+  launchctl load -w "${LAUNCHD_DAEMON_PLIST}" 2>/dev/null || {
+    log_error "Failed to load Root Daemon LaunchDaemon"
     return ${EXIT_SERVICE_FAILURE}
   }
 
-  log_success "Service loaded via launchctl"
+  launchctl load -w "${LAUNCHD_WEB_PLIST}" 2>/dev/null || {
+    log_error "Failed to load Web Tier LaunchDaemon"
+    return ${EXIT_SERVICE_FAILURE}
+  }
+
+  log_success "Two-Tier services loaded via launchctl (daemon + web)"
 }
 
 # ─── Firewall Configuration ───────────────────────────
@@ -303,12 +348,21 @@ verify_macos() {
   local checks_passed=0
   local checks_failed=0
 
-  # LaunchDaemon loaded
-  if launchctl list | grep -q "com.nexuspanel"; then
-    log_success "LaunchDaemon is loaded"
+  # Root Daemon LaunchDaemon
+  if launchctl list | grep -q "com.nexuspanel.daemon"; then
+    log_success "Root Daemon LaunchDaemon (com.nexuspanel.daemon) is loaded"
     checks_passed=$((checks_passed + 1))
   else
-    log_error "LaunchDaemon is NOT loaded"
+    log_error "Root Daemon LaunchDaemon is NOT loaded"
+    checks_failed=$((checks_failed + 1))
+  fi
+
+  # Web Tier LaunchDaemon
+  if launchctl list | grep -q "com.nexuspanel.web"; then
+    log_success "Web Tier LaunchDaemon (com.nexuspanel.web) is loaded"
+    checks_passed=$((checks_passed + 1))
+  else
+    log_error "Web Tier LaunchDaemon is NOT loaded"
     checks_failed=$((checks_failed + 1))
   fi
 
@@ -347,9 +401,10 @@ summary_macos() {
   echo -e "  ${BOLD}Logs:${NC}      ${LOG_DIR}"
   echo ""
   echo -e "  ${BOLD}Manage:${NC}"
-  echo "    launchctl load -w ${LAUNCHD_PLIST}"
-  echo "    launchctl unload ${LAUNCHD_PLIST}"
-  echo "    launchctl list com.nexuspanel"
+  echo "    launchctl load -w ${LAUNCHD_DAEMON_PLIST}"
+  echo "    launchctl load -w ${LAUNCHD_WEB_PLIST}"
+  echo "    launchctl list com.nexuspanel.daemon"
+  echo "    launchctl list com.nexuspanel.web"
 }
 
 # ─── Main ─────────────────────────────────────────────
