@@ -686,6 +686,7 @@ function getSSLCertInfo(domain) {
     const certPath = '/etc/letsencrypt/live/' + domain + '/fullchain.pem';
     if (!fs.existsSync(certPath)) return null;
     const result = runSafeSync('openssl', ['x509', '-enddate', '-noout', '-in', certPath]);
+    if (result.status !== 0 || !result.stdout) return null;
     const match = result.stdout.match(/notAfter=(.+)/);
     if (!match) return null;
     const expiryDate = new Date(match[1].trim());
@@ -706,17 +707,41 @@ function installCertbotSSL(domain) {
   if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
   const adminEmail = process.env.CERTBOT_EMAIL || 'admin@meedo51.com';
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(adminEmail)) throw new Error('Invalid email');
-  const result = runSafeSync('certbot', ['--nginx', '-d', domain, '--non-interactive', '--agree-tos', '-m', adminEmail], { timeout: 120000 });
-  const output = (result.stdout || '') + (result.stderr || '');
+
+  // Ensure Nginx vhost is active before Certbot challenges the domain
+  try {
+    nginxTestAndReload();
+  } catch (err) {
+    console.warn('[Domains] Pre-certbot nginx reload warning for ' + domain + ':', err.message);
+  }
+
+  const result = runSafeSync('certbot', [
+    '--nginx',
+    '-d', domain,
+    '--non-interactive',
+    '--agree-tos',
+    '-m', adminEmail
+  ], { timeout: 120000 });
+
+  const output = ((result.stdout || '') + '\n' + (result.stderr || '') + (result.error ? '\n' + result.error : '')).trim();
   const certPath = '/etc/letsencrypt/live/' + domain + '/fullchain.pem';
-  const success = fs.existsSync(certPath);
-  return { success, output };
+  const success = result.status === 0 || fs.existsSync(certPath);
+
+  if (!success) {
+    console.error('[Domains] Certbot SSL provisioning failed for domain ' + domain + ':\n' + output);
+  }
+
+  return { success, output, error: result.error || null, status: result.status };
 }
 
 function deleteCertbotSSL(domain) {
   if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
   const result = runSafeSync('certbot', ['delete', '--cert-name', domain, '--non-interactive'], { timeout: 30000 });
-  return { output: (result.stdout || '') + (result.stderr || '') };
+  const output = ((result.stdout || '') + '\n' + (result.stderr || '') + (result.error ? '\n' + result.error : '')).trim();
+  if (result.status !== 0) {
+    console.warn('[Domains] Certbot SSL deletion notice for ' + domain + ':', output);
+  }
+  return { output, status: result.status };
 }
 
 function sanitizeDomain(d, name) {
