@@ -52,9 +52,13 @@ function executePrivilegedCommand(params) {
       });
     }
 
-    // Crucial Security Guard: chown / chmod restricted strictly to /var/lib/rspamd/dkim/
-    if (validation.command === 'chown' || validation.command === 'chmod') {
-      const targetPaths = (args || []).filter(a => typeof a === 'string' && !a.startsWith('-')).slice(1);
+    // Crucial Security Guard: Restricted filesystem mutations
+    const FS_MUTATION_BINARIES = new Set(['chown', 'chmod', 'mkdir', 'cp', 'mv', 'rm']);
+    if (FS_MUTATION_BINARIES.has(validation.command)) {
+      let targetPaths = (args || []).filter(a => typeof a === 'string' && !a.startsWith('-'));
+      if (validation.command === 'chown' || validation.command === 'chmod') {
+        targetPaths = targetPaths.slice(1);
+      }
       if (targetPaths.length === 0) {
         return resolve({
           result: null,
@@ -64,14 +68,24 @@ function executePrivilegedCommand(params) {
           }
         });
       }
-      for (const targetPath of targetPaths) {
+
+      const allowedPrefixes = ['/var/www/', '/var/www', '/etc/nginx/', '/var/lib/rspamd/dkim/', '/var/log/nginx/'];
+
+      for (let idx = 0; idx < targetPaths.length; idx++) {
+        const targetPath = targetPaths[idx];
         const normalized = path.normalize(targetPath);
-        if (!normalized.startsWith('/var/lib/rspamd/dkim/')) {
+
+        // For cp/mv, source file (first path argument) can be located in /tmp
+        const isSourceArg = (validation.command === 'cp' || validation.command === 'mv') && idx === 0 && targetPaths.length > 1;
+        const isTmpAllowed = isSourceArg && (normalized.startsWith('/tmp/') || normalized === '/tmp');
+
+        const isAllowed = isTmpAllowed || allowedPrefixes.some(prefix => normalized.startsWith(prefix) || normalized === prefix.replace(/\/$/, ''));
+        if (!isAllowed) {
           return resolve({
             result: null,
             error: {
               code: ERROR_CODES.FORBIDDEN_BINARY,
-              message: `Unauthorized path for ${validation.command}: target must strictly begin with /var/lib/rspamd/dkim/`
+              message: `Unauthorized path for ${validation.command}: target must strictly begin with /var/www/, /etc/nginx/, or /var/lib/rspamd/dkim/`
             }
           });
         }

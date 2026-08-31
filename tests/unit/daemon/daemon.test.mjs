@@ -31,7 +31,9 @@ describe('Daemon & Two-Tier IPC Architecture', () => {
     expect(protocol.validateCommand('systemctl').valid).toBe(true);
     expect(protocol.validateCommand('iptables').valid).toBe(true);
     expect(protocol.validateCommand('certbot').valid).toBe(true);
-    expect(protocol.validateCommand('rm').valid).toBe(false);
+    expect(protocol.validateCommand('mkdir').valid).toBe(true);
+    expect(protocol.validateCommand('rm').valid).toBe(true);
+    expect(protocol.validateCommand('dd').valid).toBe(false);
     expect(protocol.validateCommand('../bin/bash').valid).toBe(false);
   });
 
@@ -43,18 +45,22 @@ describe('Daemon & Two-Tier IPC Architecture', () => {
 
   it('rejects unwhitelisted commands with FORBIDDEN_BINARY error code', async () => {
     await expect(
-      daemonClient.execViaSocket('rm', ['-rf', '/tmp/fake'], { timeout: 5000 }, TEST_SOCK)
+      daemonClient.execViaSocket('dd', ['if=/dev/zero', 'of=/tmp/test'], { timeout: 5000 }, TEST_SOCK)
     ).rejects.toThrow(/Forbidden binary/i);
   });
 
-  it('rejects chown or chmod commands outside /var/lib/rspamd/dkim/', async () => {
+  it('rejects chown, chmod, and rm commands outside authorized directories', async () => {
     await expect(
       daemonClient.execViaSocket('chmod', ['0777', '/etc/shadow'], { timeout: 5000 }, TEST_SOCK)
     ).rejects.toThrow(/Unauthorized path for chmod/i);
 
     await expect(
-      daemonClient.execViaSocket('chown', ['root:root', '/tmp/malicious'], { timeout: 5000 }, TEST_SOCK)
+      daemonClient.execViaSocket('chown', ['root:root', '/var/tmp/malicious'], { timeout: 5000 }, TEST_SOCK)
     ).rejects.toThrow(/Unauthorized path for chown/i);
+
+    await expect(
+      daemonClient.execViaSocket('rm', ['-rf', '/etc/shadow'], { timeout: 5000 }, TEST_SOCK)
+    ).rejects.toThrow(/Unauthorized path for rm/i);
   });
 
   it('enforces payload limits', () => {

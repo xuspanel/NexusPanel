@@ -80,7 +80,7 @@ function backupNginxConf(domain) {
   if (fs.existsSync(confPath)) {
     const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const backupPath = path.join(NGINX_CONF_DIR, domain + '.conf.bak.' + ts);
-    try { fs.copyFileSync(confPath, backupPath); } catch (_) {}
+    try { runSafeSync('cp', [confPath, backupPath]); } catch (_) {}
   }
 }
 
@@ -549,13 +549,14 @@ function writeNginxConf(domain, confContent) {
   if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
   const confPath = path.join(NGINX_CONF_DIR, domain + '.conf');
   backupNginxConf(domain);
-  const tmpFile = confPath + '.tmp';
+
+  // Write temporary file in /tmp
+  const tmpFile = path.join('/tmp', 'np-nginx-' + domain + '-' + Date.now() + '.conf');
+  fs.writeFileSync(tmpFile, confContent, 'utf8');
 
   if (!fs.existsSync(NGINX_CONF_DIR)) {
-    try { fs.mkdirSync(NGINX_CONF_DIR, { recursive: true }); } catch (_) {}
+    try { runSafeSync('mkdir', ['-p', NGINX_CONF_DIR]); } catch (_) {}
   }
-
-  fs.writeFileSync(tmpFile, confContent, 'utf8');
 
   const originalExists = fs.existsSync(confPath);
   let originalContent = null;
@@ -564,14 +565,26 @@ function writeNginxConf(domain, confContent) {
   }
 
   try {
-    fs.renameSync(tmpFile, confPath);
+    // Copy/move file from /tmp to /etc/nginx/conf.d/ via root daemon IPC
+    const cpRes = runSafeSync('cp', [tmpFile, confPath]);
+    if (cpRes.status !== 0) {
+      throw new Error('Failed to install nginx conf: ' + (cpRes.stderr || cpRes.error || 'cp error'));
+    }
+    runSafeSync('chmod', ['0644', confPath]);
+    runSafeSync('chown', ['0:0', confPath]);
+
+    try { fs.unlinkSync(tmpFile); } catch (_) {}
+
     const test = runSafeSync('nginx', ['-t']);
     const testOutput = (test.stdout + test.stderr);
     if (test.status !== 0 && (testOutput.includes('[emerg]') || testOutput.includes('test failed') || testOutput.includes('syntax error'))) {
       if (originalExists && originalContent !== null) {
-        fs.writeFileSync(confPath, originalContent, 'utf8');
+        const restoreTmp = path.join('/tmp', 'np-restore-' + domain + '-' + Date.now() + '.conf');
+        fs.writeFileSync(restoreTmp, originalContent, 'utf8');
+        runSafeSync('cp', [restoreTmp, confPath]);
+        try { fs.unlinkSync(restoreTmp); } catch (_) {}
       } else {
-        try { fs.unlinkSync(confPath); } catch (_) {}
+        try { runSafeSync('rm', ['-f', confPath]); } catch (_) {}
       }
       throw new Error('Nginx pre-flight test failed:\n' + (testOutput || test.error));
     }
@@ -589,18 +602,27 @@ function removeNginxConf(domain) {
   if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
   const confPath = path.join(NGINX_CONF_DIR, domain + '.conf');
   try {
-    if (fs.existsSync(confPath)) fs.unlinkSync(confPath);
+    if (fs.existsSync(confPath)) {
+      runSafeSync('rm', ['-f', confPath]);
+    }
   } catch (_) {}
 }
 
 function createDomainWWW(domain, root) {
   const dir = root || path.join(WWW_DIR, domain);
   if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
+    runSafeSync('mkdir', ['-p', dir]);
+    runSafeSync('chown', ['-R', 'www-data:www-data', dir]);
+    runSafeSync('chmod', ['-R', '0755', dir]);
   }
   const indexPath = path.join(dir, 'index.html');
   if (!fs.existsSync(indexPath)) {
-    fs.writeFileSync(indexPath, LIVE_PAGE_HTML(domain), 'utf8');
+    const tmpIndex = path.join('/tmp', 'np-idx-' + domain + '-' + Date.now() + '.html');
+    fs.writeFileSync(tmpIndex, LIVE_PAGE_HTML(domain), 'utf8');
+    runSafeSync('cp', [tmpIndex, indexPath]);
+    try { fs.unlinkSync(tmpIndex); } catch (_) {}
+    runSafeSync('chown', ['www-data:www-data', indexPath]);
+    runSafeSync('chmod', ['0644', indexPath]);
   }
   return dir;
 }
@@ -654,7 +676,7 @@ function removeDomainWWW(domain) {
   try {
     const resolved = path.resolve(dir);
     if (resolved.startsWith(path.resolve(WWW_DIR) + path.sep) || resolved === path.resolve(WWW_DIR)) {
-      fs.rmSync(dir, { recursive: true, force: true });
+      runSafeSync('rm', ['-rf', dir]);
     }
   } catch (_) {}
 }
@@ -778,7 +800,7 @@ function createDomain(type, name, opts) {
   }
 
   if (!fs.existsSync(NGINX_CONF_DIR)) {
-    fs.mkdirSync(NGINX_CONF_DIR, { recursive: true });
+    try { runSafeSync('mkdir', ['-p', NGINX_CONF_DIR]); } catch (_) {}
   }
 
   createDomainWWW(name, root);
