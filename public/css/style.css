@@ -1,5 +1,8 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500;700&display=swap');
 
+@layer tokens, reset, base, layout, components, utilities, overrides;
+
+@layer tokens {
 :root {
   --bg-primary: #0a0e1a;
   --bg-secondary: #111827;
@@ -59,13 +62,17 @@
   --gradient-green: linear-gradient(135deg, #059669, #0891b2);
   --gradient-card: linear-gradient(135deg, rgba(8, 145, 178, 0.08), rgba(192, 38, 211, 0.04));
 }
+}
 
+@layer reset {
 *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
 
 html {
   font-size: 16px;
 }
+}
 
+@layer base {
 body {
   font-family: var(--font-sans);
   background: var(--bg-primary);
@@ -111,6 +118,9 @@ body::before {
 ::-webkit-scrollbar-track { background: var(--bg-primary); }
 ::-webkit-scrollbar-thumb { background: var(--accent-cyan); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--accent-magenta); }
+}
+
+@layer components {
 
 /* Login Page */
 .login-page {
@@ -10835,6 +10845,24 @@ html[data-theme] * {
   height: auto;
 }
 
+} /* end @layer components */
+
+/* ─── Layer Overrides & Responsive Optimizations ─── */
+@layer overrides {
+
+/* Rendering Performance: Skip off-screen layout/paint on long tables and card grids */
+.data-table-wrapper,
+.db-table-wrap,
+.fm-table-wrap,
+.email-grid,
+.audit-table-wrap,
+.process-table-wrap,
+.services-grid,
+.table-responsive {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 500px;
+}
+
 @media (max-width: 768px) {
   .modal-overlay,
   .fm-modal-overlay,
@@ -10862,6 +10890,49 @@ html[data-theme] * {
   .log-compare-selectors {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  /* GPU & Glassmorphism Optimization: Disable backdrop-filter on scrollable cards on mobile */
+  .db-card,
+  .metric-card,
+  .email-card,
+  .svc-card,
+  .fm-card,
+  .dns-record-card,
+  .data-card,
+  .stat-card,
+  .quick-stat,
+  .domain-card,
+  .cron-card,
+  .firewall-card,
+  .proc-card,
+  .db-grid-card,
+  .ec-message-item,
+  .email-config-panel,
+  .login-card {
+    backdrop-filter: none !important;
+    -webkit-backdrop-filter: none !important;
+    background: rgba(17, 24, 39, 0.98) !important;
+  }
+
+  [data-theme="light"] .db-card,
+  [data-theme="light"] .metric-card,
+  [data-theme="light"] .email-card,
+  [data-theme="light"] .svc-card,
+  [data-theme="light"] .fm-card,
+  [data-theme="light"] .dns-record-card,
+  [data-theme="light"] .data-card,
+  [data-theme="light"] .stat-card,
+  [data-theme="light"] .quick-stat,
+  [data-theme="light"] .domain-card,
+  [data-theme="light"] .cron-card,
+  [data-theme="light"] .firewall-card,
+  [data-theme="light"] .proc-card,
+  [data-theme="light"] .db-grid-card,
+  [data-theme="light"] .ec-message-item,
+  [data-theme="light"] .email-config-panel,
+  [data-theme="light"] .login-card {
+    background: rgba(255, 255, 255, 0.98) !important;
   }
 }
 
@@ -10954,4 +11025,6 @@ html[data-theme] * {
     padding-bottom: 2px;
   }
 }
+
+} /* end @layer overrides */
 
