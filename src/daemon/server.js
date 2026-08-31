@@ -124,6 +124,126 @@ function executePrivilegedCommand(params) {
   });
 }
 
+function detectOSFamily() {
+  try {
+    if (fs.existsSync('/etc/os-release')) {
+      const content = fs.readFileSync('/etc/os-release', 'utf8');
+      const lines = content.split('\n');
+      const vars = {};
+      for (const line of lines) {
+        const match = line.match(/^([A-Z_]+)=(.*)$/);
+        if (match) {
+          const key = match[1];
+          let val = match[2].trim();
+          if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+            val = val.slice(1, -1);
+          }
+          vars[key] = val.toLowerCase();
+        }
+      }
+
+      const id = vars.ID || '';
+      const idLike = vars.ID_LIKE || '';
+
+      if (id.includes('debian') || id.includes('ubuntu') || idLike.includes('debian') || idLike.includes('ubuntu')) {
+        return 'debian';
+      }
+      if (
+        id.includes('rhel') || id.includes('alma') || id.includes('rocky') ||
+        id.includes('centos') || id.includes('fedora') ||
+        idLike.includes('rhel') || idLike.includes('fedora') || idLike.includes('centos')
+      ) {
+        return 'rhel';
+      }
+    }
+  } catch (_) {}
+
+  // Fallback: check binaries
+  try {
+    if (fs.existsSync('/usr/bin/apt-get') || fs.existsSync('/usr/bin/apt')) return 'debian';
+    if (fs.existsSync('/usr/bin/dnf') || fs.existsSync('/usr/bin/yum')) return 'rhel';
+  } catch (_) {}
+
+  return 'debian';
+}
+
+const PRESET_SERVICE_COMMANDS = {
+  debian: {
+    vsftpd: 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y vsftpd && systemctl enable vsftpd --now',
+    'php-fpm': 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y php-fpm && (systemctl enable php-fpm --now 2>/dev/null || systemctl enable php*-fpm --now 2>/dev/null || true)',
+    nodejs: 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y nodejs npm',
+    nginx: 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y nginx && systemctl enable nginx --now',
+    redis: 'apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y redis-server && systemctl enable redis-server --now'
+  },
+  rhel: {
+    vsftpd: 'dnf install -y vsftpd && systemctl enable vsftpd --now',
+    'php-fpm': 'dnf install -y php-fpm && systemctl enable php-fpm --now',
+    nodejs: 'dnf install -y nodejs npm',
+    nginx: 'dnf install -y nginx && systemctl enable nginx --now',
+    redis: 'dnf install -y redis && systemctl enable redis --now'
+  }
+};
+
+function handleInstallService(params) {
+  return new Promise((resolve) => {
+    const rawService = (params && (params.service || params.name)) ? String(params.service || params.name).toLowerCase().trim() : '';
+    if (!rawService) {
+      return resolve({
+        result: null,
+        error: {
+          code: ERROR_CODES.INVALID_PARAMS,
+          message: 'Missing service preset name'
+        }
+      });
+    }
+
+    const osFamily = detectOSFamily();
+    const osMap = PRESET_SERVICE_COMMANDS[osFamily] || PRESET_SERVICE_COMMANDS.debian;
+    const commandStr = osMap[rawService];
+
+    if (!commandStr) {
+      const available = Object.keys(osMap).join(', ');
+      return resolve({
+        result: null,
+        error: {
+          code: ERROR_CODES.INVALID_PARAMS,
+          message: `Unknown service preset: '${rawService}'. Available presets: ${available}`
+        }
+      });
+    }
+
+    console.log(`[DAEMON] Installing service preset '${rawService}' on ${osFamily}: ${commandStr}`);
+
+    const { exec } = require('child_process');
+    exec(commandStr, {
+      timeout: 300000,
+      maxBuffer: 10 * 1024 * 1024,
+      env: { ...process.env, DEBIAN_FRONTEND: 'noninteractive', PATH: '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin' }
+    }, (error, stdout, stderr) => {
+      const output = ((stdout || '') + '\n' + (stderr || '')).trim();
+      const status = error ? (error.code || 1) : 0;
+      const success = !error && status === 0;
+
+      resolve({
+        result: {
+          success,
+          service: rawService,
+          os: osFamily,
+          command: commandStr,
+          stdout: stdout || '',
+          stderr: stderr || '',
+          output: output || (success ? 'Service installed successfully' : 'Installation failed'),
+          status
+        },
+        error: error && !stdout ? {
+          code: ERROR_CODES.EXEC_FAILED,
+          message: error.message
+        } : null
+      });
+    });
+  });
+}
+
 function handleClientConnection(socket) {
   activeSockets.add(socket);
   let buffer = '';
@@ -166,7 +286,7 @@ function handleClientConnection(socket) {
         continue;
       }
 
-      if (!req || req.jsonrpc !== '2.0' || !req.method || req.method !== 'exec' || !req.params) {
+      if (!req || req.jsonrpc !== '2.0' || !req.method || !req.params) {
         socket.write(formatResponse(req?.id || null, null, {
           code: ERROR_CODES.INVALID_REQUEST,
           message: 'Malformed JSON-RPC 2.0 request payload'
@@ -174,19 +294,44 @@ function handleClientConnection(socket) {
         continue;
       }
 
-      try {
-        const { result, error } = await executePrivilegedCommand(req.params);
-        if (socket.writable) {
-          socket.write(formatResponse(req.id, result, error));
+      if (req.method === 'install_service') {
+        try {
+          const { result, error } = await handleInstallService(req.params);
+          if (socket.writable) {
+            socket.write(formatResponse(req.id, result, error));
+          }
+        } catch (err) {
+          if (socket.writable) {
+            socket.write(formatResponse(req.id, null, {
+              code: ERROR_CODES.INTERNAL_ERROR,
+              message: 'Service installation error: ' + err.message
+            }));
+          }
         }
-      } catch (err) {
-        if (socket.writable) {
-          socket.write(formatResponse(req.id, null, {
-            code: ERROR_CODES.INTERNAL_ERROR,
-            message: 'Daemon execution error: ' + err.message
-          }));
-        }
+        continue;
       }
+
+      if (req.method === 'exec') {
+        try {
+          const { result, error } = await executePrivilegedCommand(req.params);
+          if (socket.writable) {
+            socket.write(formatResponse(req.id, result, error));
+          }
+        } catch (err) {
+          if (socket.writable) {
+            socket.write(formatResponse(req.id, null, {
+              code: ERROR_CODES.INTERNAL_ERROR,
+              message: 'Daemon execution error: ' + err.message
+            }));
+          }
+        }
+        continue;
+      }
+
+      socket.write(formatResponse(req.id, null, {
+        code: ERROR_CODES.METHOD_NOT_FOUND,
+        message: `Unknown JSON-RPC method: '${req.method}'`
+      }));
     }
   });
 
@@ -275,4 +420,12 @@ if (require.main === module) {
   startDaemon();
 }
 
-module.exports = { startDaemon, stopDaemon, executePrivilegedCommand, resolveNexusPanelGid };
+module.exports = {
+  startDaemon,
+  stopDaemon,
+  executePrivilegedCommand,
+  resolveNexusPanelGid,
+  detectOSFamily,
+  PRESET_SERVICE_COMMANDS,
+  handleInstallService
+};

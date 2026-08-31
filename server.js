@@ -67,6 +67,7 @@ app.use(express.static(path.join(__dirname, 'public'), {
 
 const authRoutes = require('./src/routes/auth');
 const dashboardRoutes = require('./src/routes/dashboard');
+const systemRoutes = require('./src/routes/system');
 const profileRoutes = require('./src/routes/profile');
 const fileRoutes = require('./src/routes/files');
 const databaseRoutes = require('./src/routes/databases');
@@ -103,6 +104,7 @@ const webhookRoutes = require('./src/routes/webhook');
 
 app.use('/api/auth', loginLimiter, authRoutes);
 app.use('/api/system', apiLimiter, dashboardRoutes);
+app.use('/api/system', apiLimiter, systemRoutes);
 app.use('/api/profile', apiLimiter, profileRoutes);
 app.use('/api/files', apiLimiter, fileRoutes);
 app.use('/api/databases', apiLimiter, databaseRoutes);

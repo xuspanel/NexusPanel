@@ -375,6 +375,7 @@ const API = {
     action: (name, act) => API.request('POST', '/services/' + encodeURIComponent(name) + '/' + encodeURIComponent(act)),
     bulkAction: (names, act) => API.request('POST', '/services/bulk/' + encodeURIComponent(act), { services: names }),
     status: (name) => API.request('GET', '/services/' + encodeURIComponent(name) + '/status'),
+    install: (service) => API.request('POST', '/system/services/install', { service }),
   },
   processes: {
     list: () => API.request('GET', '/processes'),

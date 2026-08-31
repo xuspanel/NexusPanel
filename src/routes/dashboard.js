@@ -51,4 +51,20 @@ router.get('/reboot-status', (req, res) => {
   res.json({ rebooting: isRebooting() });
 });
 
+router.post('/services/install', adminOnly, async (req, res) => {
+  try {
+    const service = (req.body && (req.body.service || req.body.name)) ? String(req.body.service || req.body.name).trim() : '';
+    if (!service) {
+      return res.status(400).json({ error: 'Service preset name is required' });
+    }
+    const daemonClient = require('../utils/daemon-client');
+    const audit = require('../services/audit');
+    const result = await daemonClient.installService(service);
+    audit.log('service.install', req, { service, success: result.success });
+    res.json(result);
+  } catch (err) {
+    res.status(400).json({ error: err.message });
+  }
+});
+
 module.exports = router;

@@ -28,6 +28,13 @@ const validators = {
   iptablesRule: /^[\w\s.\-\/:!"'$%&()+,;=<>\[\]{}|\\@#~`?]+$/
 };
 
-module.exports = { runSafe, runSafeSync, validators, PRIVILEGED_BINARIES, buildExecutionPlan };
+module.exports = {
+  runSafe,
+  runSafeSync,
+  validators,
+  PRIVILEGED_BINARIES,
+  buildExecutionPlan,
+  installService: daemonClient.installService
+};
 
 

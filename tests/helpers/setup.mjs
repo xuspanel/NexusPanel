@@ -74,9 +74,11 @@ export function createTestApp() {
   const appsRoutes = require('../../src/routes/apps.js');
   const deployRoutes = require('../../src/routes/deploy.js');
   const webhookRoutes = require('../../src/routes/webhook.js');
+  const systemRoutes = require('../../src/routes/system.js');
 
   app.use('/api/auth', loginLimiter, authRoutes);
   app.use('/api/system', apiLimiter, dashboardRoutes);
+  app.use('/api/system', apiLimiter, systemRoutes);
   app.use('/api/profile', apiLimiter, profileRoutes);
   app.use('/api/files', apiLimiter, fileRoutes);
   const { authMiddleware } = require('../../src/middleware/auth.js');

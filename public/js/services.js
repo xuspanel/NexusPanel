@@ -278,6 +278,74 @@
     }
   });
 
+  function openInstallModal() {
+    var modal = document.getElementById('svcInstallModal');
+    if (!modal) return;
+    document.getElementById('svcInstallError').style.display = 'none';
+    document.getElementById('svcInstallError').textContent = '';
+    document.getElementById('svcInstallProgress').style.display = 'none';
+    document.getElementById('svcInstallOutputWrap').style.display = 'none';
+    document.getElementById('svcInstallOutput').textContent = '';
+    document.getElementById('svcInstallSubmit').disabled = false;
+    document.getElementById('svcInstallPreset').disabled = false;
+    modal.style.display = 'flex';
+  }
+
+  function closeInstallModal() {
+    var modal = document.getElementById('svcInstallModal');
+    if (modal) modal.style.display = 'none';
+  }
+
+  async function runInstallService() {
+    var presetEl = document.getElementById('svcInstallPreset');
+    var service = presetEl ? presetEl.value : '';
+    if (!service) return;
+
+    var progress = document.getElementById('svcInstallProgress');
+    var statusText = document.getElementById('svcInstallStatusText');
+    var errEl = document.getElementById('svcInstallError');
+    var outWrap = document.getElementById('svcInstallOutputWrap');
+    var outPre = document.getElementById('svcInstallOutput');
+    var submitBtn = document.getElementById('svcInstallSubmit');
+
+    errEl.style.display = 'none';
+    errEl.textContent = '';
+    outWrap.style.display = 'none';
+    outPre.textContent = '';
+    progress.style.display = 'block';
+    statusText.textContent = 'Installing preset "' + service + '" via Root Daemon (APT/DNF)...';
+    submitBtn.disabled = true;
+    presetEl.disabled = true;
+
+    try {
+      var res = await API.services.install(service);
+      progress.style.display = 'none';
+      submitBtn.disabled = false;
+      presetEl.disabled = false;
+
+      outWrap.style.display = 'block';
+      var textOutput = (res.stdout || '') + (res.stderr ? '\n' + res.stderr : '') || res.output || 'Installation completed.';
+      outPre.textContent = textOutput;
+
+      if (res.success) {
+        showToast('Service "' + service + '" installed successfully', 'success');
+        if (window.NexusEvents) {
+          window.NexusEvents.emit('service:updated', { service: service, status: 'active' });
+        }
+        loadServices();
+      } else {
+        errEl.textContent = res.error || 'Installation finished with warnings';
+        errEl.style.display = 'block';
+      }
+    } catch (err) {
+      progress.style.display = 'none';
+      submitBtn.disabled = false;
+      presetEl.disabled = false;
+      errEl.textContent = err.message || 'Installation failed';
+      errEl.style.display = 'block';
+    }
+  }
+
   document.addEventListener('change', function (e) {
     if (e.target.classList.contains('svc-check') && e.target.dataset.svcAction === 'toggle-select') {
       var n = e.target.dataset.svcName;
@@ -296,6 +364,18 @@
       case 'refresh':
         e.preventDefault();
         loadServices();
+        break;
+      case 'open-install':
+        e.preventDefault();
+        openInstallModal();
+        break;
+      case 'close-install':
+        e.preventDefault();
+        closeInstallModal();
+        break;
+      case 'run-install':
+        e.preventDefault();
+        runInstallService();
         break;
       case 'svc-action':
         e.preventDefault();
@@ -339,8 +419,10 @@
   });
 
   document.addEventListener('click', function (e) {
-    var modal = document.getElementById('svcStatusModal');
-    if (modal && e.target === modal) modal.style.display = 'none';
+    var statusModal = document.getElementById('svcStatusModal');
+    if (statusModal && e.target === statusModal) statusModal.style.display = 'none';
+    var installModal = document.getElementById('svcInstallModal');
+    if (installModal && e.target === installModal) installModal.style.display = 'none';
   });
 
   // Reactive Event Bus Subscription

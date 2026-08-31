@@ -20,4 +20,21 @@ describe('Services Routes', () => {
     const res = await request(app).get('/api/services/');
     expect(res.status).toBe(401);
   });
+
+  it('POST /api/system/services/install rejects unauthenticated request', async () => {
+    const res = await request(app).post('/api/system/services/install').send({ service: 'nodejs' });
+    expect(res.status).toBe(401);
+  });
+
+  it('POST /api/system/services/install requires service preset name', async () => {
+    const res = await request(app).post('/api/system/services/install').set('Cookie', adminCookie).send({});
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/required/i);
+  });
+
+  it('POST /api/system/services/install rejects unknown service preset', async () => {
+    const res = await request(app).post('/api/system/services/install').set('Cookie', adminCookie).send({ service: 'invalid_xyz' });
+    expect(res.status).toBe(400);
+    expect(res.body.error).toMatch(/unknown service preset/i);
+  });
 });

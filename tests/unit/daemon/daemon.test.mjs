@@ -66,4 +66,29 @@ describe('Daemon & Two-Tier IPC Architecture', () => {
   it('enforces payload limits', () => {
     expect(protocol.MAX_PAYLOAD_SIZE).toBeGreaterThan(1024 * 1024);
   });
+
+  it('detects OS family from /etc/os-release', () => {
+    const osFamily = daemonServer.detectOSFamily();
+    expect(['debian', 'rhel']).toContain(osFamily);
+  });
+
+  it('provides safe OS preset mappings for standard services', () => {
+    const presets = daemonServer.PRESET_SERVICE_COMMANDS;
+    expect(presets.debian).toBeDefined();
+    expect(presets.rhel).toBeDefined();
+
+    expect(presets.debian.vsftpd).toContain('apt');
+    expect(presets.debian['php-fpm']).toContain('php-fpm');
+    expect(presets.debian.nodejs).toContain('nodejs');
+
+    expect(presets.rhel.vsftpd).toContain('dnf');
+    expect(presets.rhel['php-fpm']).toContain('dnf');
+    expect(presets.rhel.nodejs).toContain('dnf');
+  });
+
+  it('rejects invalid service preset via installService socket IPC', async () => {
+    await expect(
+      daemonClient.installService('nonexistent_preset_xyz', { sockPath: TEST_SOCK, timeout: 5000 })
+    ).rejects.toThrow(/Unknown service preset/i);
+  });
 });
