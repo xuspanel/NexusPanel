@@ -538,8 +538,14 @@
     }
   });
 
-  /* ─── EXPOSE ─── */
+  /* ─── EXPOSE & EVENT SUBSCRIPTIONS ─── */
   window.initDashboard = initDashboard;
   window.stopDashboardPolling = stopDashboardPolling;
   window.resumeDashboardPolling = resumeDashboardPolling;
+
+  if (window.NexusEvents) {
+    window.NexusEvents.on('service:updated', function (payload) {
+      updateServiceHealth();
+    });
+  }
 })();

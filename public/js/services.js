@@ -197,13 +197,27 @@
     try {
       await API.services.action(name, act);
       var svc = state.services.find(function (s) { return s.name === name; });
+      var newActive = (act === 'stop' || act === 'disable') ? 'inactive' : 'active';
+      var newSub = act === 'enable' ? 'enabled' : (act === 'disable' ? 'disabled' : (act === 'stop' ? 'dead' : 'running'));
+
       if (svc) {
-        if (act === 'start' || act === 'enable') { svc.active = 'active'; svc.sub = act === 'enable' ? 'enabled' : 'running'; }
-        else if (act === 'stop' || act === 'disable') { svc.active = 'inactive'; svc.sub = act === 'disable' ? 'disabled' : 'dead'; }
-        else if (act === 'restart' || act === 'reload') { svc.active = 'active'; svc.sub = 'running'; }
+        svc.active = newActive;
+        svc.sub = newSub;
       }
-      renderStats();
-      renderServices();
+
+      // Decoupled Reactive Event Bus Notification
+      if (window.NexusEvents) {
+        window.NexusEvents.emit('service:updated', {
+          service: name,
+          action: act,
+          status: newActive,
+          sub: newSub
+        });
+      } else {
+        renderStats();
+        renderServices();
+      }
+
       showToast(name + ': ' + act + ' OK', 'success');
     } catch (e) {
       showToast(e.message || act + ' failed', 'error');
@@ -328,4 +342,18 @@
     var modal = document.getElementById('svcStatusModal');
     if (modal && e.target === modal) modal.style.display = 'none';
   });
+
+  // Reactive Event Bus Subscription
+  if (window.NexusEvents) {
+    window.NexusEvents.on('service:updated', function (payload) {
+      if (!payload || !payload.service) return;
+      var svc = state.services.find(function (s) { return s.name === payload.service; });
+      if (svc) {
+        svc.active = payload.status || svc.active;
+        if (payload.sub) svc.sub = payload.sub;
+      }
+      renderStats();
+      renderServices();
+    });
+  }
 })();
