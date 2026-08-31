@@ -48,10 +48,10 @@ describe('Domains Routes', () => {
     expect(res.body.error).toMatch(/parent domain not found/i);
   });
 
-  it('POST /api/domains/create rejects a port already in use', async () => {
+  it('POST /api/domains/create rejects a reserved port', async () => {
     const res = await request(app).post('/api/domains/create').set('Cookie', adminCookie).send({ type: 'domain', domain: 'portbusy-' + Date.now() + '.com', port: 443, ssl: false });
     expect(res.status).toBe(400);
-    expect(res.body.error).toMatch(/already in use/i);
+    expect(res.body.error).toMatch(/security violation|already in use/i);
   });
 
   it('POST /api/domains/create rejects an invalid port', async () => {

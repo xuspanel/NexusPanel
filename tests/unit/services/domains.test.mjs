@@ -64,9 +64,20 @@ describe('domains service', () => {
       .rejects.toThrow(/parent domain/i);
   });
 
-  it('createDomain rejects a port that is already in use', async () => {
+  it('createDomain rejects reserved web ports 80 and 443 with security violation', async () => {
     const domains = require('../../../src/services/domains.js');
-    await expect(domains.createDomain('domain', 'busy-port-' + Date.now() + '.com', { port: 443, ssl: false }))
-      .rejects.toThrow(/already in use/i);
+    await expect(domains.createDomain('domain', 'reserved-port-' + Date.now() + '.com', { port: 443, ssl: false }))
+      .rejects.toThrow(/Security Violation: Cannot proxy backend to reserved web ports/i);
+
+    await expect(domains.createDomain('domain', 'reserved-port-80-' + Date.now() + '.com', { port: 80, ssl: false }))
+      .rejects.toThrow(/Security Violation: Cannot proxy backend to reserved web ports/i);
+  });
+
+  it('writeNginxConf and generateAppNginxConf enforce proxy port guardrails', () => {
+    const domains = require('../../../src/services/domains.js');
+    expect(() => domains.generateAppNginxConf('test.com', 443, false))
+      .toThrow(/Security Violation/i);
+    expect(() => domains.generateAppNginxConf('test.com', 80, false))
+      .toThrow(/Security Violation/i);
   });
 });

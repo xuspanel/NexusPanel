@@ -440,14 +440,18 @@ function validateDomain(name, type, parentDomain) {
 function generateNginxConf(domain, port, sslEnabled, type, options) {
   const root = (options && options.root) || '/var/www/' + domain;
   const log = '/var/log/nginx/' + domain;
-  const httpsPort = port || 443;
+  const proxyPass = options && options.proxyPass;
+  if (proxyPass && (proxyPass.includes(':80/') || proxyPass.endsWith(':80') || proxyPass.includes(':443/') || proxyPass.endsWith(':443'))) {
+    throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+  }
+
   let conf = 'server {\n';
   conf += '    server_name ' + domain + ';\n';
   conf += '\n';
   if (sslEnabled) {
     const standaloneH2 = supportsStandaloneHttp2();
-    conf += '    listen ' + httpsPort + ' ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
-    conf += '    listen [::]:' + httpsPort + ' ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
+    conf += '    listen 443 ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
+    conf += '    listen [::]:443 ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
     if (standaloneH2) conf += '    http2 on;\n';
     conf += '\n';
     conf += '    ssl_certificate /etc/letsencrypt/live/' + domain + '/fullchain.pem;\n';
@@ -455,8 +459,8 @@ function generateNginxConf(domain, port, sslEnabled, type, options) {
     conf += '    include /etc/letsencrypt/options-ssl-nginx.conf;\n';
     conf += '    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;\n';
   } else {
-    conf += '    listen ' + port + ';\n';
-    conf += '    listen [::]:' + port + ';\n';
+    conf += '    listen 80;\n';
+    conf += '    listen [::]:80;\n';
   }
   conf += '\n';
   conf += '    root ' + root + ';\n';
@@ -467,10 +471,28 @@ function generateNginxConf(domain, port, sslEnabled, type, options) {
   conf += '    add_header X-XSS-Protection "1; mode=block" always;\n';
   conf += '    add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n';
   conf += '\n';
-  conf += '    location / {\n';
-  conf += '        try_files $uri $uri/ =404;\n';
-  conf += '    }\n';
-  conf += '\n';
+
+  if (proxyPass) {
+    conf += '    location / {\n';
+    conf += '        proxy_pass ' + proxyPass + ';\n';
+    conf += '        proxy_http_version 1.1;\n';
+    conf += '        proxy_set_header Upgrade $http_upgrade;\n';
+    conf += '        proxy_set_header Connection "upgrade";\n';
+    conf += '        proxy_set_header Host $host;\n';
+    conf += '        proxy_set_header X-Real-IP $remote_addr;\n';
+    conf += '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n';
+    conf += '        proxy_set_header X-Forwarded-Proto $scheme;\n';
+    conf += '        proxy_read_timeout 300s;\n';
+    conf += '        proxy_send_timeout 300s;\n';
+    conf += '    }\n';
+    conf += '\n';
+  } else {
+    conf += '    location / {\n';
+    conf += '        try_files $uri $uri/ =404;\n';
+    conf += '    }\n';
+    conf += '\n';
+  }
+
   conf += '    location ~ /\\. {\n';
   conf += '        deny all;\n';
   conf += '        access_log off;\n';
@@ -487,7 +509,7 @@ function generateNginxConf(domain, port, sslEnabled, type, options) {
     conf += '    listen 80;\n';
     conf += '    listen [::]:80;\n';
     conf += '    server_name ' + domain + ';\n';
-    conf += '    return 301 https://$server_name' + (httpsPort === 443 ? '' : ':' + httpsPort) + '$request_uri;\n';
+    conf += '    return 301 https://$server_name$request_uri;\n';
     conf += '}\n';
   }
 
@@ -497,17 +519,23 @@ function generateNginxConf(domain, port, sslEnabled, type, options) {
 function generateAppNginxConf(domain, port, sslEnabled, opts) {
   const options = opts || {};
   const root = options.root;
-  const proxyPass = options.proxyPass;
+  const backendPort = port || 8000;
+  if (backendPort === 80 || backendPort === 443) {
+    throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+  }
+  const proxyPass = options.proxyPass || ('http://127.0.0.1:' + backendPort);
+  if (proxyPass.includes(':80/') || proxyPass.endsWith(':80') || proxyPass.includes(':443/') || proxyPass.endsWith(':443')) {
+    throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+  }
   const phpSocket = options.phpSocket;
   const log = '/var/log/nginx/' + domain;
-  const httpsPort = port || 443;
   let conf = 'server {\n';
   conf += '    server_name ' + domain + ';\n';
   conf += '\n';
   if (sslEnabled) {
     const standaloneH2 = supportsStandaloneHttp2();
-    conf += '    listen ' + httpsPort + ' ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
-    conf += '    listen [::]:' + httpsPort + ' ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
+    conf += '    listen 443 ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
+    conf += '    listen [::]:443 ssl' + (standaloneH2 ? '' : ' http2') + ';\n';
     if (standaloneH2) conf += '    http2 on;\n';
     conf += '\n';
     conf += '    ssl_certificate /etc/letsencrypt/live/' + domain + '/fullchain.pem;\n';
@@ -515,8 +543,8 @@ function generateAppNginxConf(domain, port, sslEnabled, opts) {
     conf += '    include /etc/letsencrypt/options-ssl-nginx.conf;\n';
     conf += '    ssl_dhparam /etc/letsencrypt/ssl-dhparams.pem;\n';
   } else {
-    conf += '    listen ' + port + ';\n';
-    conf += '    listen [::]:' + port + ';\n';
+    conf += '    listen 80;\n';
+    conf += '    listen [::]:80;\n';
   }
   conf += '\n';
   conf += '    add_header X-Frame-Options "DENY" always;\n';
@@ -576,7 +604,7 @@ function generateAppNginxConf(domain, port, sslEnabled, opts) {
     conf += '    listen 80;\n';
     conf += '    listen [::]:80;\n';
     conf += '    server_name ' + domain + ';\n';
-    conf += '    return 301 https://$server_name' + (httpsPort === 443 ? '' : ':' + httpsPort) + '$request_uri;\n';
+    conf += '    return 301 https://$server_name$request_uri;\n';
     conf += '}\n';
   }
 
@@ -585,6 +613,12 @@ function generateAppNginxConf(domain, port, sslEnabled, opts) {
 
 function writeNginxConf(domain, confContent) {
   if (!validators.domain.test(domain)) throw new Error('Invalid domain: ' + domain);
+
+  // Validation Guardrail: Ensure proxy_pass never targets reserved ports 80 or 443
+  if (/proxy_pass\s+https?:\/\/127\.0\.0\.1:(80|443)\b/i.test(confContent)) {
+    throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+  }
+
   const confPath = path.join(NGINX_CONF_DIR, domain + '.conf');
   backupNginxConf(domain);
 
@@ -855,8 +889,15 @@ async function createDomain(type, name, opts) {
   const sslEnabled = enableSSL;
   const customPort = requestedPort > 0;
 
+  let backendPort;
   if (customPort) {
+    if (requestedPort === 80 || requestedPort === 443) {
+      throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+    }
     await assertPortFree(requestedPort);
+    backendPort = requestedPort;
+  } else {
+    backendPort = await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
   }
 
   const root = customRoot ? path.resolve(customRoot) : path.join(WWW_DIR, name);
@@ -870,20 +911,11 @@ async function createDomain(type, name, opts) {
 
   createDomainWWW(name, root);
 
-  let finalPort = 80;
-  if (sslEnabled && !customPort) {
-    finalPort = 443;
-  } else if (customPort) {
-    finalPort = requestedPort;
-  } else {
-    finalPort = await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
-  }
-
   let finalSSL = false;
   let sslError = '';
 
   if (sslEnabled) {
-    writeNginxConf(name, generateNginxConf(name, 80, false, type, { root }));
+    writeNginxConf(name, generateNginxConf(name, backendPort, false, type, { root }));
     nginxTestAndReload();
     const sslResult = installCertbotSSL(name);
     if (sslResult.success) {
@@ -894,15 +926,11 @@ async function createDomain(type, name, opts) {
     }
   }
 
-  if (!sslEnabled || !finalSSL) {
-    finalPort = customPort ? requestedPort : await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
-  }
-
-  writeNginxConf(name, generateNginxConf(name, finalPort, finalSSL, type, { root }));
+  writeNginxConf(name, generateNginxConf(name, backendPort, finalSSL, type, { root }));
   nginxTestAndReload();
 
-  const firewallOpened = ensureFirewallPort(finalPort);
-  const liveCheck = verifyDomainLive(name, finalPort, finalSSL);
+  const firewallOpened = ensureFirewallPort(backendPort);
+  const liveCheck = verifyDomainLive(name, backendPort, finalSSL);
 
   const parent = type === 'subdomain' ? (parentDomain || name.split('.').slice(1).join('.')) : null;
 
@@ -910,7 +938,7 @@ async function createDomain(type, name, opts) {
     type,
     domain: name,
     parentDomain: parent,
-    port: finalPort,
+    port: backendPort,
     root: root,
     sslEnabled: finalSSL,
     sslCert: finalSSL ? '/etc/letsencrypt/live/' + name + '/fullchain.pem' : '',
@@ -925,8 +953,8 @@ async function createDomain(type, name, opts) {
 
   const result = getDomain(name);
   result.liveCheck = liveCheck;
-  result.previewUrl = (liveCheck.ok && !finalSSL && finalPort !== 80 && finalPort !== 443)
-    ? 'http://' + getServerPublicIP() + ':' + finalPort + '/'
+  result.previewUrl = (liveCheck.ok && !finalSSL && backendPort !== 80 && backendPort !== 443)
+    ? 'http://' + getServerPublicIP() + ':' + backendPort + '/'
     : null;
   return result;
 }
@@ -943,6 +971,9 @@ async function editDomain(name, updates) {
 
   if (updates.port !== undefined) {
     if (isNaN(newPort) || newPort < 1 || newPort > 65535) throw new Error('Invalid port number');
+    if (newPort === 80 || newPort === 443) {
+      throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+    }
     if (newPort !== d.port) await assertPortFree(newPort);
     d.port = newPort;
   }
