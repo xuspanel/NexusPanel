@@ -6,7 +6,7 @@ const audit = require('../services/audit');
 const router = express.Router();
 router.use(authMiddleware);
 
-const ALLOWED_FIELDS = ['port', 'sslEnabled', 'root', 'type'];
+const ALLOWED_FIELDS = ['port', 'sslEnabled', 'root', 'type', 'siteType'];
 
 function sanitizeUpdates(body) {
   const out = {};
@@ -64,15 +64,16 @@ router.put('/:name/nginx', (req, res) => {
 
 router.post('/create', async (req, res) => {
   try {
-    const { type, domain, port, ssl, root, location, parentDomain } = req.body;
+    const { type, domain, siteType, port, ssl, root, location, parentDomain } = req.body;
     if (!domain || !type) return res.status(400).json({ error: 'Domain name and type required' });
     const result = await domains.createDomain(type, domain, {
+      siteType: siteType || (type === 'proxy' || type === 'static' ? type : undefined),
       port,
       ssl,
       root: root || location,
       parentDomain,
     });
-    audit.log('domain.create', req, { domain, type, port: result.port, root: result.root, ssl: result.sslEnabled, parentDomain: result.parentDomain });
+    audit.log('domain.create', req, { domain, type, siteType: result.siteType, port: result.port, root: result.root, ssl: result.sslEnabled, parentDomain: result.parentDomain });
     res.json({ success: true, domain: result });
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

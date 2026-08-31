@@ -3237,6 +3237,24 @@
 
           <div class="form-row">
             <div class="form-group">
+              <label class="form-label">Site Type</label>
+              <div style="display:flex;gap:16px;margin-top:4px;">
+                <label class="form-radio">
+                  <input type="radio" name="siteType" value="static" id="domainFormSiteTypeStatic" checked>
+                  <span class="form-radio-mark"></span>
+                  <span class="form-radio-label">Static HTML</span>
+                </label>
+                <label class="form-radio">
+                  <input type="radio" name="siteType" value="proxy" id="domainFormSiteTypeProxy">
+                  <span class="form-radio-mark"></span>
+                  <span class="form-radio-label">Web App (Reverse Proxy)</span>
+                </label>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-row" id="domainFormPortRow" style="display:none;">
+            <div class="form-group">
               <label class="form-label">Custom Port</label>
               <input type="number" id="domainFormPort" class="form-input" placeholder="Auto-assign (8000-9000)" min="1" max="65535">
               <span class="form-hint">Leave empty to auto-assign an available port (no conflicts)</span>

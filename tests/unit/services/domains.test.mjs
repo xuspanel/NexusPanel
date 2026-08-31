@@ -80,4 +80,17 @@ describe('domains service', () => {
     expect(() => domains.generateAppNginxConf('test.com', 80, false))
       .toThrow(/Security Violation/i);
   });
+
+  it('generateNginxConf generates static vs reverse proxy templates based on siteType', () => {
+    const domains = require('../../../src/services/domains.js');
+    const staticConf = domains.generateNginxConf('static.example.com', null, false, 'domain', { siteType: 'static' });
+    expect(staticConf).toContain('try_files $uri $uri/ =404;');
+    expect(staticConf).not.toContain('proxy_pass');
+
+    const proxyConf = domains.generateNginxConf('proxy.example.com', 8080, false, 'domain', { siteType: 'proxy' });
+    expect(proxyConf).toContain('proxy_pass http://127.0.0.1:8080;');
+    expect(proxyConf).toContain('proxy_set_header Upgrade $http_upgrade;');
+    expect(proxyConf).toContain("proxy_set_header Connection 'upgrade';");
+    expect(proxyConf).toContain('proxy_cache_bypass $http_upgrade;');
+  });
 });

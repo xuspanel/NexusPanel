@@ -300,11 +300,14 @@ function openAddDomain() {
   document.getElementById('domainFormSSL').checked = true;
   document.getElementById('domainFormTypeDomain').checked = true;
   document.getElementById('domainFormTypeSub').checked = false;
+  document.getElementById('domainFormSiteTypeStatic').checked = true;
+  document.getElementById('domainFormSiteTypeProxy').checked = false;
   document.getElementById('domainFormParentRow').style.display = 'none';
   document.getElementById('domainFormError').style.display = 'none';
   document.getElementById('domainFormSuccess').style.display = 'none';
   document.getElementById('domainFormModal').style.display = 'flex';
   document.getElementById('domainFormName').focus();
+  toggleSiteType();
   populateParentDropdown();
 }
 
@@ -344,6 +347,15 @@ async function openEditDomain(name) {
       document.getElementById('domainFormTypeSub').checked = false;
       document.getElementById('domainFormParentRow').style.display = 'none';
     }
+    const isProxy = d.siteType === 'proxy' || (d.port && d.port !== 80 && d.port !== 443);
+    if (isProxy) {
+      document.getElementById('domainFormSiteTypeProxy').checked = true;
+      document.getElementById('domainFormSiteTypeStatic').checked = false;
+    } else {
+      document.getElementById('domainFormSiteTypeStatic').checked = true;
+      document.getElementById('domainFormSiteTypeProxy').checked = false;
+    }
+    toggleSiteType();
     document.getElementById('domainFormError').style.display = 'none';
     document.getElementById('domainFormSuccess').style.display = 'none';
     document.getElementById('domainFormModal').style.display = 'flex';
@@ -357,6 +369,19 @@ async function openEditDomain(name) {
 
 function closeDomainForm() {
   document.getElementById('domainFormModal').style.display = 'none';
+}
+
+function toggleSiteType() {
+  const isProxy = document.getElementById('domainFormSiteTypeProxy')?.checked;
+  const portRow = document.getElementById('domainFormPortRow');
+  const portInput = document.getElementById('domainFormPort');
+  if (portRow) {
+    portRow.style.display = isProxy ? 'flex' : 'none';
+  }
+  if (portInput) {
+    portInput.disabled = !isProxy;
+    if (!isProxy) portInput.value = '';
+  }
 }
 
 function toggleDomainType() {
@@ -502,11 +527,18 @@ async function installDomainSSL(name) {
 /* ── Form Submit ── */
 
 document.addEventListener('DOMContentLoaded', () => {
+  document.getElementById('domainFormTypeDomain')?.addEventListener('change', toggleDomainType);
+  document.getElementById('domainFormTypeSub')?.addEventListener('change', toggleDomainType);
+  document.getElementById('domainFormSiteTypeStatic')?.addEventListener('change', toggleSiteType);
+  document.getElementById('domainFormSiteTypeProxy')?.addEventListener('change', toggleSiteType);
+
   document.getElementById('domainForm').addEventListener('submit', async (e) => {
     e.preventDefault();
     const isEdit = !!domainsEditing;
     const name = document.getElementById('domainFormName').value.trim().toLowerCase();
-    const port = parseInt(document.getElementById('domainFormPort').value) || 0;
+    const siteType = document.getElementById('domainFormSiteTypeProxy')?.checked ? 'proxy' : 'static';
+    const isProxy = siteType === 'proxy';
+    const port = isProxy ? (parseInt(document.getElementById('domainFormPort').value) || 0) : null;
     const root = document.getElementById('domainFormRoot').value.trim() || undefined;
     const ssl = document.getElementById('domainFormSSL').checked;
     const type = document.getElementById('domainFormTypeSub').checked ? 'subdomain' : 'domain';
@@ -533,10 +565,10 @@ document.addEventListener('DOMContentLoaded', () => {
     btn.textContent = 'Processing...';
     try {
       if (isEdit) {
-        await API.domains.update(domainsEditing, { port, sslEnabled: ssl, type, root });
+        await API.domains.update(domainsEditing, { port, siteType, sslEnabled: ssl, type, root });
         succEl.textContent = 'Domain updated';
       } else {
-        const result = await API.domains.create({ domain: name, port: port || undefined, ssl, type, root, parentDomain });
+        const result = await API.domains.create({ domain: name, siteType, port: port || undefined, ssl, type, root, parentDomain });
         let successText = 'Domain created';
         let successDelay = 800;
         if (result && result.domain && result.domain.liveCheck) {
@@ -544,7 +576,7 @@ document.addEventListener('DOMContentLoaded', () => {
           if (d.liveCheck.ok) {
             const proto = d.sslEnabled ? 'https' : 'http';
             const defaultP = d.sslEnabled ? 443 : 80;
-            const visitUrl = proto + '://' + d.domain + (Number(d.port) === defaultP ? '' : ':' + d.port);
+            const visitUrl = proto + '://' + d.domain + (Number(d.port) === defaultP || !d.port ? '' : ':' + d.port);
             successText = 'Domain created — LIVE (HTTP ' + d.liveCheck.status + ')\n' + visitUrl;
             if (d.liveCheck.previewUrl) successText += '\nPreview (works without DNS): ' + d.liveCheck.previewUrl;
             successDelay = 4000;

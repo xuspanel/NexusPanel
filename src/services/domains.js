@@ -438,9 +438,20 @@ function validateDomain(name, type, parentDomain) {
 }
 
 function generateNginxConf(domain, port, sslEnabled, type, options) {
-  const root = (options && options.root) || '/var/www/' + domain;
+  const opts = options || {};
+  const root = opts.root || '/var/www/' + domain;
   const log = '/var/log/nginx/' + domain;
-  const proxyPass = options && options.proxyPass;
+  const siteType = opts.siteType || (type === 'proxy' ? 'proxy' : (type === 'static' ? 'static' : (opts.isProxy ? 'proxy' : (port && port !== 80 && port !== 443 ? 'proxy' : 'static'))));
+  const isProxy = siteType === 'proxy';
+  const backendPort = port || opts.backendPort;
+
+  if (isProxy) {
+    if (backendPort === 80 || backendPort === 443) {
+      throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+    }
+  }
+
+  const proxyPass = opts.proxyPass || (isProxy && backendPort ? ('http://127.0.0.1:' + backendPort) : null);
   if (proxyPass && (proxyPass.includes(':80/') || proxyPass.endsWith(':80') || proxyPass.includes(':443/') || proxyPass.endsWith(':443'))) {
     throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
   }
@@ -472,18 +483,16 @@ function generateNginxConf(domain, port, sslEnabled, type, options) {
   conf += '    add_header Referrer-Policy "strict-origin-when-cross-origin" always;\n';
   conf += '\n';
 
-  if (proxyPass) {
+  if (isProxy && proxyPass) {
     conf += '    location / {\n';
     conf += '        proxy_pass ' + proxyPass + ';\n';
     conf += '        proxy_http_version 1.1;\n';
     conf += '        proxy_set_header Upgrade $http_upgrade;\n';
-    conf += '        proxy_set_header Connection "upgrade";\n';
+    conf += "        proxy_set_header Connection 'upgrade';\n";
     conf += '        proxy_set_header Host $host;\n';
+    conf += '        proxy_cache_bypass $http_upgrade;\n';
     conf += '        proxy_set_header X-Real-IP $remote_addr;\n';
     conf += '        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\n';
-    conf += '        proxy_set_header X-Forwarded-Proto $scheme;\n';
-    conf += '        proxy_read_timeout 300s;\n';
-    conf += '        proxy_send_timeout 300s;\n';
     conf += '    }\n';
     conf += '\n';
   } else {
@@ -880,24 +889,34 @@ async function createDomain(type, name, opts) {
   const enableSSL = options.ssl !== undefined ? !!options.ssl : true;
   const customRoot = (options.root || options.location || '').trim();
   const parentDomain = (options.parentDomain || '').trim() || null;
+  const sslEnabled = enableSSL;
+  const customPort = requestedPort > 0;
 
-  validateDomain(name, type, parentDomain);
+  if (customPort && (requestedPort === 80 || requestedPort === 443)) {
+    throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+  }
+
+  const siteType = (options.siteType === 'proxy' || type === 'proxy' || (customPort && options.siteType !== 'static'))
+    ? 'proxy'
+    : 'static';
+  const domainType = (type === 'subdomain' || options.domainType === 'subdomain') ? 'subdomain' : (type === 'proxy' || type === 'static' ? 'domain' : type);
+
+  validateDomain(name, domainType, parentDomain);
 
   const store = loadDomains();
   if (store[name]) throw new Error('Domain "' + name + '" already exists');
 
-  const sslEnabled = enableSSL;
-  const customPort = requestedPort > 0;
-
-  let backendPort;
-  if (customPort) {
-    if (requestedPort === 80 || requestedPort === 443) {
-      throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+  let backendPort = null;
+  if (siteType === 'proxy') {
+    if (customPort) {
+      await assertPortFree(requestedPort);
+      backendPort = requestedPort;
+    } else {
+      backendPort = await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
     }
-    await assertPortFree(requestedPort);
-    backendPort = requestedPort;
   } else {
-    backendPort = await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
+    // siteType === 'static': ignore port, set backendPort = null
+    backendPort = null;
   }
 
   const root = customRoot ? path.resolve(customRoot) : path.join(WWW_DIR, name);
@@ -915,7 +934,7 @@ async function createDomain(type, name, opts) {
   let sslError = '';
 
   if (sslEnabled) {
-    writeNginxConf(name, generateNginxConf(name, backendPort, false, type, { root }));
+    writeNginxConf(name, generateNginxConf(name, backendPort, false, domainType, { root, siteType }));
     nginxTestAndReload();
     const sslResult = installCertbotSSL(name);
     if (sslResult.success) {
@@ -926,16 +945,17 @@ async function createDomain(type, name, opts) {
     }
   }
 
-  writeNginxConf(name, generateNginxConf(name, backendPort, finalSSL, type, { root }));
+  writeNginxConf(name, generateNginxConf(name, backendPort, finalSSL, domainType, { root, siteType }));
   nginxTestAndReload();
 
-  const firewallOpened = ensureFirewallPort(backendPort);
-  const liveCheck = verifyDomainLive(name, backendPort, finalSSL);
+  const firewallOpened = backendPort ? ensureFirewallPort(backendPort) : undefined;
+  const liveCheck = verifyDomainLive(name, backendPort || 80, finalSSL);
 
-  const parent = type === 'subdomain' ? (parentDomain || name.split('.').slice(1).join('.')) : null;
+  const parent = domainType === 'subdomain' ? (parentDomain || name.split('.').slice(1).join('.')) : null;
 
   store[name] = {
-    type,
+    type: domainType,
+    siteType: siteType,
     domain: name,
     parentDomain: parent,
     port: backendPort,
@@ -943,7 +963,7 @@ async function createDomain(type, name, opts) {
     sslEnabled: finalSSL,
     sslCert: finalSSL ? '/etc/letsencrypt/live/' + name + '/fullchain.pem' : '',
     sslError: sslError || undefined,
-    autoPort: !customPort,
+    autoPort: siteType === 'proxy' ? !customPort : false,
     syncedFromNginx: false,
     nginxFile: name + '.conf',
     firewallOpened: firewallOpened || undefined,
@@ -953,7 +973,7 @@ async function createDomain(type, name, opts) {
 
   const result = getDomain(name);
   result.liveCheck = liveCheck;
-  result.previewUrl = (liveCheck.ok && !finalSSL && backendPort !== 80 && backendPort !== 443)
+  result.previewUrl = (liveCheck.ok && !finalSSL && backendPort && backendPort !== 80 && backendPort !== 443)
     ? 'http://' + getServerPublicIP() + ':' + backendPort + '/'
     : null;
   return result;
@@ -964,52 +984,61 @@ async function editDomain(name, updates) {
   if (!store[name]) throw new Error('Domain not found: ' + name);
 
   const d = store[name];
-  const allowed = ['port', 'sslEnabled', 'root', 'type'];
-  const newPort = updates.port !== undefined ? parseInt(updates.port, 10) : d.port;
+  const allowed = ['port', 'sslEnabled', 'root', 'type', 'siteType'];
+  const newSiteType = updates.siteType || d.siteType || (d.port ? 'proxy' : 'static');
+  const isProxy = newSiteType === 'proxy';
+  let newPort = d.port;
+
+  if (updates.port !== undefined) {
+    if (isProxy && updates.port !== null && updates.port !== '') {
+      const parsedPort = parseInt(updates.port, 10);
+      if (isNaN(parsedPort) || parsedPort < 1 || parsedPort > 65535) throw new Error('Invalid port number');
+      if (parsedPort === 80 || parsedPort === 443) {
+        throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
+      }
+      if (parsedPort !== d.port) await assertPortFree(parsedPort);
+      newPort = parsedPort;
+    } else if (isProxy && !d.port) {
+      newPort = await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
+    } else if (!isProxy) {
+      newPort = null;
+    }
+  } else if (!isProxy) {
+    newPort = null;
+  }
+
   const newSSL = updates.sslEnabled !== undefined ? !!updates.sslEnabled : !!d.sslEnabled;
   const newRoot = updates.root || d.root;
 
-  if (updates.port !== undefined) {
-    if (isNaN(newPort) || newPort < 1 || newPort > 65535) throw new Error('Invalid port number');
-    if (newPort === 80 || newPort === 443) {
-      throw new Error("Security Violation: Cannot proxy backend to reserved web ports.");
-    }
-    if (newPort !== d.port) await assertPortFree(newPort);
-    d.port = newPort;
-  }
-
+  d.port = newPort;
+  d.siteType = newSiteType;
   if (updates.root) d.root = newRoot;
   if (updates.type) d.type = updates.type;
 
-  if (updates.port !== undefined || updates.root) {
-    const conf = generateNginxConf(name, d.port, d.sslEnabled, d.type, { root: d.root });
+  if (updates.port !== undefined || updates.root || updates.siteType) {
+    const conf = generateNginxConf(name, d.port, d.sslEnabled, d.type, { root: d.root, siteType: d.siteType });
     writeNginxConf(name, conf);
     nginxTestAndReload();
   }
 
   if (updates.sslEnabled !== undefined && updates.sslEnabled !== d.sslEnabled) {
     if (newSSL) {
-      writeNginxConf(name, generateNginxConf(name, 80, false, d.type, { root: d.root }));
+      writeNginxConf(name, generateNginxConf(name, d.port, false, d.type, { root: d.root, siteType: d.siteType }));
       nginxTestAndReload();
       const sslResult = installCertbotSSL(name);
       if (!sslResult.success) {
-        writeNginxConf(name, generateNginxConf(name, d.port || 80, false, d.type, { root: d.root }));
+        writeNginxConf(name, generateNginxConf(name, d.port, false, d.type, { root: d.root, siteType: d.siteType }));
         nginxTestAndReload();
         throw new Error('SSL installation failed: ' + sslResult.output);
       }
       d.sslEnabled = true;
-      const httpsPort = d.port === 80 ? 443 : (d.port || 443);
-      d.port = httpsPort;
       d.sslCert = '/etc/letsencrypt/live/' + name + '/fullchain.pem';
     } else {
-      writeNginxConf(name, generateNginxConf(name, 80, false, d.type, { root: d.root }));
-      nginxTestAndReload();
       d.sslEnabled = false;
-      d.port = d.port === 443 ? 80 : d.port;
       d.sslCert = '';
       deleteCertbotSSL(name);
     }
-    writeNginxConf(name, generateNginxConf(name, d.port, d.sslEnabled, d.type, { root: d.root }));
+    writeNginxConf(name, generateNginxConf(name, d.port, d.sslEnabled, d.type, { root: d.root, siteType: d.siteType }));
     nginxTestAndReload();
   }
 
