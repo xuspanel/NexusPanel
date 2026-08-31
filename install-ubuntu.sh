@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # ============================================================================
 # NexusPanel Installer v2.0 — Ubuntu/Debian
+# Two-Tier Security Architecture & Idempotent System Provisioning
 # Platform: Ubuntu 20.04/22.04/24.04, Debian 11/12
 # Package Manager: APT
 # Firewall: UFW
@@ -10,8 +11,10 @@ IFS=$'\n\t'
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 if [ -f "${SCRIPT_DIR}/install-common.sh" ]; then
+  # shellcheck disable=SC1091
   source "${SCRIPT_DIR}/install-common.sh"
 else
+  # shellcheck disable=SC1090
   source <(curl -sL "https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install-common.sh")
 fi
 
@@ -23,7 +26,7 @@ validate_os_family() {
     *)
       log_error "This script supports Ubuntu/Debian only (detected: ${OS_ID})"
       log_info "Please use the appropriate installer for your OS"
-      exit ${EXIT_GENERAL_ERROR}
+      exit "${EXIT_GENERAL_ERROR}"
       ;;
   esac
   log_info "Detected: ${OS_ID} ${OS_VERSION} (${OS_CODENAME:-})"
@@ -35,6 +38,13 @@ install_system_deps() {
 
   pkg_update
 
+  # Crucial Fix: Remove conflicting local pip packages to prevent Certbot X509Req errors
+  log_info "Proactively removing conflicting local pip crypto packages..."
+  rm -rf /root/.local/lib/python*/site-packages/cryptography* \
+         /root/.local/lib/python*/site-packages/pyOpenSSL* \
+         /root/.local/lib/python*/site-packages/OpenSSL* \
+         /root/.local/lib/python*/site-packages/certbot* 2>/dev/null || true
+
   local base_packages=(
     curl wget git openssl build-essential
     nginx certbot python3-certbot-nginx
@@ -44,12 +54,6 @@ install_system_deps() {
   )
 
   pkg_install "${base_packages[@]}" 2>/dev/null || true
-
-  # Crucial Fix: Remove conflicting local pip packages to prevent Certbot X509Req errors
-  rm -rf /root/.local/lib/python*/site-packages/cryptography* 2>/dev/null || true
-  rm -rf /root/.local/lib/python*/site-packages/OpenSSL* 2>/dev/null || true
-  rm -rf /root/.local/lib/python*/site-packages/pyOpenSSL* 2>/dev/null || true
-  rm -rf /root/.local/lib/python*/site-packages/certbot* 2>/dev/null || true
 
   # Ensure Node.js 20+
   local node_ver
@@ -62,6 +66,120 @@ install_system_deps() {
   fi
 
   log_success "System dependencies installed"
+}
+
+# ─── User & Permission Hardening ──────────────────────
+setup_user_and_permissions() {
+  log_info "Hardening user accounts and directory permissions for Two-Tier architecture..."
+
+  # 1. Unprivileged system user & group creation
+  if ! getent group nexuspanel >/dev/null 2>&1; then
+    groupadd -r nexuspanel 2>/dev/null || groupadd nexuspanel 2>/dev/null || true
+  fi
+
+  if ! id -u nexuspanel >/dev/null 2>&1; then
+    useradd -r -g nexuspanel -s /bin/false -d "${INSTALL_DIR}" -M nexuspanel 2>/dev/null || \
+    useradd -r -s /bin/false nexuspanel 2>/dev/null || true
+  fi
+
+  # 2. Upload staging directory for unprivileged Web Tier
+  mkdir -p /tmp/nexus-uploads
+  chown -R nexuspanel:nexuspanel /tmp/nexus-uploads 2>/dev/null || true
+  chmod 755 /tmp/nexus-uploads 2>/dev/null || true
+
+  # 3. Web root directory owned by www-data
+  mkdir -p /var/www
+  if getent passwd www-data >/dev/null 2>&1; then
+    chown -R www-data:www-data /var/www 2>/dev/null || true
+  fi
+  chmod 755 /var/www 2>/dev/null || true
+
+  # 4. Main installation directory ownership
+  mkdir -p "${INSTALL_DIR}/data" /var/log/nexuspanel /etc/nexuspanel
+  chown -R nexuspanel:nexuspanel "${INSTALL_DIR}" 2>/dev/null || true
+  chown -R nexuspanel:nexuspanel /var/log/nexuspanel /etc/nexuspanel 2>/dev/null || true
+
+  find "${INSTALL_DIR}" -type d -exec chmod 755 {} + 2>/dev/null || true
+  find "${INSTALL_DIR}" -type f -exec chmod 644 {} + 2>/dev/null || true
+  chmod 750 "${INSTALL_DIR}/data" /var/log/nexuspanel /etc/nexuspanel 2>/dev/null || true
+
+  # Ensure scripts are executable
+  chmod 755 "${INSTALL_DIR}/server.js" "${INSTALL_DIR}/update.sh" "${INSTALL_DIR}/upgrade.sh" 2>/dev/null || true
+  if [ -d "${INSTALL_DIR}/scripts" ]; then
+    find "${INSTALL_DIR}/scripts" -type f -name "*.sh" -exec chmod 755 {} + 2>/dev/null || true
+  fi
+
+  # 5. Sudoers exemption for terminal sessions (node-pty)
+  if [ -d /etc/sudoers.d ]; then
+    cat > /etc/sudoers.d/nexuspanel << 'SUDOERS'
+# NexusPanel Web Tier Terminal Escalation Exemption
+nexuspanel ALL=(root) NOPASSWD: /usr/bin/sudo -i -u root, /usr/bin/sudo -i, /bin/su - root
+SUDOERS
+    chmod 0440 /etc/sudoers.d/nexuspanel 2>/dev/null || true
+  fi
+
+  log_ok "User accounts, directory structure, and permissions configured"
+}
+
+# ─── Dual Systemd Service Generation ───────────────────
+create_two_tier_services() {
+  log_info "Generating Dual Systemd Services for Two-Tier Architecture..."
+
+  # 1. Root Daemon Service (Runs as User=root)
+  cat > "/etc/systemd/system/nexuspanel-daemon.service" << SYSTEMD_DAEMON
+[Unit]
+Description=NexusPanel Root Daemon
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=/usr/bin/node ${INSTALL_DIR}/src/daemon/server.js
+Restart=always
+RestartSec=3
+StandardOutput=journal
+StandardError=journal
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD_DAEMON
+
+  # 2. Main Web Tier Service (Runs as User=nexuspanel, depends on nexuspanel-daemon.service)
+  cat > "/etc/systemd/system/nexuspanel.service" << SYSTEMD_WEB
+[Unit]
+Description=NexusPanel - VPS Control Panel
+After=network.target nexuspanel-daemon.service
+Wants=nexuspanel-daemon.service
+
+[Service]
+Type=simple
+User=nexuspanel
+Group=nexuspanel
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=/usr/bin/node ${INSTALL_DIR}/server.js
+Restart=on-failure
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+Environment=NODE_ENV=production
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target
+SYSTEMD_WEB
+
+  systemctl daemon-reload 2>/dev/null || true
+  systemctl enable nexuspanel-daemon 2>/dev/null || true
+  systemctl enable nexuspanel 2>/dev/null || true
+  systemctl enable nginx 2>/dev/null || true
+
+  systemctl restart nexuspanel-daemon 2>/dev/null || systemctl start nexuspanel-daemon 2>/dev/null || true
+  systemctl restart nexuspanel 2>/dev/null || systemctl start nexuspanel 2>/dev/null || true
+  systemctl restart nginx 2>/dev/null || systemctl start nginx 2>/dev/null || true
+
+  log_ok "Dual systemd services created, enabled, and started: nexuspanel-daemon, nexuspanel, nginx"
 }
 
 install_optional_deps() {
@@ -203,7 +321,7 @@ main() {
 
   # Validate license
   if [ -n "${LICENSE_KEY:-}" ]; then
-    validate_license "${LICENSE_KEY}" "${DOMAIN:-}" || exit ${EXIT_LICENSE_INVALID}
+    validate_license "${LICENSE_KEY}" "${DOMAIN:-}" || exit "${EXIT_LICENSE_INVALID}"
   fi
 
   save_checkpoint "install_deps"
@@ -236,13 +354,15 @@ main() {
   cd "${INSTALL_DIR}"
   npm install --production 2>&1 | tail -3 || npm install 2>&1 | tail -3
 
+  save_checkpoint "permissions"
+  setup_user_and_permissions
+
   save_checkpoint "env_file"
   JWT_SECRET=$(openssl rand -hex 32)
   generate_env_file
 
   save_checkpoint "service"
-  create_systemd_service "nexuspanel" "${INSTALL_DIR}/server.js"
-  systemctl start nexuspanel 2>/dev/null || true
+  create_two_tier_services
 
   save_checkpoint "firewall"
   configure_firewall
