@@ -920,14 +920,32 @@ setup_two_tier_environment() {
 
   # Create nexuspanel system user if not exists
   if ! id -u nexuspanel >/dev/null 2>&1; then
-    useradd -r -g nexuspanel -s /usr/sbin/nologin -d "${INSTALL_DIR}" -M nexuspanel 2>/dev/null || \
-    useradd -r -g nexuspanel -s /sbin/nologin -d "${INSTALL_DIR}" -M nexuspanel 2>/dev/null || \
-    useradd -g nexuspanel -s /bin/false -d "${INSTALL_DIR}" -M nexuspanel 2>/dev/null || true
+    useradd -r -g nexuspanel -s /bin/false -d "${INSTALL_DIR}" -M nexuspanel 2>/dev/null || \
+    useradd -r -s /bin/false nexuspanel 2>/dev/null || true
   fi
 
-  # Directory Permissions Lockdown
-  # Source code owned by root:root (0755 dirs, 0644 files)
-  chown -R root:root "${INSTALL_DIR}" 2>/dev/null || true
+  # Upload temporary directory for unprivileged Web Tier
+  mkdir -p /tmp/nexus-uploads
+  chown -R nexuspanel:nexuspanel /tmp/nexus-uploads 2>/dev/null || true
+  chmod 755 /tmp/nexus-uploads 2>/dev/null || true
+
+  # Web root directory owned by www-data:www-data
+  mkdir -p /var/www
+  if getent passwd www-data >/dev/null 2>&1; then
+    chown -R www-data:www-data /var/www 2>/dev/null || true
+  elif getent passwd nginx >/dev/null 2>&1; then
+    chown -R nginx:nginx /var/www 2>/dev/null || true
+  fi
+  chmod 755 /var/www 2>/dev/null || true
+
+  # Remove any conflicting local pip packages to prevent Certbot X509Req errors
+  rm -rf /root/.local/lib/python*/site-packages/cryptography* 2>/dev/null || true
+  rm -rf /root/.local/lib/python*/site-packages/OpenSSL* 2>/dev/null || true
+  rm -rf /root/.local/lib/python*/site-packages/pyOpenSSL* 2>/dev/null || true
+  rm -rf /root/.local/lib/python*/site-packages/certbot* 2>/dev/null || true
+
+  # Directory Permissions & Ownership: Web Tier owns installation directory
+  chown -R nexuspanel:nexuspanel "${INSTALL_DIR}" 2>/dev/null || true
   find "${INSTALL_DIR}" -type d -exec chmod 755 {} + 2>/dev/null || true
   find "${INSTALL_DIR}" -type f -exec chmod 644 {} + 2>/dev/null || true
 
@@ -937,11 +955,29 @@ setup_two_tier_environment() {
     find "${INSTALL_DIR}/scripts" -type f -name "*.sh" -exec chmod 755 {} + 2>/dev/null || true
   fi
 
-  # Data directory owned by nexuspanel:nexuspanel (0750 dir, 0640 files)
-  mkdir -p "${INSTALL_DIR}/data"
-  chown -R nexuspanel:nexuspanel "${INSTALL_DIR}/data" 2>/dev/null || true
-  chmod 750 "${INSTALL_DIR}/data" 2>/dev/null || true
-  find "${INSTALL_DIR}/data" -type f -exec chmod 640 {} + 2>/dev/null || true
+  # Data and log directories
+  mkdir -p "${INSTALL_DIR}/data" /var/log/nexuspanel /etc/nexuspanel
+  chown -R nexuspanel:nexuspanel "${INSTALL_DIR}/data" /var/log/nexuspanel /etc/nexuspanel 2>/dev/null || true
+  chmod 750 "${INSTALL_DIR}/data" /var/log/nexuspanel /etc/nexuspanel 2>/dev/null || true
+
+  # Environment Initialization (.env)
+  if [ ! -f "${INSTALL_DIR}/.env" ]; then
+    cat > "${INSTALL_DIR}/.env" << ENV_FILE
+JWT_SECRET=$(openssl rand -hex 32)
+PORT=${PORT:-3443}
+NODE_ENV=production
+ENV_FILE
+    chown nexuspanel:nexuspanel "${INSTALL_DIR}/.env" 2>/dev/null || true
+    chmod 600 "${INSTALL_DIR}/.env" 2>/dev/null || true
+    log_ok "Generated .env with secure JWT_SECRET"
+  else
+    if ! grep -q "JWT_SECRET=" "${INSTALL_DIR}/.env"; then
+      echo "JWT_SECRET=$(openssl rand -hex 32)" >> "${INSTALL_DIR}/.env"
+    fi
+    chown nexuspanel:nexuspanel "${INSTALL_DIR}/.env" 2>/dev/null || true
+    chmod 600 "${INSTALL_DIR}/.env" 2>/dev/null || true
+    log_info "Verified existing .env configuration"
+  fi
 
   # Sudoers exemption for authenticated admin terminal sessions (node-pty)
   if [ -d /etc/sudoers.d ]; then
@@ -952,7 +988,7 @@ SUDOERS
     chmod 0440 /etc/sudoers.d/nexuspanel 2>/dev/null || true
   fi
 
-  log_ok "Two-Tier user, file permissions, and sudoers configured"
+  log_ok "Two-Tier user, file permissions, directories, and sudoers configured"
 }
 
 # ─── Service Management ───────────────────────────────
@@ -1015,7 +1051,13 @@ SYSTEMD_WEB
   systemctl daemon-reload 2>/dev/null || true
   systemctl enable "${service_name}-daemon" 2>/dev/null || true
   systemctl enable "${service_name}" 2>/dev/null || true
-  log_info "Systemd services created and enabled: ${service_name}-daemon, ${service_name}"
+  systemctl enable nginx 2>/dev/null || true
+
+  systemctl restart "${service_name}-daemon" 2>/dev/null || systemctl start "${service_name}-daemon" 2>/dev/null || true
+  systemctl restart "${service_name}" 2>/dev/null || systemctl start "${service_name}" 2>/dev/null || true
+  systemctl restart nginx 2>/dev/null || systemctl start nginx 2>/dev/null || true
+
+  log_info "Systemd services created, enabled, and started: ${service_name}-daemon, ${service_name}, nginx"
 }
 
 # ─── Firewall Helpers ─────────────────────────────────

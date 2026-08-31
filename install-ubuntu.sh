@@ -38,11 +38,18 @@ install_system_deps() {
   local base_packages=(
     curl wget git openssl build-essential
     nginx certbot python3-certbot-nginx
+    python3-cryptography python3-openssl
     ufw
     unattended-upgrades
   )
 
   pkg_install "${base_packages[@]}" 2>/dev/null || true
+
+  # Crucial Fix: Remove conflicting local pip packages to prevent Certbot X509Req errors
+  rm -rf /root/.local/lib/python*/site-packages/cryptography* 2>/dev/null || true
+  rm -rf /root/.local/lib/python*/site-packages/OpenSSL* 2>/dev/null || true
+  rm -rf /root/.local/lib/python*/site-packages/pyOpenSSL* 2>/dev/null || true
+  rm -rf /root/.local/lib/python*/site-packages/certbot* 2>/dev/null || true
 
   # Ensure Node.js 20+
   local node_ver
