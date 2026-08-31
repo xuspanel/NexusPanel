@@ -57,7 +57,7 @@ generate_compose_file() {
     return 0
   fi
 
-  mkdir -p "${INSTALL_DIR}" "${DATA_DIR}" "${LOG_DIR}"
+  mkdir -p "${INSTALL_DIR}" "${DATA_DIR}" "${LOG_DIR}" /tmp/nexus-uploads
 
   cat > "${compose_file}" << COMPOSE
 version: "3.8"
@@ -82,6 +82,7 @@ services:
       - ${DATA_DIR}:/app/data
       - ${LOG_DIR}:/app/logs
       - ./config:/app/config
+      - /tmp/nexus-uploads:/tmp/nexus-uploads
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${PORT:-3443}/health"]
       interval: 30s
@@ -137,14 +138,52 @@ COMPOSE
 # ─── Dockerfile (for self-build) ──────────────────────
 generate_dockerfile() {
   local dockerfile="${INSTALL_DIR}/Dockerfile"
+  local entrypoint="${INSTALL_DIR}/entrypoint.sh"
 
   if ${DRY_RUN}; then
-    log_info "[DRY-RUN] Would create ${dockerfile}"
+    log_info "[DRY-RUN] Would create ${dockerfile} and ${entrypoint}"
     return 0
   fi
 
   mkdir -p "${INSTALL_DIR}"
 
+  # 1. Entrypoint Script Generation for Two-Tier Lifecycle Management
+  cat > "${entrypoint}" << 'ENTRYPOINT_SH'
+#!/bin/sh
+set -e
+
+# Ensure upload directory exists and is owned by unprivileged Web Tier
+mkdir -p /tmp/nexus-uploads
+chown -R nexuspanel:nexuspanel /tmp/nexus-uploads 2>/dev/null || true
+chmod 755 /tmp/nexus-uploads 2>/dev/null || true
+
+# Ensure persistent application directories exist with proper ownership
+mkdir -p /app/data /app/logs /app/config
+chown -R nexuspanel:nexuspanel /app/data /app/logs /app/config 2>/dev/null || true
+
+# Start the Root Daemon in background (runs as root)
+echo "[ENTRYPOINT] Starting NexusPanel Root Daemon..."
+node src/daemon/server.js &
+DAEMON_PID=$!
+
+# Trap shutdown signals to terminate child processes gracefully
+trap 'kill -TERM $DAEMON_PID 2>/dev/null; exit 0' TERM INT
+
+# Brief pause for socket readiness
+sleep 1
+
+# Drop privileges and launch the main Web Tier as nexuspanel user
+echo "[ENTRYPOINT] Launching NexusPanel Web Tier as 'nexuspanel' user..."
+if command -v runuser >/dev/null 2>&1; then
+  exec runuser -u nexuspanel -- node server.js "$@"
+else
+  exec su -s /bin/sh nexuspanel -c "node server.js $*"
+fi
+ENTRYPOINT_SH
+
+  chmod +x "${entrypoint}"
+
+  # 2. Alpine Dockerfile with native nexuspanel user and Two-Tier entrypoint
   cat > "${dockerfile}" << DOCKERFILE
 FROM node:20-alpine AS builder
 WORKDIR /app
@@ -153,23 +192,32 @@ RUN npm ci --only=production
 
 FROM node:20-alpine
 WORKDIR /app
-RUN apk add --no-cache tini curl
+RUN apk add --no-cache tini curl util-linux bash
+
+# Create unprivileged nexuspanel system user and group natively in Alpine
+RUN addgroup -S nexuspanel && adduser -S -G nexuspanel -h /app -s /bin/false nexuspanel
+
 COPY --from=builder /app/node_modules ./node_modules
 COPY . .
+COPY entrypoint.sh /app/entrypoint.sh
+RUN chmod +x /app/entrypoint.sh
+RUN chown -R nexuspanel:nexuspanel /app
+
 EXPOSE ${PORT:-3443}
-USER node
-HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \\
   CMD curl -f http://localhost:${PORT:-3443}/health || exit 1
-ENTRYPOINT ["/sbin/tini", "--"]
-CMD ["node", "server.js"]
+
+ENTRYPOINT ["/sbin/tini", "--", "/app/entrypoint.sh"]
 DOCKERFILE
 
-  log_info "Dockerfile created at ${dockerfile}"
+  log_info "Dockerfile and entrypoint.sh created at ${INSTALL_DIR}"
 }
 
 # ─── Main ─────────────────────────────────────────────
 main() {
   show_banner
+  parse_args "$@"
   setup_logging
 
   check_prerequisites "$@"
