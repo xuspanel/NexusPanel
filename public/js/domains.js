@@ -337,6 +337,25 @@ async function openEditDomain(name) {
     document.getElementById('domainFormPort').placeholder = 'Port number';
     document.getElementById('domainFormRoot').value = d.root || '';
     updateRootPlaceholder();
+    const isProxy = d.siteType === 'proxy' || d.type === 'proxy' || (d.port && d.port !== 80 && d.port !== 443);
+    if (isProxy) {
+      document.getElementById('domainFormSiteTypeProxy').checked = true;
+      document.getElementById('domainFormSiteTypeStatic').checked = false;
+    } else {
+      document.getElementById('domainFormSiteTypeStatic').checked = true;
+      document.getElementById('domainFormSiteTypeProxy').checked = false;
+    }
+    toggleSiteType();
+
+    if (isProxy) {
+      document.getElementById('domainFormPort').value = d.port || '';
+      document.getElementById('domainFormPort').placeholder = 'Auto-assign (8000-9000)';
+    } else {
+      document.getElementById('domainFormPort').value = '';
+    }
+
+    document.getElementById('domainFormRoot').value = d.root || '';
+    updateRootPlaceholder();
     document.getElementById('domainFormSSL').checked = d.sslEnabled;
     if (d.type === 'subdomain') {
       document.getElementById('domainFormTypeSub').checked = true;
@@ -347,15 +366,6 @@ async function openEditDomain(name) {
       document.getElementById('domainFormTypeSub').checked = false;
       document.getElementById('domainFormParentRow').style.display = 'none';
     }
-    const isProxy = d.siteType === 'proxy' || (d.port && d.port !== 80 && d.port !== 443);
-    if (isProxy) {
-      document.getElementById('domainFormSiteTypeProxy').checked = true;
-      document.getElementById('domainFormSiteTypeStatic').checked = false;
-    } else {
-      document.getElementById('domainFormSiteTypeStatic').checked = true;
-      document.getElementById('domainFormSiteTypeProxy').checked = false;
-    }
-    toggleSiteType();
     document.getElementById('domainFormError').style.display = 'none';
     document.getElementById('domainFormSuccess').style.display = 'none';
     document.getElementById('domainFormModal').style.display = 'flex';

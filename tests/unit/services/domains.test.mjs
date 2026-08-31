@@ -93,4 +93,29 @@ describe('domains service', () => {
     expect(proxyConf).toContain("proxy_set_header Connection 'upgrade';");
     expect(proxyConf).toContain('proxy_cache_bypass $http_upgrade;');
   });
+
+  it('persists siteType and assigned port correctly in domain store and sanitizeDomain', () => {
+    const domains = require('../../../src/services/domains.js');
+    const proxyDomain = {
+      type: 'domain',
+      siteType: 'proxy',
+      port: 8555,
+      root: '/var/www/proxy.com',
+      sslEnabled: false,
+    };
+    const sanitizedProxy = domains.sanitizeDomain(proxyDomain, 'proxy.com');
+    expect(sanitizedProxy.siteType).toBe('proxy');
+    expect(sanitizedProxy.port).toBe(8555);
+
+    const staticDomain = {
+      type: 'domain',
+      siteType: 'static',
+      port: null,
+      root: '/var/www/static.com',
+      sslEnabled: false,
+    };
+    const sanitizedStatic = domains.sanitizeDomain(staticDomain, 'static.com');
+    expect(sanitizedStatic.siteType).toBe('static');
+    expect(sanitizedStatic.port).toBeNull();
+  });
 });

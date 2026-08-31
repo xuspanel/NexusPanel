@@ -151,7 +151,14 @@ function parseNginxServerBlocks(confContent) {
     const listenM = body.match(/listen\s+(\d+)/);
     const rootM = body.match(/root\s+([^;]+);/);
     const sslM = body.match(/ssl_certificate\s+([^;]+);/);
+    const proxyM = body.match(/proxy_pass\s+([^;]+);/);
     const sslEnabled = body.includes('ssl') && listenM && body.includes('listen ' + listenM[1] + ' ssl');
+
+    let proxyPort = null;
+    if (proxyM) {
+      const pm = proxyM[1].match(/:(\d+)/);
+      if (pm) proxyPort = parseInt(pm[1], 10);
+    }
 
     if (serverNameM) {
       const names = serverNameM[1].trim().split(/\s+/);
@@ -160,6 +167,9 @@ function parseNginxServerBlocks(confContent) {
         blocks.push({
           server_name: name,
           port: listenM ? parseInt(listenM[1]) || 80 : 80,
+          proxyPort: proxyPort,
+          isProxy: !!proxyM,
+          proxyPass: proxyM ? proxyM[1].trim() : null,
           root: rootM ? rootM[1].trim() : '',
           sslEnabled: sslEnabled,
           sslCert: sslM ? sslM[1].trim() : '',
@@ -380,11 +390,13 @@ function syncFromNginx() {
 
       if (!store[name]) {
         const isSubdomain = name.split('.').length > 2;
+        const isProxy = !!block.isProxy;
         store[name] = {
-          type: isSubdomain ? 'subdomain' : 'domain',
+          type: isSubdomain ? 'subdomain' : (isProxy ? 'proxy' : 'domain'),
+          siteType: isProxy ? 'proxy' : 'static',
           domain: name,
           parentDomain: isSubdomain ? name.split('.').slice(1).join('.') : null,
-          port: block.port || 80,
+          port: isProxy ? (block.proxyPort || null) : null,
           root: block.root || '/var/www/' + name,
           sslEnabled: !!block.sslEnabled,
           sslCert: block.sslCert || '',
@@ -396,7 +408,10 @@ function syncFromNginx() {
         changed[name] = 'imported';
       } else {
         if (!store[name].syncedFromNginx) {
-          store[name].port = block.port || store[name].port;
+          if (block.isProxy && block.proxyPort) {
+            store[name].siteType = 'proxy';
+            store[name].port = store[name].port || block.proxyPort;
+          }
           store[name].root = block.root || store[name].root;
           store[name].sslEnabled = !!block.sslEnabled;
           store[name].sslCert = block.sslCert || store[name].sslCert;
@@ -826,10 +841,12 @@ function deleteCertbotSSL(domain) {
 }
 
 function sanitizeDomain(d, name) {
+  const isProxy = d.siteType === 'proxy' || d.type === 'proxy' || (d.port && d.port !== 80 && d.port !== 443);
   return {
     domain: name,
-    type: d.type || 'domain',
-    port: d.port || 80,
+    type: d.type || (isProxy ? 'proxy' : 'domain'),
+    siteType: d.siteType || (isProxy ? 'proxy' : 'static'),
+    port: isProxy ? (d.port || null) : null,
     root: d.root || '/var/www/' + name,
     sslEnabled: !!d.sslEnabled,
     parentDomain: d.parentDomain || null,
@@ -1165,6 +1182,7 @@ module.exports = {
   nginxTestAndReload,
   generateNginxConf,
   generateAppNginxConf,
+  sanitizeDomain,
   WWW_DIR,
   NGINX_CONF_DIR,
 };
