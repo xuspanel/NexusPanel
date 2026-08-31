@@ -3,6 +3,7 @@ const path = require('path');
 const fs = require('fs');
 const multer = require('multer');
 const { authMiddleware, adminOnly } = require('../middleware/auth');
+const { runSafeSync } = require('../utils/shell');
 const fm = require('../services/filemanager');
 const audit = require('../services/audit');
 
@@ -75,7 +76,7 @@ router.delete('/delete', async (req, res) => {
 });
 
 router.post('/upload', (req, res) => {
-  upload.array('files', 50)(req, res, (err) => {
+  upload.any()(req, res, async (err) => {
     if (err) {
       if (err.code === 'LIMIT_FILE_SIZE') {
         return res.status(413).json({
@@ -92,23 +93,50 @@ router.post('/upload', (req, res) => {
       return res.status(400).json({ error: err.message });
     }
 
-    (async () => {
-      try {
-        const destPath = req.body.path || '/';
-        const uploaded = [];
-        for (const file of req.files) {
-          const safeName = path.basename(file.originalname).replace(/[^a-zA-Z0-9._-]/g, '_');
-          const targetPath = path.join(fm.safeResolve(destPath, req.user), safeName);
-          await fs.promises.copyFile(file.path, targetPath);
-          await fs.promises.unlink(file.path);
-          uploaded.push({ name: safeName, size: file.size, path: targetPath });
-        }
-        audit.log('file.upload', req, { path: destPath, count: req.files.length });
-        res.json({ uploaded });
-      } catch (e) {
-        res.status(400).json({ error: e.message });
+    try {
+      const files = req.files || (req.file ? [req.file] : []);
+      if (!files || files.length === 0) {
+        return res.status(400).json({ error: 'No files provided for upload' });
       }
-    })();
+
+      const destPath = req.body.path || req.query.path || '/';
+      const resolvedDir = fm.safeResolve(destPath, req.user);
+
+      // Ensure target directory exists via Root Daemon IPC
+      if (!fs.existsSync(resolvedDir)) {
+        runSafeSync('mkdir', ['-p', resolvedDir]);
+        runSafeSync('chown', ['-R', 'www-data:www-data', resolvedDir]);
+      }
+
+      const uploaded = [];
+      for (const file of files) {
+        const safeName = path.basename(file.originalname || file.name || 'uploaded_file').replace(/[^a-zA-Z0-9._-]/g, '_');
+        const targetPath = path.join(resolvedDir, safeName);
+
+        // Move file from /tmp to target location via Root Daemon IPC
+        const mvResult = runSafeSync('mv', [file.path, targetPath]);
+        if (mvResult.status !== 0) {
+          try { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); } catch (_) {}
+          throw new Error('IPC upload failed: ' + (mvResult.stderr || mvResult.stdout || 'Unable to move file to destination'));
+        }
+
+        // Set ownership and permissions via Root Daemon IPC
+        runSafeSync('chown', ['www-data:www-data', targetPath]);
+        runSafeSync('chmod', ['0644', targetPath]);
+
+        uploaded.push({ name: safeName, size: file.size, path: targetPath });
+      }
+
+      audit.log('file.upload', req, { path: destPath, count: uploaded.length });
+      res.json({ uploaded });
+    } catch (e) {
+      if (req.files) {
+        for (const file of req.files) {
+          try { if (fs.existsSync(file.path)) fs.unlinkSync(file.path); } catch (_) {}
+        }
+      }
+      res.status(400).json({ error: e.message });
+    }
   });
 });
 

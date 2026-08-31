@@ -140,16 +140,22 @@ function renderDomainsTable(domains) {
       ? '<span class="domain-sync-badge">🔄 Synced</span>'
       : '';
     const checked = domainsSelected.has(d.domain) ? ' checked' : '';
+    const isProxy = d.siteType === 'proxy' || d.type === 'proxy' || (d.port && d.port !== 80 && d.port !== 443);
+    const portBadge = isProxy
+      ? '<span class="domain-port-badge">' + (d.port ? escHtml(String(d.port)) : 'Auto') + '</span>'
+      : '<span class="domain-port-badge domain-port-static">Static</span>';
+    const visitPort = d.port || (d.sslEnabled ? 443 : 80);
+
     return '<tr>' +
       '<td><input type="checkbox" class="domains-cb" data-dm="' + escHtml(d.domain) + '"' + checked + '></td>' +
       '<td>' + typeBadge + '</td>' +
       '<td><span class="domain-name-cell">' + escHtml(d.domain) + '</span> ' + syncBadge + '</td>' +
-      '<td><span class="domain-port-badge">' + d.port + '</span></td>' +
+      '<td>' + portBadge + '</td>' +
       '<td>' + sslBadge + ' ' + sslExpiry + '</td>' +
       '<td class="domain-root-cell" title="' + escHtml(d.root) + '">' + escHtml(d.root) + '</td>' +
       '<td class="domain-date-cell">' + (d.createdAt ? formatDate(d.createdAt) : '—') + '</td>' +
       '<td class="domain-actions">' +
-        '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="visit" data-dm-domain="' + escHtml(d.domain) + '" data-dm-port="' + d.port + '" data-dm-ssl="' + d.sslEnabled + '" title="Open site in new tab">🔗</button>' +
+        '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="visit" data-dm-domain="' + escHtml(d.domain) + '" data-dm-port="' + visitPort + '" data-dm-ssl="' + d.sslEnabled + '" title="Open site in new tab">🔗</button>' +
         '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="dns" data-dm-domain="' + escHtml(d.domain) + '" title="DNS Authentication Records (DKIM, SPF, DMARC)">🔑</button>' +
         '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="nginx" data-dm-domain="' + escHtml(d.domain) + '" title="View/Edit nginx config">⚙</button>' +
         (!d.sslEnabled ? '<button class="fm-btn fm-btn-secondary fm-btn-sm" data-dm-action="ssl" data-dm-domain="' + escHtml(d.domain) + '" title="Install SSL">🔒</button>' : '') +

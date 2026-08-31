@@ -355,6 +355,8 @@ function openFmModal(title, bodyHtml) {
   document.getElementById('fmModalTitle').textContent = title;
   document.getElementById('fmModalBody').innerHTML = bodyHtml;
   document.getElementById('fmModalOverlay').style.display = 'flex';
+  const firstInput = document.getElementById('fmModalBody').querySelector('input:not([type="hidden"]), textarea, select');
+  if (firstInput) setTimeout(() => firstInput.focus(), 50);
 }
 
 function fmShowCopyTo(path, name) {
@@ -443,7 +445,7 @@ function fmShowCreate() {
   openFmModal('✨ Create New', `
     <div class="fm-form-group">
       <label class="fm-form-label">Name</label>
-      <input class="fm-form-input" id="fmCreateName" placeholder="file.txt or folder name" autofocus>
+      <input class="fm-form-input" id="fmCreateName" placeholder="file.txt or folder name">
       <div class="fm-form-error" id="fmCreateError"></div>
     </div>
     <div class="fm-form-group">
@@ -493,7 +495,7 @@ async function fmShowRename(path, currentName) {
   openFmModal('✏ Rename', `
     <div class="fm-form-group">
       <label class="fm-form-label">New name</label>
-      <input class="fm-form-input" id="fmRenameInput" value="${escapeAttr(currentName)}" autofocus>
+      <input class="fm-form-input" id="fmRenameInput" value="${escapeAttr(currentName)}">
       <div class="fm-form-error" id="fmRenameError"></div>
     </div>
     <div class="fm-form-actions">
@@ -661,7 +663,7 @@ async function fmShowArchive(paths) {
   openFmModal('📦 Create Archive', `
     <div class="fm-form-group">
       <label class="fm-form-label">Archive name</label>
-      <input class="fm-form-input" id="fmArchiveName" value="${escapeAttr(defaultName)}" autofocus>
+      <input class="fm-form-input" id="fmArchiveName" value="${escapeAttr(defaultName)}">
     </div>
     <div class="fm-form-group">
       <label class="fm-form-label">Format</label>
@@ -695,7 +697,7 @@ async function fmShowExtract(path) {
   openFmModal('🗜 Extract Archive', `
     <div class="fm-form-group">
       <label class="fm-form-label">Extract to</label>
-      <input class="fm-form-input" id="fmExtractDest" value="${escapeAttr(defaultDest)}" autofocus>
+      <input class="fm-form-input" id="fmExtractDest" value="${escapeAttr(defaultDest)}">
     </div>
     <div class="fm-form-actions">
       <button class="fm-btn fm-btn-cancel">Cancel</button>
@@ -2048,7 +2050,7 @@ function fmShowCreateFolder() {
   const typeOpts = `<option value="file">File</option><option value="directory" selected>Folder</option>`;
   const contentRow = `<div class="fm-form-group" id="fmCreateContentGroup" style="display:none"><label class="fm-form-label">Content</label><textarea class="fm-form-textarea" id="fmCreateContent"></textarea></div>`;
   openFmModal('+ New', `
-    <div class="fm-form-group"><label class="fm-form-label">Name</label><input class="fm-form-input" id="fmCreateName" placeholder="new_folder" autofocus></div>
+    <div class="fm-form-group"><label class="fm-form-label">Name</label><input class="fm-form-input" id="fmCreateName" placeholder="new_folder"></div>
     <div class="fm-form-group"><label class="fm-form-label">Type</label><select class="fm-form-select" id="fmCreateType">${typeOpts}</select></div>
     ${contentRow}
     <div class="fm-form-error" id="fmCreateError"></div>
