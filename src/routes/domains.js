@@ -35,8 +35,8 @@ router.get('/parents', (req, res) => {
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/ports/available', (req, res) => {
-  try { res.json(domains.getSuggestedPort()); }
+router.get('/ports/available', async (req, res) => {
+  try { res.json(await domains.getSuggestedPort()); }
   catch (e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -62,11 +62,11 @@ router.put('/:name/nginx', (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-router.post('/create', (req, res) => {
+router.post('/create', async (req, res) => {
   try {
     const { type, domain, port, ssl, root, location, parentDomain } = req.body;
     if (!domain || !type) return res.status(400).json({ error: 'Domain name and type required' });
-    const result = domains.createDomain(type, domain, {
+    const result = await domains.createDomain(type, domain, {
       port,
       ssl,
       root: root || location,
@@ -77,10 +77,10 @@ router.post('/create', (req, res) => {
   } catch (e) { res.status(400).json({ error: e.message }); }
 });
 
-router.put('/:name', (req, res) => {
+router.put('/:name', async (req, res) => {
   try {
     const updates = sanitizeUpdates(req.body);
-    const result = domains.editDomain(req.params.name, updates);
+    const result = await domains.editDomain(req.params.name, updates);
     audit.log('domain.update', req, { domain: req.params.name, updates });
     res.json({ success: true, domain: result });
   } catch (e) { res.status(400).json({ error: e.message }); }

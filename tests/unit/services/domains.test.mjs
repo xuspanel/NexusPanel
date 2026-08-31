@@ -50,15 +50,23 @@ describe('domains service', () => {
     expect(() => domains.findNextFreePort(full, 8000, 9000)).toThrow(/No available ports/);
   });
 
-  it('createDomain rejects subdomain without a parent before writing anything', () => {
+  it('findAvailablePort finds an open port via live TCP network check', async () => {
     const domains = require('../../../src/services/domains.js');
-    expect(() => domains.createDomain('subdomain', 'no-parent-' + Date.now() + '.example.com', { ssl: false }))
-      .toThrow(/parent domain/i);
+    const port = await domains.findAvailablePort(8000, 9000);
+    expect(typeof port).toBe('number');
+    expect(port).toBeGreaterThanOrEqual(8000);
+    expect(port).toBeLessThanOrEqual(9000);
   });
 
-  it('createDomain rejects a port that is already in use', () => {
+  it('createDomain rejects subdomain without a parent before writing anything', async () => {
     const domains = require('../../../src/services/domains.js');
-    expect(() => domains.createDomain('domain', 'busy-port-' + Date.now() + '.com', { port: 443, ssl: false }))
-      .toThrow(/already in use/i);
+    await expect(domains.createDomain('subdomain', 'no-parent-' + Date.now() + '.example.com', { ssl: false }))
+      .rejects.toThrow(/parent domain/i);
+  });
+
+  it('createDomain rejects a port that is already in use', async () => {
+    const domains = require('../../../src/services/domains.js');
+    await expect(domains.createDomain('domain', 'busy-port-' + Date.now() + '.com', { port: 443, ssl: false }))
+      .rejects.toThrow(/already in use/i);
   });
 });

@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const net = require('net');
 const { runSafeSync, validators } = require('../utils/shell');
 
 const DATA_DIR = path.join(__dirname, '..', '..', 'data');
@@ -234,6 +235,43 @@ function getUsedPorts() {
   return usedPorts;
 }
 
+function testPortBindable(port) {
+  return new Promise((resolve) => {
+    const server = net.createServer();
+    server.unref();
+    server.once('error', () => {
+      resolve(false);
+    });
+    server.once('listening', () => {
+      server.close(() => {
+        resolve(true);
+      });
+    });
+    server.listen(port, '127.0.0.1');
+  });
+}
+
+async function findAvailablePort(min = PORT_RANGE_START, max = PORT_RANGE_END) {
+  const lo = parseInt(min, 10) || PORT_RANGE_START;
+  const hi = parseInt(max, 10) || PORT_RANGE_END;
+
+  // Step A: State Check - exclude registered/configured NexusPanel domain and service ports
+  const usedPorts = getUsedPorts();
+
+  // Step B: Live System Check - verify port can actively bind on 127.0.0.1
+  for (let port = lo; port <= hi; port++) {
+    if (usedPorts.has(port)) {
+      continue;
+    }
+    const isBindable = await testPortBindable(port);
+    if (isBindable) {
+      return port;
+    }
+  }
+
+  throw new Error('No available ports in range ' + lo + '-' + hi);
+}
+
 function findNextFreePort(usedPorts, start, end) {
   const used = usedPorts || new Set();
   const lo = start || PORT_RANGE_START;
@@ -244,17 +282,17 @@ function findNextFreePort(usedPorts, start, end) {
   throw new Error('No available ports in range ' + lo + '-' + hi);
 }
 
-function findAvailablePort() {
-  return findNextFreePort(getUsedPorts());
-}
-
-function assertPortFree(port) {
+async function assertPortFree(port) {
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     throw new Error('Invalid port number: ' + port);
   }
   const usedPorts = getUsedPorts();
   if (usedPorts.has(port)) {
     throw new Error('Port ' + port + ' is already in use by another domain or service. Choose a different port or leave it empty to auto-assign.');
+  }
+  const isBindable = await testPortBindable(port);
+  if (!isBindable) {
+    throw new Error('Port ' + port + ' is currently bound by another running process or service on 127.0.0.1.');
   }
   return true;
 }
@@ -800,9 +838,11 @@ function getDomain(name) {
   return sanitizeDomain(store[name], name);
 }
 
-function createDomain(type, name, opts) {
+async function createDomain(type, name, opts) {
   const options = opts || {};
-  const requestedPort = options.port !== undefined ? parseInt(options.port, 10) : 0;
+  const requestedPort = options.port !== undefined && options.port !== '' && options.port !== null
+    ? parseInt(options.port, 10)
+    : 0;
   const enableSSL = options.ssl !== undefined ? !!options.ssl : true;
   const customRoot = (options.root || options.location || '').trim();
   const parentDomain = (options.parentDomain || '').trim() || null;
@@ -816,7 +856,7 @@ function createDomain(type, name, opts) {
   const customPort = requestedPort > 0;
 
   if (customPort) {
-    assertPortFree(requestedPort);
+    await assertPortFree(requestedPort);
   }
 
   const root = customRoot ? path.resolve(customRoot) : path.join(WWW_DIR, name);
@@ -830,7 +870,15 @@ function createDomain(type, name, opts) {
 
   createDomainWWW(name, root);
 
-  let finalPort = sslEnabled && !customPort ? 443 : (customPort ? requestedPort : findAvailablePort());
+  let finalPort = 80;
+  if (sslEnabled && !customPort) {
+    finalPort = 443;
+  } else if (customPort) {
+    finalPort = requestedPort;
+  } else {
+    finalPort = await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
+  }
+
   let finalSSL = false;
   let sslError = '';
 
@@ -847,7 +895,7 @@ function createDomain(type, name, opts) {
   }
 
   if (!sslEnabled || !finalSSL) {
-    finalPort = customPort ? requestedPort : findAvailablePort();
+    finalPort = customPort ? requestedPort : await findAvailablePort(PORT_RANGE_START, PORT_RANGE_END);
   }
 
   writeNginxConf(name, generateNginxConf(name, finalPort, finalSSL, type, { root }));
@@ -883,7 +931,7 @@ function createDomain(type, name, opts) {
   return result;
 }
 
-function editDomain(name, updates) {
+async function editDomain(name, updates) {
   const store = loadDomains();
   if (!store[name]) throw new Error('Domain not found: ' + name);
 
@@ -895,7 +943,7 @@ function editDomain(name, updates) {
 
   if (updates.port !== undefined) {
     if (isNaN(newPort) || newPort < 1 || newPort > 65535) throw new Error('Invalid port number');
-    if (newPort !== d.port) assertPortFree(newPort);
+    if (newPort !== d.port) await assertPortFree(newPort);
     d.port = newPort;
   }
 
@@ -1014,8 +1062,9 @@ function getParentCandidates() {
   return candidates.sort();
 }
 
-function getSuggestedPort() {
-  return { port: findAvailablePort() };
+async function getSuggestedPort() {
+  const port = await findAvailablePort();
+  return { port };
 }
 
 function bulkDelete(names) {
@@ -1044,13 +1093,18 @@ module.exports = {
   installSSL,
   getParentCandidates,
   getSuggestedPort,
+  findAvailablePort,
+  findNextFreePort,
+  assertPortFree,
+  testPortBindable,
   syncFromNginx,
   bulkDelete,
   validateNginxContent,
-  findNextFreePort,
   getUsedPorts,
   writeNginxConf,
   nginxTestAndReload,
   generateNginxConf,
   generateAppNginxConf,
+  WWW_DIR,
+  NGINX_CONF_DIR,
 };
