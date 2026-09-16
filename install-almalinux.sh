@@ -298,10 +298,19 @@ main() {
     shopt -u dotglob
   fi
 
-  save_checkpoint "npm_install"
-  log_info "Installing Node.js dependencies..."
-  cd "${INSTALL_DIR}"
-  npm install --production 2>&1 | tail -3 || npm install 2>&1 | tail -3
+  if id -u nexuspanel >/dev/null 2>&1; then
+    chown -R nexuspanel:nexuspanel "${INSTALL_DIR}" 2>/dev/null || true
+    save_checkpoint "npm_install"
+    log_info "Installing Node.js dependencies as nexuspanel user..."
+    sudo -u nexuspanel bash -c "cd ${INSTALL_DIR} && npm install --production" 2>&1 | tail -3 || \
+    sudo -u nexuspanel bash -c "cd ${INSTALL_DIR} && npm install" 2>&1 | tail -3
+    chown -R nexuspanel:nexuspanel "${INSTALL_DIR}" 2>/dev/null || true
+  else
+    save_checkpoint "npm_install"
+    log_info "Installing Node.js dependencies..."
+    cd "${INSTALL_DIR}"
+    npm install --production 2>&1 | tail -3 || npm install 2>&1 | tail -3
+  fi
 
   save_checkpoint "env_file"
   JWT_SECRET=$(openssl rand -hex 32)

@@ -364,16 +364,8 @@ main() {
     cp -r "${INSTALL_DIR}/nxApp/"* "${INSTALL_DIR}/" 2>/dev/null || true
     rm -rf "${INSTALL_DIR}/nxApp" 2>/dev/null || true
   fi
-  log_ok "Application files successfully deployed to ${INSTALL_DIR}"
-
-  # 7. NPM Dependencies Installation
-  log_info "Step 4/7: Installing Node.js production dependencies in ${INSTALL_DIR}..."
-  cd "${INSTALL_DIR}"
-  npm install --production 2>&1 | tail -5 || npm install 2>&1 | tail -5
-  log_ok "NPM dependencies installed successfully"
-
-  # 8. Directory Structure & Permissions Lockdown
-  log_info "Step 5/7: Applying Two-Tier directory structure and permissions..."
+  # 7. Directory Structure & Permissions Lockdown
+  log_info "Step 4/7: Applying Two-Tier directory structure and permissions..."
   
   # A. /tmp/nexus-uploads owned by nexuspanel:nexuspanel (0755)
   mkdir -p /tmp/nexus-uploads
@@ -405,9 +397,6 @@ main() {
   if [ -d "${INSTALL_DIR}/scripts" ]; then
     find "${INSTALL_DIR}/scripts" -type f -name "*.sh" -exec chmod 755 {} + 2>/dev/null || true
   fi
-  if [ -d "${INSTALL_DIR}/node_modules/.bin" ]; then
-    chmod -R 755 "${INSTALL_DIR}/node_modules/.bin" 2>/dev/null || true
-  fi
 
   # D. Sudoers Exemption for Terminal Sessions
   if [ -d /etc/sudoers.d ]; then
@@ -418,6 +407,17 @@ SUDOERS
     chmod 0440 /etc/sudoers.d/nexuspanel 2>/dev/null || true
   fi
   log_ok "Directory structure and permissions applied"
+
+  # 8. NPM Dependencies Installation (as unprivileged nexuspanel user for native C++ compilation)
+  log_info "Step 5/7: Installing Node.js production dependencies in ${INSTALL_DIR} as 'nexuspanel' user..."
+  sudo -u nexuspanel bash -c "cd ${INSTALL_DIR} && npm install --production" 2>&1 | tail -5 || \
+  sudo -u nexuspanel bash -c "cd ${INSTALL_DIR} && npm install" 2>&1 | tail -5
+
+  if [ -d "${INSTALL_DIR}/node_modules/.bin" ]; then
+    chmod -R 755 "${INSTALL_DIR}/node_modules/.bin" 2>/dev/null || true
+  fi
+  chown -R nexuspanel:nexuspanel "${INSTALL_DIR}" 2>/dev/null || true
+  log_ok "NPM dependencies installed successfully"
 
   # 9. Environment Initialization (.env)
   log_info "Step 6/7: Configuring environment (.env)..."
