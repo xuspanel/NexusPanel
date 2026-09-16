@@ -330,16 +330,22 @@ main() {
   save_checkpoint "clone_app"
   log_info "Installing NexusPanel..."
   mkdir -p "${INSTALL_DIR}"
+  rm -rf /tmp/nexuspanel-repo 2>/dev/null || true
 
-  if [ -d "${INSTALL_DIR}/.git" ]; then
+  if git clone -b main --single-branch https://github.com/xuspanel/NexusPanel.git /tmp/nexuspanel-repo 2>/dev/null; then
+    log_info "Cloned repository into temporary staging directory"
+    cp -r /tmp/nexuspanel-repo/. "${INSTALL_DIR}/" 2>/dev/null || true
+    rm -rf /tmp/nexuspanel-repo 2>/dev/null || true
+  elif [ -d "${INSTALL_DIR}/.git" ]; then
     cd "${INSTALL_DIR}" && git pull origin main 2>/dev/null || true
   else
-    git clone -b main --single-branch https://github.com/xuspanel/NexusPanel.git "${INSTALL_DIR}" 2>/dev/null || {
-      log_warning "Git clone failed — using local copy"
-      if [ -d "${SCRIPT_DIR}/nxApp" ]; then
-        cp -r "${SCRIPT_DIR}/nxApp/"* "${INSTALL_DIR}/" 2>/dev/null || true
-      fi
-    }
+    log_warning "Git clone failed — using local copy"
+    if [ -d "${SCRIPT_DIR}/nxApp" ]; then
+      cp -r "${SCRIPT_DIR}/nxApp/"* "${INSTALL_DIR}/" 2>/dev/null || true
+    elif [ -d "${SCRIPT_DIR}/src" ]; then
+      cp -r "${SCRIPT_DIR}/." "${INSTALL_DIR}/" 2>/dev/null || true
+    fi
+    rm -rf /tmp/nexuspanel-repo 2>/dev/null || true
   fi
 
   if [ -d "${INSTALL_DIR}/nxApp" ]; then

@@ -45,6 +45,16 @@ function loadFromDisk() {
   try { entries = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8')); }
   catch { entries = []; }
   if (entries.length > MAX_ENTRIES) entries = entries.slice(-MAX_ENTRIES);
+  for (let i = 0; i < entries.length; i++) {
+    const prev = i > 0 ? entries[i - 1] : null;
+    const expectedPrev = prev ? prev.hash : GENESIS_HASH;
+    if (!entries[i].prev_hash || entries[i].prev_hash !== expectedPrev) {
+      entries[i].prev_hash = expectedPrev;
+      entries[i].hash = computeEntryHash(entries[i]);
+    } else if (!entries[i].hash) {
+      entries[i].hash = computeEntryHash(entries[i]);
+    }
+  }
 }
 
 function flushToDisk() {
@@ -60,6 +70,7 @@ function init() {
   loadFromDisk();
   initialized = true;
   flushTimer = setInterval(flushToDisk, FLUSH_INTERVAL);
+  if (flushTimer.unref) flushTimer.unref();
   process.on('exit', flushToDisk);
   process.on('SIGINT', () => { flushToDisk(); process.exit(); });
   process.on('SIGTERM', () => { flushToDisk(); process.exit(); });

@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
 # ============================================================================
 # NexusPanel Universal Installer v2.0
-# Two-Tier Security Architecture & Idempotent System Provisioning
+# Two-Tier Security Architecture & Full Deployment Pipeline
 #
 # Usage:
 #   curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh | bash
-#   bash install.sh [--license KEY] [--domain DOMAIN] [--port PORT] [--docker] [--postgres] [--unattended] [--dry-run]
+#   bash install.sh [--license KEY] [--domain DOMAIN] [--email EMAIL] [--port PORT]
+#                   [--admin-user USER] [--admin-pass PASS] [--install-dir DIR]
+#                   [--docker] [--postgres] [--unattended] [--dry-run]
 # ============================================================================
 set -euo pipefail
 IFS=$'\n\t'
 
 VERSION="2.0.0"
+DEFAULT_INSTALL_DIR="/opt/nexuspanel"
+REPO_URL="https://github.com/xuspanel/NexusPanel.git"
+TEMP_CLONE_DIR="/tmp/nexuspanel-repo"
 
 # ─── Colors & Output Helpers ──────────────────────────
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[0;33m'; CYAN='\033[0;36m'
@@ -42,25 +47,27 @@ show_usage() {
   echo "Usage: bash install.sh [options]"
   echo ""
   echo "Options:"
-  echo "  --license KEY     License key (NX-XXXX-XXXX-XXXX)"
-  echo "  --domain DOMAIN   Domain name for the panel"
-  echo "  --port PORT       Panel port (default: 3443)"
-  echo "  --admin-user USER Admin username (default: admin)"
-  echo "  --admin-pass PASS Admin password"
-  echo "  --install-dir DIR Installation directory (default: current or /opt/nexuspanel)"
-  echo "  --docker          Install Docker alongside NexusPanel"
-  echo "  --postgres        Install PostgreSQL alongside NexusPanel"
-  echo "  --unattended      Non-interactive installation"
-  echo "  --dry-run         Simulate installation without changes"
-  echo "  -h, --help        Show this help"
+  echo "  --license KEY       License key (NX-XXXX-XXXX-XXXX)"
+  echo "  --domain DOMAIN     Domain name for the panel"
+  echo "  --email EMAIL       Email for SSL notifications"
+  echo "  --port PORT         Panel port (default: 3443)"
+  echo "  --admin-user USER   Admin username (default: admin)"
+  echo "  --admin-pass PASS   Admin password"
+  echo "  --install-dir DIR   Installation directory (default: /opt/nexuspanel)"
+  echo "  --docker            Install Docker alongside NexusPanel"
+  echo "  --postgres          Install PostgreSQL alongside NexusPanel"
+  echo "  --unattended, -y    Non-interactive installation"
+  echo "  --dry-run           Simulate installation without changes"
+  echo "  -h, --help          Show this help"
   echo ""
   echo "Quick install:"
   echo "  curl -sL https://raw.githubusercontent.com/xuspanel/NexusPanel/main/install.sh | bash"
 }
 
-# ─── Parse Arguments ─────────────────────────────────
+# ─── Configuration Variables & CLI Parsing ────────────
 LICENSE_KEY=""
 DOMAIN=""
+EMAIL=""
 PORT="3443"
 ADMIN_USER="admin"
 ADMIN_PASS=""
@@ -77,6 +84,8 @@ parse_args() {
       --license=*)      LICENSE_KEY="${1#*=}"; shift ;;
       --domain)         DOMAIN="$2"; shift 2 ;;
       --domain=*)       DOMAIN="${1#*=}"; shift ;;
+      --email)          EMAIL="$2"; shift 2 ;;
+      --email=*)        EMAIL="${1#*=}"; shift ;;
       --port)           PORT="$2"; shift 2 ;;
       --port=*)         PORT="${1#*=}"; shift ;;
       --admin-user)     ADMIN_USER="$2"; shift 2 ;;
@@ -85,14 +94,60 @@ parse_args() {
       --admin-pass=*)   ADMIN_PASS="${1#*=}"; shift ;;
       --install-dir)    INSTALL_DIR="$2"; shift 2 ;;
       --install-dir=*)  INSTALL_DIR="${1#*=}"; shift ;;
-      --docker)         INSTALL_DOCKER=true; shift ;;
-      --postgres)       INSTALL_POSTGRES=true; shift ;;
-      --unattended|-y)  UNATTENDED=true; shift ;;
+      --docker|--with-docker)     INSTALL_DOCKER=true; shift ;;
+      --postgres|--with-postgres) INSTALL_POSTGRES=true; shift ;;
+      --unattended|--yes|-y|-s|--silent) UNATTENDED=true; shift ;;
       --dry-run)        DRY_RUN=true; shift ;;
       -h|--help)        show_usage; exit 0 ;;
       *)                log_error "Unknown option: $1"; show_usage; exit 1 ;;
     esac
   done
+}
+
+# ─── Interactive Prompts ──────────────────────────────
+prompt_interactive() {
+  if ${UNATTENDED} || ${DRY_RUN}; then
+    return 0
+  fi
+
+  echo -e "${BOLD}Interactive Configuration Setup:${NC}"
+  echo "Press Enter to keep default values where shown in brackets."
+  echo ""
+
+  if [ -z "${LICENSE_KEY}" ]; then
+    read -r -p "License Key [NX-XXXX-XXXX-XXXX] (leave empty to skip): " input_lic || true
+    LICENSE_KEY="${input_lic:-${LICENSE_KEY}}"
+  fi
+
+  if [ -z "${DOMAIN}" ]; then
+    read -r -p "Domain name (leave empty for localhost / IP access): " input_dom || true
+    DOMAIN="${input_dom:-${DOMAIN}}"
+  fi
+
+  if [ -z "${EMAIL}" ]; then
+    read -r -p "Admin / SSL notification email: " input_email || true
+    EMAIL="${input_email:-${EMAIL}}"
+  fi
+
+  read -r -p "Panel port [${PORT}]: " input_port || true
+  PORT="${input_port:-${PORT}}"
+
+  read -r -p "Admin username [${ADMIN_USER}]: " input_user || true
+  ADMIN_USER="${input_user:-${ADMIN_USER}}"
+
+  if [ -z "${ADMIN_PASS}" ]; then
+    read -r -s -p "Admin password: " input_pass || true
+    echo ""
+    ADMIN_PASS="${input_pass:-${ADMIN_PASS}}"
+  fi
+
+  read -r -p "Install Docker alongside NexusPanel? [y/N]: " input_docker || true
+  [[ "${input_docker}" =~ ^[Yy] ]] && INSTALL_DOCKER=true
+
+  read -r -p "Install PostgreSQL alongside NexusPanel? [y/N]: " input_pg || true
+  [[ "${input_pg}" =~ ^[Yy] ]] && INSTALL_POSTGRES=true
+
+  echo ""
 }
 
 # ─── OS Detection ────────────────────────────────────
@@ -130,7 +185,7 @@ detect_os() {
     OS_ID="debian"
   fi
 
-  # Binary fallback
+  # Fallback based on available package manager
   if [ "${OS_FAMILY}" = "unknown" ]; then
     if command -v apt-get >/dev/null 2>&1; then
       OS_FAMILY="debian"
@@ -153,16 +208,19 @@ main() {
     exit 1
   fi
 
-  # 2. Determine and Normalize Target Installation Directory
+  # 2. Interactive Prompts
+  prompt_interactive
+
+  # 3. Determine Target Installation Directory
   if [ -z "${INSTALL_DIR}" ]; then
     if [ -f "${PWD}/server.js" ] && [ -d "${PWD}/src" ]; then
       INSTALL_DIR="${PWD}"
-    elif [ -d "/opt/nexuspanel" ] && [ -f "/opt/nexuspanel/server.js" ]; then
-      INSTALL_DIR="/opt/nexuspanel"
+    elif [ -d "${DEFAULT_INSTALL_DIR}" ] && [ -f "${DEFAULT_INSTALL_DIR}/server.js" ]; then
+      INSTALL_DIR="${DEFAULT_INSTALL_DIR}"
     elif [ -d "/root/NexusPanel" ] && [ -f "/root/NexusPanel/server.js" ]; then
       INSTALL_DIR="/root/NexusPanel"
     else
-      INSTALL_DIR="/opt/nexuspanel"
+      INSTALL_DIR="${DEFAULT_INSTALL_DIR}"
     fi
   fi
 
@@ -176,8 +234,8 @@ main() {
     exit 0
   fi
 
-  # 3. System Dependencies & Certbot Cryptography Fix
-  log_info "Step 1/6: Installing core system dependencies..."
+  # 4. System Dependencies & Certbot Cryptography Safeguards
+  log_info "Step 1/7: Installing core system dependencies..."
   if [ "${OS_FAMILY}" = "debian" ]; then
     export DEBIAN_FRONTEND=noninteractive
     apt-get update -y
@@ -235,8 +293,35 @@ main() {
     fi
   fi
 
-  # 4. Unprivileged System User Creation
-  log_info "Step 2/6: Creating unprivileged nexuspanel system user and group..."
+  # Optional Services (Docker / PostgreSQL)
+  if ${INSTALL_DOCKER}; then
+    log_info "Installing Docker..."
+    if ! command -v docker >/dev/null 2>&1; then
+      curl -fsSL https://get.docker.com | bash 2>/dev/null || true
+      systemctl enable --now docker 2>/dev/null || true
+      log_ok "Docker installed and started"
+    else
+      log_ok "Docker is already installed"
+    fi
+  fi
+
+  if ${INSTALL_POSTGRES}; then
+    log_info "Installing PostgreSQL..."
+    if [ "${OS_FAMILY}" = "debian" ]; then
+      apt-get install -y postgresql postgresql-contrib 2>/dev/null || true
+    elif [ "${OS_FAMILY}" = "rhel" ]; then
+      if command -v dnf >/dev/null 2>&1; then
+        dnf install -y postgresql-server postgresql-contrib 2>/dev/null || true
+      else
+        yum install -y postgresql-server postgresql-contrib 2>/dev/null || true
+      fi
+    fi
+    systemctl enable --now postgresql 2>/dev/null || true
+    log_ok "PostgreSQL installed and started"
+  fi
+
+  # 5. Unprivileged System User Creation
+  log_info "Step 2/7: Creating unprivileged nexuspanel system user and group..."
   if ! getent group nexuspanel >/dev/null 2>&1; then
     groupadd -r nexuspanel 2>/dev/null || groupadd nexuspanel 2>/dev/null || true
   fi
@@ -247,8 +332,48 @@ main() {
   fi
   log_ok "Unprivileged user 'nexuspanel:nexuspanel' verified"
 
-  # 5. Directory Structure & Permissions Lockdown
-  log_info "Step 3/6: Establishing directory structure and strict permissions..."
+  # 6. Application Cloning into Temporary Directory & Sync
+  log_info "Step 3/7: Fetching NexusPanel application code..."
+  mkdir -p "${INSTALL_DIR}"
+  rm -rf "${TEMP_CLONE_DIR}" 2>/dev/null || true
+
+  local clone_done=false
+  if git clone -b main --single-branch "${REPO_URL}" "${TEMP_CLONE_DIR}" 2>/dev/null; then
+    log_ok "Cloned repository into temporary directory (${TEMP_CLONE_DIR})"
+    cp -r "${TEMP_CLONE_DIR}/." "${INSTALL_DIR}/" 2>/dev/null || true
+    rm -rf "${TEMP_CLONE_DIR}" 2>/dev/null || true
+    clone_done=true
+  elif [ -d "${INSTALL_DIR}/.git" ]; then
+    log_info "Existing repository detected at ${INSTALL_DIR}, pulling latest changes..."
+    (cd "${INSTALL_DIR}" && git pull origin main 2>/dev/null) || true
+    clone_done=true
+  fi
+
+  # Fallback to local source if remote clone was not performed
+  if ! ${clone_done}; then
+    log_warn "Remote git clone unavailable — syncing from local directory..."
+    if [ -d "${PWD}/src" ] && [ -f "${PWD}/server.js" ] && [ "${PWD}" != "${INSTALL_DIR}" ]; then
+      cp -r "${PWD}/." "${INSTALL_DIR}/" 2>/dev/null || true
+    elif [ -d "/root/NexusPanel/src" ] && [ "${INSTALL_DIR}" != "/root/NexusPanel" ]; then
+      cp -r /root/NexusPanel/. "${INSTALL_DIR}/" 2>/dev/null || true
+    fi
+    rm -rf "${TEMP_CLONE_DIR}" 2>/dev/null || true
+  fi
+
+  if [ -d "${INSTALL_DIR}/nxApp" ]; then
+    cp -r "${INSTALL_DIR}/nxApp/"* "${INSTALL_DIR}/" 2>/dev/null || true
+    rm -rf "${INSTALL_DIR}/nxApp" 2>/dev/null || true
+  fi
+  log_ok "Application files successfully deployed to ${INSTALL_DIR}"
+
+  # 7. NPM Dependencies Installation
+  log_info "Step 4/7: Installing Node.js production dependencies in ${INSTALL_DIR}..."
+  cd "${INSTALL_DIR}"
+  npm install --production 2>&1 | tail -5 || npm install 2>&1 | tail -5
+  log_ok "NPM dependencies installed successfully"
+
+  # 8. Directory Structure & Permissions Lockdown
+  log_info "Step 5/7: Applying Two-Tier directory structure and permissions..."
   
   # A. /tmp/nexus-uploads owned by nexuspanel:nexuspanel (0755)
   mkdir -p /tmp/nexus-uploads
@@ -280,6 +405,9 @@ main() {
   if [ -d "${INSTALL_DIR}/scripts" ]; then
     find "${INSTALL_DIR}/scripts" -type f -name "*.sh" -exec chmod 755 {} + 2>/dev/null || true
   fi
+  if [ -d "${INSTALL_DIR}/node_modules/.bin" ]; then
+    chmod -R 755 "${INSTALL_DIR}/node_modules/.bin" 2>/dev/null || true
+  fi
 
   # D. Sudoers Exemption for Terminal Sessions
   if [ -d /etc/sudoers.d ]; then
@@ -291,30 +419,42 @@ SUDOERS
   fi
   log_ok "Directory structure and permissions applied"
 
-  # 6. Environment Initialization (.env)
-  log_info "Step 4/6: Initializing environment configuration..."
-  if [ ! -f "${INSTALL_DIR}/.env" ]; then
+  # 9. Environment Initialization (.env)
+  log_info "Step 6/7: Configuring environment (.env)..."
+  local env_file="${INSTALL_DIR}/.env"
+  if [ ! -f "${env_file}" ]; then
     local jwt_secret
     jwt_secret=$(openssl rand -hex 32)
-    cat > "${INSTALL_DIR}/.env" << ENV_FILE
+    cat > "${env_file}" << ENV_FILE
+# NexusPanel Environment Configuration
+LICENSE_KEY=${LICENSE_KEY:-}
+DOMAIN=${DOMAIN:-}
+EMAIL=${EMAIL:-}
+PORT=${PORT:-3443}
+ADMIN_USER=${ADMIN_USER:-admin}
+ADMIN_PASS=${ADMIN_PASS:-}
 JWT_SECRET=${jwt_secret}
-PORT=${PORT}
 NODE_ENV=production
 ENV_FILE
-    chown nexuspanel:nexuspanel "${INSTALL_DIR}/.env"
-    chmod 600 "${INSTALL_DIR}/.env"
-    log_ok "Generated fresh .env with cryptographically secure JWT_SECRET"
+    chown nexuspanel:nexuspanel "${env_file}"
+    chmod 600 "${env_file}"
+    log_ok "Generated fresh .env configuration"
   else
-    if ! grep -q "JWT_SECRET=" "${INSTALL_DIR}/.env"; then
-      echo "JWT_SECRET=$(openssl rand -hex 32)" >> "${INSTALL_DIR}/.env"
+    if ! grep -q "JWT_SECRET=" "${env_file}"; then
+      echo "JWT_SECRET=$(openssl rand -hex 32)" >> "${env_file}"
     fi
-    chown nexuspanel:nexuspanel "${INSTALL_DIR}/.env"
-    chmod 600 "${INSTALL_DIR}/.env"
-    log_ok "Existing .env preserved with valid JWT_SECRET"
+    [ -n "${LICENSE_KEY}" ] && (grep -q "^LICENSE_KEY=" "${env_file}" && sed -i "s/^LICENSE_KEY=.*/LICENSE_KEY=${LICENSE_KEY}/" "${env_file}" || echo "LICENSE_KEY=${LICENSE_KEY}" >> "${env_file}")
+    [ -n "${DOMAIN}" ] && (grep -q "^DOMAIN=" "${env_file}" && sed -i "s/^DOMAIN=.*/DOMAIN=${DOMAIN}/" "${env_file}" || echo "DOMAIN=${DOMAIN}" >> "${env_file}")
+    [ -n "${EMAIL}" ] && (grep -q "^EMAIL=" "${env_file}" && sed -i "s/^EMAIL=.*/EMAIL=${EMAIL}/" "${env_file}" || echo "EMAIL=${EMAIL}" >> "${env_file}")
+    [ -n "${ADMIN_USER}" ] && (grep -q "^ADMIN_USER=" "${env_file}" && sed -i "s/^ADMIN_USER=.*/ADMIN_USER=${ADMIN_USER}/" "${env_file}" || echo "ADMIN_USER=${ADMIN_USER}" >> "${env_file}")
+    [ -n "${ADMIN_PASS}" ] && (grep -q "^ADMIN_PASS=" "${env_file}" && sed -i "s/^ADMIN_PASS=.*/ADMIN_PASS=${ADMIN_PASS}/" "${env_file}" || echo "ADMIN_PASS=${ADMIN_PASS}" >> "${env_file}")
+    chown nexuspanel:nexuspanel "${env_file}"
+    chmod 600 "${env_file}"
+    log_ok "Existing .env preserved and updated"
   fi
 
-  # 7. Two-Tier Systemd Services Creation
-  log_info "Step 5/6: Generating Two-Tier systemd service definitions..."
+  # 10. Two-Tier Systemd Services Creation & Service Activation
+  log_info "Step 7/7: Generating Two-Tier systemd services and starting..."
 
   # A. Root Daemon Service (Runs as root)
   cat > "/etc/systemd/system/nexuspanel-daemon.service" << SYSTEMD_DAEMON
@@ -363,8 +503,6 @@ SYSTEMD_WEB
 
   log_ok "Systemd unit files written"
 
-  # 8. Service Activation & Verification
-  log_info "Step 6/6: Reloading and activating services..."
   systemctl daemon-reload 2>/dev/null || true
   systemctl enable nexuspanel-daemon 2>/dev/null || true
   systemctl enable nexuspanel 2>/dev/null || true
