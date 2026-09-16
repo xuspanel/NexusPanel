@@ -408,16 +408,21 @@ SUDOERS
   fi
   log_ok "Directory structure and permissions applied"
 
-  # 8. NPM Dependencies Installation (as unprivileged nexuspanel user for native C++ compilation)
-  log_info "Step 5/7: Installing Node.js production dependencies in ${INSTALL_DIR} as 'nexuspanel' user..."
-  sudo -u nexuspanel bash -c "cd ${INSTALL_DIR} && npm install --production" 2>&1 | tail -5 || \
-  sudo -u nexuspanel bash -c "cd ${INSTALL_DIR} && npm install" 2>&1 | tail -5
+  # 8. NPM Dependencies Installation
+  log_info "Step 5/7: Installing Node.js production dependencies in ${INSTALL_DIR}..."
+  cd "${INSTALL_DIR}"
+  npm install-scripts approve node-pty 2>/dev/null || true
+  npm install-scripts approve cpu-features 2>/dev/null || true
+  npm install-scripts approve ssh2 2>/dev/null || true
+  npm install-scripts approve protobufjs 2>/dev/null || true
+  npm install --production 2>&1 | tail -5 || npm install 2>&1 | tail -5
+  npm rebuild 2>&1 | tail -5 || true
 
+  chown -R nexuspanel:nexuspanel "${INSTALL_DIR}" 2>/dev/null || true
   if [ -d "${INSTALL_DIR}/node_modules/.bin" ]; then
     chmod -R 755 "${INSTALL_DIR}/node_modules/.bin" 2>/dev/null || true
   fi
-  chown -R nexuspanel:nexuspanel "${INSTALL_DIR}" 2>/dev/null || true
-  log_ok "NPM dependencies installed successfully"
+  log_ok "NPM dependencies installed and native modules compiled successfully"
 
   # 9. Environment Initialization (.env)
   log_info "Step 6/7: Configuring environment (.env)..."
@@ -511,6 +516,47 @@ SYSTEMD_WEB
   systemctl restart nexuspanel-daemon 2>/dev/null || systemctl start nexuspanel-daemon 2>/dev/null || true
   systemctl restart nexuspanel 2>/dev/null || systemctl start nexuspanel 2>/dev/null || true
   systemctl restart nginx 2>/dev/null || systemctl start nginx 2>/dev/null || true
+
+  # 11. Restore Nginx & Certbot Domain Configuration (if DOMAIN is set)
+  if [ -n "${DOMAIN:-}" ]; then
+    log_info "Configuring Nginx reverse proxy and SSL for domain: ${DOMAIN}..."
+    mkdir -p /etc/nginx/sites-available /etc/nginx/sites-enabled
+
+    cat > "/etc/nginx/sites-available/nexuspanel" << NGINX_CONF
+server {
+    listen 80;
+    server_name ${DOMAIN};
+
+    location / {
+        proxy_pass http://127.0.0.1:${PORT:-3443};
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 86400s;
+    }
+}
+NGINX_CONF
+
+    ln -sf /etc/nginx/sites-available/nexuspanel /etc/nginx/sites-enabled/nexuspanel
+    rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+
+    systemctl restart nginx 2>/dev/null || nginx -s reload 2>/dev/null || true
+    log_ok "Nginx reverse proxy configured for http://${DOMAIN}"
+
+    if command -v certbot >/dev/null 2>&1; then
+      log_info "Running Certbot to obtain SSL certificate for ${DOMAIN}..."
+      if [ -n "${EMAIL:-}" ]; then
+        certbot --nginx -d "${DOMAIN}" -m "${EMAIL}" --non-interactive --agree-tos 2>&1 || log_warn "Certbot SSL provisioning encountered an issue"
+      else
+        certbot --nginx -d "${DOMAIN}" --register-unsafely-without-email --non-interactive --agree-tos 2>&1 || log_warn "Certbot SSL provisioning encountered an issue"
+      fi
+    fi
+  fi
 
   echo ""
   log_ok "============================================================"

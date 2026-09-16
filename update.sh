@@ -54,9 +54,16 @@ echo -e "${GREEN}✓ Code updated: ${CURRENT} → ${NEW}${NC}"
 
 # ─── [2/4] Install dependencies ───
 echo ""
-echo -e "${CYAN}[2/4] Installing dependencies...${NC}"
+echo -e "${CYAN}[2/4] Installing dependencies and building native modules...${NC}"
+cd "$INSTALL_DIR"
+npm install-scripts approve node-pty 2>/dev/null || true
+npm install-scripts approve cpu-features 2>/dev/null || true
+npm install-scripts approve ssh2 2>/dev/null || true
+npm install-scripts approve protobufjs 2>/dev/null || true
 npm install --production 2>&1 | tail -3
-echo -e "${GREEN}✓ Dependencies installed${NC}"
+npm rebuild 2>&1 | tail -3 || true
+chown -R nexuspanel:nexuspanel "$INSTALL_DIR" 2>/dev/null || true
+echo -e "${GREEN}✓ Dependencies installed and native modules rebuilt${NC}"
 
 # ─── [3/4] Restart service ───
 echo ""

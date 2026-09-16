@@ -170,13 +170,19 @@ update_via_download() {
 
 # ─── npm Update ─────────────────────────────────────
 update_npm() {
-  log_info "Updating npm packages..."
+  log_info "Updating npm packages and whitelisting native modules..."
 
   cd "${INSTALL_DIR}"
+  npm install-scripts approve node-pty 2>/dev/null || true
+  npm install-scripts approve cpu-features 2>/dev/null || true
+  npm install-scripts approve ssh2 2>/dev/null || true
+  npm install-scripts approve protobufjs 2>/dev/null || true
   npm prune --production 2>/dev/null || true
   npm install --production 2>&1 | tail -3 || true
+  npm rebuild 2>&1 | tail -3 || true
+  chown -R nexuspanel:nexuspanel "${INSTALL_DIR}" 2>/dev/null || true
 
-  log_ok "npm packages updated"
+  log_ok "npm packages updated and native modules rebuilt"
 }
 
 # ─── Migration Scripts ─────────────────────────────
